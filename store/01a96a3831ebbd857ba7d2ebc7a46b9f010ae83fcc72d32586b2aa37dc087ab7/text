@@ -1,0 +1,9 @@
+r4d-mul4-mid : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  LorRing A z one add mul neg →
+  (a b c d : A) → mul (mul a b) (mul c d) ≡ mul (mul a c) (mul b d)
+r4d-mul4-mid A z one add mul neg r a b c d =
+  lor-tr A (mul (mul a b) (mul c d)) (mul (mul (mul a b) c) d) (mul (mul a c) (mul b d))
+    (sym (r4d-massoc A z one add mul neg r (mul a b) c d))
+    (lor-tr A (mul (mul (mul a b) c) d) (mul (mul (mul a c) b) d) (mul (mul a c) (mul b d))
+      (cong (λ t → mul t d) (r4d-mul3-swap A z one add mul neg r a b c))
+      (r4d-massoc A z one add mul neg r (mul a c) b d))

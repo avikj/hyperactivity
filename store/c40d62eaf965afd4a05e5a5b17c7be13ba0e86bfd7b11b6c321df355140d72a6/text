@@ -1,0 +1,10 @@
+rxn-dpo-diamond : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (g d1 d2 : List A) →
+  rxn-add-delta A add (rxn-add-delta A add g d1) d2 ≡
+  rxn-add-delta A add (rxn-add-delta A add g d2) d1
+rxn-dpo-diamond A z add neg ab g =
+  case g return λ gs → (d1 d2 : List A) →
+    rxn-add-delta A add (rxn-add-delta A add gs d1) d2 ≡
+    rxn-add-delta A add (rxn-add-delta A add gs d2) d1 of
+    nil → λ d1 d2 → refl
+    cons gx gr → rxn-dpo-dia-cons A z add neg ab gx gr (rec gr)

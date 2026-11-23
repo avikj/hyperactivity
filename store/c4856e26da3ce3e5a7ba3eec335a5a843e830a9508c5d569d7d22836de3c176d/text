@@ -1,0 +1,39 @@
+-- THEOREM 1B (Universal Univalent Klein-4 (Z_2 x Z_2) Four-Sector Quadratic Split & PSD Theorem):
+h3d-klein4-quad-split : (W A : Type) → (zW : W) → (z : A) → (addW : W → W → W) → (negW : W → W) →
+  QgmAb W zW addW negW →
+  (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (B : W → W → A) → ScBilin W A addW negW add neg B →
+  (tau1 tau2 : W → W) →
+  ((x y : W) → tau1 (addW x y) ≡ addW (tau1 x) (tau1 y)) →
+  ((x : W) → B (tau1 x) (tau1 x) ≡ B x x) →
+  ((x : W) → B (tau2 x) (tau2 x) ≡ B x x) →
+  (x : W) →
+  B (addW (addW x x) (addW x x)) (addW (addW x x) (addW x x)) ≡
+  add (add (B (sc-xp W addW tau2 (sc-xp W addW tau1 x)) (sc-xp W addW tau2 (sc-xp W addW tau1 x)))
+           (B (sc-xm W addW negW tau2 (sc-xp W addW tau1 x)) (sc-xm W addW negW tau2 (sc-xp W addW tau1 x))))
+      (add (B (sc-xp W addW tau2 (sc-xm W addW negW tau1 x)) (sc-xp W addW tau2 (sc-xm W addW negW tau1 x)))
+           (B (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x)) (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x))))
+h3d-klein4-quad-split W A zW z addW negW ab add mul neg r B bil tau1 tau2 hlin1 hinv1 hinv2 x =
+  lor-tr A
+    (B (addW (addW x x) (addW x x)) (addW (addW x x) (addW x x)))
+    (add (B (addW (sc-xp W addW tau1 x) (sc-xp W addW tau1 x))
+            (addW (sc-xp W addW tau1 x) (sc-xp W addW tau1 x)))
+         (B (addW (sc-xm W addW negW tau1 x) (sc-xm W addW negW tau1 x))
+            (addW (sc-xm W addW negW tau1 x) (sc-xm W addW negW tau1 x))))
+    (add (add (B (sc-xp W addW tau2 (sc-xp W addW tau1 x)) (sc-xp W addW tau2 (sc-xp W addW tau1 x)))
+              (B (sc-xm W addW negW tau2 (sc-xp W addW tau1 x)) (sc-xm W addW negW tau2 (sc-xp W addW tau1 x))))
+         (add (B (sc-xp W addW tau2 (sc-xm W addW negW tau1 x)) (sc-xp W addW tau2 (sc-xm W addW negW tau1 x)))
+              (B (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x)) (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x)))))
+    (lor-tr A
+      (B (addW (addW x x) (addW x x)) (addW (addW x x) (addW x x)))
+      (add (B (sc-xp W addW tau1 (addW x x)) (sc-xp W addW tau1 (addW x x)))
+           (B (sc-xm W addW negW tau1 (addW x x)) (sc-xm W addW negW tau1 (addW x x))))
+      (add (B (addW (sc-xp W addW tau1 x) (sc-xp W addW tau1 x))
+              (addW (sc-xp W addW tau1 x) (sc-xp W addW tau1 x)))
+           (B (addW (sc-xm W addW negW tau1 x) (sc-xm W addW negW tau1 x))
+              (addW (sc-xm W addW negW tau1 x) (sc-xm W addW negW tau1 x))))
+      (sc-z2-quad-split W A zW z addW negW ab add mul neg r B bil tau1 hinv1 (addW x x))
+      (λ i → add (B (h3d-xp-dup W zW addW negW ab tau1 hlin1 x i) (h3d-xp-dup W zW addW negW ab tau1 hlin1 x i))
+                 (B (h3d-xm-dup W zW addW negW ab tau1 hlin1 x i) (h3d-xm-dup W zW addW negW ab tau1 hlin1 x i))))
+    (λ i → add (sc-z2-quad-split W A zW z addW negW ab add mul neg r B bil tau2 hinv2 (sc-xp W addW tau1 x) i)
+               (sc-z2-quad-split W A zW z addW negW ab add mul neg r B bil tau2 hinv2 (sc-xm W addW negW tau1 x) i))

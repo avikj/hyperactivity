@@ -1,0 +1,12 @@
+rxn-orbit-loop : RxnGraph → RxnGraph → RxnGraph → List (List Nat) → List (List Nat) → List Nat →
+  Nat → List RxnGraph → List RxnGraph → Nat × (Nat × Nat)
+rxn-orbit-loop patL patR hostG cands allPs rng embCnt labAcc isoAcc = case cands of
+  nil → (embCnt , (rxn-len RxnGraph labAcc , rxn-len RxnGraph isoAcc))
+  cons m mr →
+    if rxn-is-dpo-match patL hostG m
+    then
+      (rxn-force-graph (Nat × (Nat × Nat)) (rxn-apply-dpo patL patR m hostG) (λ prod →
+        rxn-orbit-loop patL patR hostG mr allPs rng (suc embCnt)
+          (if rxn-mem-labeled prod labAcc then labAcc else cons prod labAcc)
+          (if rxn-mem-iso prod isoAcc allPs rng then isoAcc else cons prod isoAcc)))
+    else rxn-orbit-loop patL patR hostG mr allPs rng embCnt labAcc isoAcc

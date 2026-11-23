@@ -1,0 +1,19 @@
+-- (C) 3D Neutral Dihydrogen (H_2, protons at {0, 1} of K_4):
+--     * Covalent Singlet (^1Sigma_g^+, dim 111): E_0 < 0   (v^T H v = -68 < 0!)
+--     * Pauli Triplet (^3Sigma_u^+, dim 73 -> Klein-4 blocks 17+19+20+17): E_0 > 7/2 > 0!
+--     * Dissociated (u_1,u_2 in {2,3}, dim 24 -> 13+11): E_0 > 9 > 0!
+h3d-h2-3d-verdict :
+  both
+    (h3d-force-mat Bool (h3d-k4-mat false bz-one bz-zero h3d-b-h2-sing)
+      (λ fm → h3d-quad-neg h3d-v-h2-sing fm))
+    (both
+      (h3d-klein4-pd 2 6 2 0
+        (h3d-k4-mat true (true , bin-two) (sc-n (h3-i (h3-i bin-one))) h3d-b-h2-trip)
+        (h3d-build-ts23 true h3d-b-h2-trip h3d-b-h2-trip)
+        h3d-ts-h2tr-e01 h3d-ts-h2tr-o01
+        h3d-L-h2tr-ee h3d-L-h2tr-eo h3d-L-h2tr-oe h3d-L-h2tr-oo)
+      (h3d-z2-pd 5 1
+        (h3d-k4-mat false bz-one (sc-n (h3-i (h3-o (h3-o bin-one)))) h3d-b-h2-diss)
+        (h3d-build-ts23 false h3d-b-h2-diss h3d-b-h2-diss)
+        h3d-L-h2-diss-e h3d-L-h2-diss-o)) ≡ true
+h3d-h2-3d-verdict = refl

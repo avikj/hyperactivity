@@ -1,0 +1,34 @@
+h3d-klein4-psd : (W A : Type) → (zW : W) → (z : A) → (addW : W → W → W) → (negW : W → W) →
+  QgmAb W zW addW negW →
+  (add mul : A → A → A) → (neg : A → A) → (Pos Nonneg : A → Type) →
+  ScRing A z add mul neg → ScOrd A z add mul Pos Nonneg →
+  (B : W → W → A) → ScBilin W A addW negW add neg B →
+  (tau1 tau2 : W → W) →
+  ((x y : W) → tau1 (addW x y) ≡ addW (tau1 x) (tau1 y)) →
+  ((x : W) → B (tau1 x) (tau1 x) ≡ B x x) →
+  ((x : W) → B (tau2 x) (tau2 x) ≡ B x x) →
+  (x : W) →
+  Nonneg (B (sc-xp W addW tau2 (sc-xp W addW tau1 x)) (sc-xp W addW tau2 (sc-xp W addW tau1 x))) →
+  Nonneg (B (sc-xm W addW negW tau2 (sc-xp W addW tau1 x)) (sc-xm W addW negW tau2 (sc-xp W addW tau1 x))) →
+  Nonneg (B (sc-xp W addW tau2 (sc-xm W addW negW tau1 x)) (sc-xp W addW tau2 (sc-xm W addW negW tau1 x))) →
+  Nonneg (B (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x)) (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x))) →
+  Nonneg (B (addW (addW x x) (addW x x)) (addW (addW x x) (addW x x)))
+h3d-klein4-psd W A zW z addW negW ab add mul neg Pos Nonneg r ord B bil tau1 tau2 hlin1 hinv1 hinv2
+  x hpp hpm hmp hmm =
+  (λ addNN →
+    transport
+      (λ i → Nonneg (sym (h3d-klein4-quad-split W A zW z addW negW ab add mul neg r B bil tau1 tau2 hlin1 hinv1 hinv2 x) i))
+      (addNN
+        (add (B (sc-xp W addW tau2 (sc-xp W addW tau1 x)) (sc-xp W addW tau2 (sc-xp W addW tau1 x)))
+             (B (sc-xm W addW negW tau2 (sc-xp W addW tau1 x)) (sc-xm W addW negW tau2 (sc-xp W addW tau1 x))))
+        (add (B (sc-xp W addW tau2 (sc-xm W addW negW tau1 x)) (sc-xp W addW tau2 (sc-xm W addW negW tau1 x)))
+             (B (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x)) (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x))))
+        (addNN
+          (B (sc-xp W addW tau2 (sc-xp W addW tau1 x)) (sc-xp W addW tau2 (sc-xp W addW tau1 x)))
+          (B (sc-xm W addW negW tau2 (sc-xp W addW tau1 x)) (sc-xm W addW negW tau2 (sc-xp W addW tau1 x)))
+          hpp hpm)
+        (addNN
+          (B (sc-xp W addW tau2 (sc-xm W addW negW tau1 x)) (sc-xp W addW tau2 (sc-xm W addW negW tau1 x)))
+          (B (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x)) (sc-xm W addW negW tau2 (sc-xm W addW negW tau1 x)))
+          hmp hmm)))
+  (fst (snd (snd (snd ord))))

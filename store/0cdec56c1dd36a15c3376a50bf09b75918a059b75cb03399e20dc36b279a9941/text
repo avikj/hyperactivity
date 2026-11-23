@@ -1,0 +1,11 @@
+r4d-neg-add : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  LorRing A z one add mul neg → (x y : A) → neg (add x y) ≡ add (neg x) (neg y)
+r4d-neg-add A z one add mul neg r x y =
+  lor-tr A
+    (neg (add x y))
+    (add (mul (neg one) x) (mul (neg one) y))
+    (add (neg x) (neg y))
+    (lor-tr A (neg (add x y)) (mul (neg one) (add x y)) (add (mul (neg one) x) (mul (neg one) y))
+      (sym (r4d-mul-neg1 A z one add mul neg r (add x y)))
+      (r4d-ldist A z one add mul neg r (neg one) x y))
+    (λ i → add (r4d-mul-neg1 A z one add mul neg r x i) (r4d-mul-neg1 A z one add mul neg r y i))

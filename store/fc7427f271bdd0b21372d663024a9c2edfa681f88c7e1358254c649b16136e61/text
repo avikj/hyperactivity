@@ -1,0 +1,13 @@
+rxn-dpo-sum-conserved : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (g d : List A) → rxn-len A g ≡ rxn-len A d → rxn-vec-sum A z add d ≡ z →
+  rxn-vec-sum A z add (rxn-add-delta A add g d) ≡ rxn-vec-sum A z add g
+rxn-dpo-sum-conserved A z add neg ab g d hlen hzero =
+  lor-tr A
+    (rxn-vec-sum A z add (rxn-add-delta A add g d))
+    (add (rxn-vec-sum A z add g) (rxn-vec-sum A z add d))
+    (rxn-vec-sum A z add g)
+    (rxn-sum-add A z add neg ab g d hlen)
+    (lor-tr A (add (rxn-vec-sum A z add g) (rxn-vec-sum A z add d)) (add (rxn-vec-sum A z add g) z)
+              (rxn-vec-sum A z add g)
+      (cong (λ t → add (rxn-vec-sum A z add g) t) hzero)
+      (qgm-zr A z add neg ab (rxn-vec-sum A z add g)))

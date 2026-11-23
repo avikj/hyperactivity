@@ -1,0 +1,18 @@
+r4d-swap4 : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → R4dAb A z add neg →
+  (a b c d : A) → add (add a b) (add c d) ≡ add (add a c) (add b d)
+r4d-swap4 A z add neg ab a b c d =
+  lor-tr A
+    (add (add a b) (add c d))
+    (add a (add b (add c d)))
+    (add (add a c) (add b d))
+    (r4d-assoc A z add neg ab a b (add c d))
+    (lor-tr A
+      (add a (add b (add c d)))
+      (add a (add c (add b d)))
+      (add (add a c) (add b d))
+      (cong (λ t → add a t)
+        (lor-tr A (add b (add c d)) (add (add c b) d) (add c (add b d))
+          (concat (sym (r4d-assoc A z add neg ab b c d))
+                  (cong (λ u → add u d) (r4d-comm A z add neg ab b c)))
+          (r4d-assoc A z add neg ab c b d)))
+      (sym (r4d-assoc A z add neg ab a c (add b d))))

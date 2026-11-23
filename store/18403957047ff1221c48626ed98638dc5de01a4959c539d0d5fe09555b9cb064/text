@@ -1,0 +1,8 @@
+rxn-dpo-reversible : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (g l r : List A) →
+  rxn-dpo-step A add neg (rxn-dpo-step A add neg g l r) r l ≡ g
+rxn-dpo-reversible A z add neg ab g =
+  case g return λ gs → (l r : List A) →
+    rxn-dpo-step A add neg (rxn-dpo-step A add neg gs l r) r l ≡ gs of
+    nil → λ l0 r0 → refl
+    cons gx gr → rxn-dpo-rev-cons A z add neg ab gx gr (rec gr)

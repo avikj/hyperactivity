@@ -1,0 +1,9 @@
+bst-half-diag-eq : (S A : Type) → (z one : A) → (add mul : A → A → A) → QentSR A z add mul →
+  ((x : A) → mul x one ≡ x) →
+  (w : A) → (boostProd overlap : S → A) → (configs : List S) →
+  ((s : S) → boostProd s ≡ w) →
+  qent-sum S A z add overlap configs ≡ one →
+  qent-sum S A z add (λ s → mul (boostProd s) (overlap s)) configs ≡ w
+bst-half-diag-eq S A z one add mul sr mulOneR w boostProd overlap configs hw hnorm =
+  concat (bst-const-factor S A z add mul sr w boostProd overlap configs hw)
+         (concat (cong (λ t → mul w t) hnorm) (mulOneR w))

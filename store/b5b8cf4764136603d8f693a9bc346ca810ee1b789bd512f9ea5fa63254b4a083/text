@@ -1,0 +1,27 @@
+-- THEOREM 2A (Universal DPO Interface Cancellation):
+-- Deleting L \ K to form context D = g - (l - k) and gluing R \ K = r - k equals g + (r - l) identically!
+rxn-dpo-span-eq : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (g l k r : A) →
+  add (add g (neg (add l (neg k)))) (add r (neg k)) ≡ add g (add r (neg l))
+rxn-dpo-span-eq A z add neg ab g l k r =
+  lor-tr A
+    (add (add g (neg (add l (neg k)))) (add r (neg k)))
+    (add g (add (add (neg l) k) (add r (neg k))))
+    (add g (add r (neg l)))
+    (lor-tr A
+      (add (add g (neg (add l (neg k)))) (add r (neg k)))
+      (add (add g (add (neg l) k)) (add r (neg k)))
+      (add g (add (add (neg l) k) (add r (neg k))))
+      (cong (λ t → add (add g t) (add r (neg k))) (rxn-neg-sub A z add neg ab l k))
+      (qgm-assoc A z add neg ab g (add (neg l) k) (add r (neg k))))
+    (cong (λ t → add g t)
+      (lor-tr A
+        (add (add (neg l) k) (add r (neg k)))
+        (add (add (neg l) r) (add k (neg k)))
+        (add r (neg l))
+        (qgm-swap4 A z add neg ab (neg l) k r (neg k))
+        (lor-tr A (add (add (neg l) r) (add k (neg k))) (add (add (neg l) r) z) (add r (neg l))
+          (cong (λ u → add (add (neg l) r) u) (qgm-inv A z add neg ab k))
+          (lor-tr A (add (add (neg l) r) z) (add (neg l) r) (add r (neg l))
+            (qgm-zr A z add neg ab (add (neg l) r))
+            (qgm-comm A z add neg ab (neg l) r)))))

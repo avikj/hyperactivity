@@ -1,0 +1,18 @@
+-- THEOREM 1A (Universal Constant-Boost Factorization out of Any 4-Valent Intertwiner Overlap):
+bst-const-factor : (S A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (w : A) → (boostProd overlap : S → A) → (configs : List S) →
+  ((s : S) → boostProd s ≡ w) →
+  qent-sum S A z add (λ s → mul (boostProd s) (overlap s)) configs ≡
+  mul w (qent-sum S A z add overlap configs)
+bst-const-factor S A z add mul sr w boostProd overlap configs =
+  case configs return λ cs → ((s : S) → boostProd s ≡ w) →
+    qent-sum S A z add (λ s → mul (boostProd s) (overlap s)) cs ≡
+    mul w (qent-sum S A z add overlap cs) of
+    nil → λ _ → sym (qent-mul-zr A z add mul sr w)
+    cons s rest → λ hw →
+      qent-tr A
+        (add (mul (boostProd s) (overlap s)) (qent-sum S A z add (λ x → mul (boostProd x) (overlap x)) rest))
+        (add (mul w (overlap s)) (mul w (qent-sum S A z add overlap rest)))
+        (mul w (add (overlap s) (qent-sum S A z add overlap rest)))
+        (λ i → add (mul (hw s i) (overlap s)) (rec rest hw i))
+        (sym (qent-ldist A z add mul sr w (overlap s) (qent-sum S A z add overlap rest)))

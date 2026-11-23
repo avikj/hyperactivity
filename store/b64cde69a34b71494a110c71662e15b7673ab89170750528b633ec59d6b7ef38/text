@@ -1,0 +1,16 @@
+h3d-k4-entry : Bool → BZ → BZ → QmolState → QmolState → BZ
+h3d-k4-entry trip qsh psh a b =
+  (λ u1 u2 fa w1 w2 fb gd →
+    if both (eqb u1 w1) (eqb u2 w2)
+    then
+      (if qgm-vec-eq fa fb
+       then bz-add (bz-mul qsh (bz-mul gd (bz-add (bz-mul qgm-gE-spin-half (qgm-flux-sq fa))
+                                                  (sc-p (bin-pow2 3)))))
+                   (bz-mul psh gd)
+       else (if h3d-is-k4-plaq fa fb then bz-mul qsh (bz-neg gd) else bz-zero))
+    else
+      (if h3d-share-v u1 u2 w1 w2
+       then bz-mul qsh (bz-mul (bz-neg qgm-tD-spin-half) (h3d-hop-coeff trip a b))
+       else bz-zero))
+  (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b)
+  (qmol-gram-diag trip a)

@@ -1,0 +1,16 @@
+h3d-z2-pd : Nat → Nat → List (List BZ) → List (Nat × Bool) → List (List BZ) → List (List BZ) → Bool
+h3d-z2-pd pe po rawM rawTs le lo =
+  h3d-force-mat Bool rawM (λ fm →
+  h3d-force-ts Bool rawTs (λ ts →
+    if not (sc-z2-check-rows zero fm fm ts) then false
+    else
+      (λ ek ok →
+        if not (eqb (plus (h3d-len ScKet ek) (h3d-len ScKet ok)) (h3d-len (Nat × Bool) ts)) then false
+        else
+          h3d-force-mat Bool (sc-proj-mat fm ek) (λ be →
+          if not (h3d-rump-pd pe be le) then false
+          else
+            h3d-force-mat Bool (sc-proj-mat fm ok) (λ bo →
+              h3d-rump-pd po bo lo)))
+      (sc-build-even zero ts)
+      (h3d-build-odd zero ts)))

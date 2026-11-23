@@ -1,0 +1,15 @@
+-- THEOREM 1A (Universal 4D 3-3 Pachner Move Boundary Identity d(LHS_3) == d(RHS_3)):
+r4d-pachner33-boundary : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → R4dAb A z add neg →
+  (s00 s01 s02 s10 s11 s12 s20 s21 s22 u4 u5 u3 v2 v1 v0 : A) →
+  r4d-side-boundary A add neg (s00 , (s10 , s20)) (s01 , (s11 , s21)) (s02 , (s12 , s22)) u4 u5 u3 ≡
+  r4d-side-boundary A add neg (s00 , (s01 , s02)) (s10 , (s11 , s12)) (s20 , (s21 , s22)) v2 v1 v0
+r4d-pachner33-boundary A z add neg ab s00 s01 s02 s10 s11 s12 s20 s21 s22 u4 u5 u3 v2 v1 v0 =
+  lor-tr A
+    (r4d-side-boundary A add neg (s00 , (s10 , s20)) (s01 , (s11 , s21)) (s02 , (s12 , s22)) u4 u5 u3)
+    (r4d-sum3 A add (r4d-v3add A add (s00 , (s10 , s20))
+                                     (r4d-v3add A add (s01 , (s11 , s21)) (s02 , (s12 , s22)))))
+    (r4d-side-boundary A add neg (s00 , (s01 , s02)) (s10 , (s11 , s12)) (s20 , (s21 , s22)) v2 v1 v0)
+    (concat
+      (r4d-side-reduce A z add neg ab (s00 , (s10 , s20)) (s01 , (s11 , s21)) (s02 , (s12 , s22)) u4 u5 u3)
+      (r4d-grid3x3-fubini A z add neg ab (s00 , (s10 , s20)) (s01 , (s11 , s21)) (s02 , (s12 , s22))))
+    (sym (r4d-side-reduce A z add neg ab (s00 , (s01 , s02)) (s10 , (s11 , s12)) (s20 , (s21 , s22)) v2 v1 v0))

@@ -1,0 +1,16 @@
+-- Pi-free Euler partial-fraction summand for gamma^2 = p2 / q2 (all arithmetic in binary, max Nat = 16!):
+--   d_n(p2/q2) = [ p2 * ((8*n - 2)*q2 + 6*p2) ] / [ ((2*n - 1)^2 * q2 + p2) * (n^2 * q2 + p2) ]
+bst-euler-acc : (C : Type) → List Bool → List Bool → Nat → Nat → List Bool → List Bool →
+  (List Bool → List Bool → C) → C
+bst-euler-acc C bp bq k fuel an ad cont = case fuel of
+  zero → cont an ad
+  suc rem →
+    bst-force-bin C (bin-of-nat k) (λ bk →
+    bst-force-bin C (bin-of-nat (monus (times 2 k) 1)) (λ bodd →
+    bst-force-bin C (bst-bmul bp (bst-badd (bst-bmul (bin-of-nat (monus (times 8 k) 2)) bq)
+                                           (bst-bmul (bin-of-nat 6) bp))) (λ tn →
+    bst-force-bin C (bst-bmul (bst-badd (bst-bmul (bst-bmul bodd bodd) bq) bp)
+                              (bst-badd (bst-bmul (bst-bmul bk bk) bq) bp)) (λ td →
+    bst-force-bin C (bst-badd (bst-bmul an td) (bst-bmul tn ad)) (λ an2 →
+    bst-force-bin C (bst-bmul ad td) (λ ad2 →
+      bst-euler-acc C bp bq (suc k) rem an2 ad2 cont))))))

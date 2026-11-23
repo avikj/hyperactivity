@@ -1,0 +1,13 @@
+h3d-xm-dup : (W : Type) → (zW : W) → (addW : W → W → W) → (negW : W → W) → QgmAb W zW addW negW →
+  (tau : W → W) → ((x y : W) → tau (addW x y) ≡ addW (tau x) (tau y)) →
+  (x : W) → sc-xm W addW negW tau (addW x x) ≡ addW (sc-xm W addW negW tau x) (sc-xm W addW negW tau x)
+h3d-xm-dup W zW addW negW ab tau hlin x =
+  qgm-tr W
+    (addW (addW x x) (negW (tau (addW x x))))
+    (addW (addW x x) (addW (negW (tau x)) (negW (tau x))))
+    (addW (sc-xm W addW negW tau x) (sc-xm W addW negW tau x))
+    (cong (λ t → addW (addW x x) t)
+          (lor-tr W (negW (tau (addW x x))) (negW (addW (tau x) (tau x))) (addW (negW (tau x)) (negW (tau x)))
+            (cong negW (hlin x x))
+            (qgm-neghom W zW addW negW ab (tau x) (tau x))))
+    (qgm-swap4 W zW addW negW ab x x (negW (tau x)) (negW (tau x)))

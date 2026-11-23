@@ -1,0 +1,24 @@
+r4d-canon-bf-R : (C : Type) →
+  Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat →
+  Nat → Nat → Nat → Nat → Nat → Bool → (R4dFrac → C) → C
+r4d-canon-bf-R C j01 j02 j03 j04 j12 j13 j14 j23 j24 j34 k0 k1 k2 k3 k4 pos cont =
+  if r4d-canon-ok j01 j02 j03 j04 j12 j13 j14 j23 j24 j34 k0 k1 k2 k3 k4
+  then
+    (r4d-bq-to-fr C (sf-ninej-W j03 j04 k0 j13 j14 k1 k3 k4 k2) (λ w9 →
+     if r4d-fr-is-zero w9 then cont r4d-fr-zero else
+     r4d-bq-to-fr C (sf-racah-W k0 k1 k2 j12 j02 j01) (λ wL →
+     if r4d-fr-is-zero wL then cont r4d-fr-zero else
+     r4d-bq-to-fr C (sf-racah-W k2 k3 k4 j34 j24 j23) (λ wR →
+     if r4d-fr-is-zero wR then cont r4d-fr-zero else
+     r4d-bq-to-fr C (sf-delta2 k0 k1 k2) (λ dL →
+     r4d-bq-to-fr C (sf-delta2 k2 k3 k4) (λ dR →
+     r4d-force-fr C (r4d-fr-mul dL (r4d-fr-mul dR w9)) (λ p1 →
+     r4d-force-fr C (r4d-fr-mul p1 (r4d-fr-mul wL wR)) (λ raw →
+       (λ exp → cont (if odd exp then r4d-fr-neg raw else raw))
+       (plus (plus (nat-half (plus (plus j01 j02) k0)) (nat-half (plus (plus j02 j12) k2)))
+             (plus (plus (nat-half (plus (plus j23 j24) k2)) (nat-half (plus (plus j24 j34) k4)))
+                   (plus (plus j03 j14)
+                         (if pos then 0
+                          else plus (plus (plus j01 j02) (plus j03 j04))
+                                    (plus (plus (plus j12 j13) (plus j14 j23)) (plus j24 j34))))))))))))))
+  else cont r4d-fr-zero

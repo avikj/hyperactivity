@@ -1,0 +1,11 @@
+rxn-dpo-cols : List (List Nat) → List (List Nat) → List Nat → Nat → Nat → Nat → List Nat → List Nat
+rxn-dpo-cols adjL adjR m nL i j rowG = case rowG of
+  nil → nil
+  cons gij gr →
+    (λ u v →
+      cons (if both (leb (suc u) nL) (leb (suc v) nL)
+            then plus (monus gij (rxn-adj adjL u v)) (rxn-adj adjR u v)
+            else gij)
+           (rxn-dpo-cols adjL adjR m nL i (suc j) gr))
+    (rxn-inv-at m zero i)
+    (rxn-inv-at m zero j)

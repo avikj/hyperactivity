@@ -1,0 +1,30 @@
+-- THEOREM 1A (Universal Arbitrary-Background-Charge Dirac Hop Gauge Invariance on Any Oriented Graph):
+h3d-gauss-hop-arb : (A : Type) → (z one : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (qbg : Nat → A) → (x k : Nat) → (es : List (Nat × Nat)) → (fs : List A) →
+  qgm-div A z add neg x es fs ≡ h3d-charge-arb A z one add neg qbg x (fst (qgm-edge-at es k)) →
+  qgm-div A z add neg x es (qgm-vec-add A add fs (qgm-unit-flux A z one k)) ≡
+  h3d-charge-arb A z one add neg qbg x (snd (qgm-edge-at es k))
+h3d-gauss-hop-arb A z one add neg ab qbg x k es fs h =
+  qgm-tr A
+    (qgm-div A z add neg x es (qgm-vec-add A add fs (qgm-unit-flux A z one k)))
+    (add (add (qbg x) (if eqb x (fst (qgm-edge-at es k)) then neg one else z))
+         (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one))
+    (add (qbg x) (if eqb x (snd (qgm-edge-at es k)) then neg one else z))
+    (lor-tr A
+      (qgm-div A z add neg x es (qgm-vec-add A add fs (qgm-unit-flux A z one k)))
+      (add (qgm-div A z add neg x es fs) (qgm-div A z add neg x es (qgm-unit-flux A z one k)))
+      (add (add (qbg x) (if eqb x (fst (qgm-edge-at es k)) then neg one else z))
+           (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one))
+      (qgm-div-linear A z add neg ab x es fs (qgm-unit-flux A z one k))
+      (λ i → add (h i) (qgm-div-unit A z one add neg ab x es k i)))
+    (lor-tr A
+      (add (add (qbg x) (if eqb x (fst (qgm-edge-at es k)) then neg one else z))
+           (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one))
+      (add (qbg x) (add (if eqb x (fst (qgm-edge-at es k)) then neg one else z)
+                        (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one)))
+      (add (qbg x) (if eqb x (snd (qgm-edge-at es k)) then neg one else z))
+      (qgm-assoc A z add neg ab (qbg x)
+        (if eqb x (fst (qgm-edge-at es k)) then neg one else z)
+        (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one))
+      (cong (λ t → add (qbg x) t)
+        (h3d-el-step A z one add neg ab x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)))))

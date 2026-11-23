@@ -1,0 +1,17 @@
+h3d-klein4-pd : Nat → Nat → Nat → Nat →
+  List (List BZ) → List (Nat × Bool) → List (Nat × Bool) → List (Nat × Bool) →
+  List (List BZ) → List (List BZ) → List (List BZ) → List (List BZ) → Bool
+h3d-klein4-pd pee peo poe poo rawM rawTs23 tsE01 tsO01 lee leo loe loo =
+  h3d-force-mat Bool rawM (λ fm →
+  h3d-force-ts Bool rawTs23 (λ ts23 →
+    if not (sc-z2-check-rows zero fm fm ts23) then false
+    else
+      (λ ek ok →
+        if not (eqb (plus (h3d-len ScKet ek) (h3d-len ScKet ok)) (h3d-len (Nat × Bool) ts23)) then false
+        else
+          h3d-force-mat Bool (sc-proj-mat fm ek) (λ be →
+          h3d-force-mat Bool (sc-proj-mat fm ok) (λ bo →
+            both (h3d-z2-pd pee peo be tsE01 lee leo)
+                 (h3d-z2-pd poe poo bo tsO01 loe loo))))
+      (sc-build-even zero ts23)
+      (h3d-build-odd zero ts23)))

@@ -1,0 +1,12 @@
+-- THEOREM 1A (Universal Impossibility of Static Canonical Identifiers across Observation Windows):
+rxn-no-static-canonicalizer : (X I : Type) →
+  (SemFast SemSlow : X → X → Type) →
+  (canon : X → I) →
+  ((x y : X) → canon x ≡ canon y → SemFast x y) →
+  ((x y : X) → SemSlow x y → canon x ≡ canon y) →
+  (a b : X) →
+  (SemFast a b → Empty) →
+  SemSlow a b →
+  Empty
+rxn-no-static-canonicalizer X I SemFast SemSlow canon soundFast completeSlow a b notFast eqSlow =
+  notFast (soundFast a b (completeSlow a b eqSlow))

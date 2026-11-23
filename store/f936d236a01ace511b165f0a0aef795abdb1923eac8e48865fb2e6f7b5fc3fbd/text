@@ -1,0 +1,11 @@
+bst-tele-cancel : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → BstAb A z add neg →
+  (a b c : A) → add (add a (neg b)) (add b (neg c)) ≡ add a (neg c)
+bst-tele-cancel A z add neg ab a b c =
+  lor-tr A
+    (add (add a (neg b)) (add b (neg c)))
+    (add a (add (add (neg b) b) (neg c)))
+    (add a (neg c))
+    (concat (fst (snd (snd ab)) a (neg b) (add b (neg c)))
+            (cong (λ t → add a t) (sym (fst (snd (snd ab)) (neg b) b (neg c)))))
+    (concat (cong (λ t → add a (add t (neg c))) (snd (snd (snd (snd ab))) b))
+            (cong (λ t → add a t) (fst ab (neg c))))

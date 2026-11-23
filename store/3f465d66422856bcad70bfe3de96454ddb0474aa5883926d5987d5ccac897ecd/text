@@ -1,0 +1,22 @@
+rxn-single-rev : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (g l r : A) → add (add g (add r (neg l))) (add l (neg r)) ≡ g
+rxn-single-rev A z add neg ab g l r =
+  lor-tr A
+    (add (add g (add r (neg l))) (add l (neg r)))
+    (add g (add (add r (neg l)) (add l (neg r))))
+    g
+    (qgm-assoc A z add neg ab g (add r (neg l)) (add l (neg r)))
+    (lor-tr A
+      (add g (add (add r (neg l)) (add l (neg r))))
+      (add g z)
+      g
+      (cong (λ t → add g t)
+        (lor-tr A (add (add r (neg l)) (add l (neg r))) (add (add r l) (add (neg l) (neg r))) z
+          (qgm-swap4 A z add neg ab r (neg l) l (neg r))
+          (lor-tr A (add (add r l) (add (neg l) (neg r))) (add (add r l) (neg (add r l))) z
+            (cong (λ u → add (add r l) u)
+              (lor-tr A (add (neg l) (neg r)) (add (neg r) (neg l)) (neg (add r l))
+                (qgm-comm A z add neg ab (neg l) (neg r))
+                (sym (qgm-neghom A z add neg ab r l))))
+            (qgm-inv A z add neg ab (add r l)))))
+      (qgm-zr A z add neg ab g))

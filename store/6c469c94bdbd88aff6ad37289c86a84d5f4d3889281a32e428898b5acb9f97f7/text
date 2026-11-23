@@ -1,0 +1,14 @@
+h3d-hop-coeff : Bool → QmolState → QmolState → BZ
+h3d-hop-coeff trip a b =
+  (λ u1 u2 fa w1 w2 fb →
+    if trip
+    then qmol-bz-sub (h3d-one-hop-k4 u1 u2 fa w1 w2 fb) (h3d-one-hop-k4 u1 u2 fa w2 w1 fb)
+    else (if eqb u1 u2
+          then (if eqb w1 w2
+                then h3d-one-hop-k4 u1 u2 fa w1 w2 fb
+                else bz-add (h3d-one-hop-k4 u1 u2 fa w1 w2 fb) (h3d-one-hop-k4 u1 u2 fa w2 w1 fb))
+          else (if eqb w1 w2
+                then bz-add (h3d-one-hop-k4 u1 u2 fa w1 w2 fb) (h3d-one-hop-k4 u2 u1 fa w1 w2 fb)
+                else bz-add (bz-add (h3d-one-hop-k4 u1 u2 fa w1 w2 fb) (h3d-one-hop-k4 u1 u2 fa w2 w1 fb))
+                            (bz-add (h3d-one-hop-k4 u2 u1 fa w1 w2 fb) (h3d-one-hop-k4 u2 u1 fa w2 w1 fb)))))
+  (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b)

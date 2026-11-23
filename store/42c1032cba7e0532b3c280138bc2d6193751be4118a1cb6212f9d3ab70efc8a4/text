@@ -1,0 +1,11 @@
+r4d-foil : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  LorRing A z one add mul neg →
+  (a b c d : A) → mul (add a b) (add c d) ≡ add (add (mul a c) (mul a d)) (add (mul b c) (mul b d))
+r4d-foil A z one add mul neg r a b c d =
+  lor-tr A
+    (mul (add a b) (add c d))
+    (add (mul a (add c d)) (mul b (add c d)))
+    (add (add (mul a c) (mul a d)) (add (mul b c) (mul b d)))
+    (r4d-rdist A z one add mul neg r a b (add c d))
+    (λ i → add (r4d-ldist A z one add mul neg r a c d i)
+               (r4d-ldist A z one add mul neg r b c d i))

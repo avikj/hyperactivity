@@ -1,0 +1,15 @@
+r4d-neg-neg : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → R4dAb A z add neg →
+  (x : A) → neg (neg x) ≡ x
+r4d-neg-neg A z add neg ab x =
+  lor-tr A
+    (neg (neg x))
+    (add (neg (neg x)) (add (neg x) x))
+    x
+    (sym (lor-tr A (add (neg (neg x)) (add (neg x) x)) (add (neg (neg x)) z) (neg (neg x))
+           (cong (λ t → add (neg (neg x)) t) (snd (snd (snd (snd (fst ab)))) x))
+           (r4d-zr A z add neg ab (neg (neg x)))))
+    (lor-tr A (add (neg (neg x)) (add (neg x) x)) (add (add (neg (neg x)) (neg x)) x) x
+      (sym (r4d-assoc A z add neg ab (neg (neg x)) (neg x) x))
+      (lor-tr A (add (add (neg (neg x)) (neg x)) x) (add z x) x
+        (cong (λ t → add t x) (snd (snd (snd (snd (fst ab)))) (neg x)))
+        (r4d-zl A z add neg ab x)))

@@ -1,0 +1,24 @@
+h3d-rump-cols : List Bool → Nat → Nat → List BZ → List (List BZ) → List BZ → List (List BZ) →
+  H3dGP → List Bool → Bool
+h3d-rump-cols s2 i j rowM allM rowL curLs diag off = case rowM of
+  nil → (case curLs of
+           nil → eqb (bst-bin-cmp (bst-badd (snd diag) off) (fst diag)) 0
+           cons _ _ → false)
+  cons mij mrest → case curLs of
+    nil → false
+    cons lj lrest →
+      if h3d-bz-eq mij (sc-nth-bz (sc-nth-row allM j) i)
+      then
+        (h3d-force-gp Bool (h3d-gp-dot rowL lj h3d-gp-zero) (λ dt →
+         h3d-force-gp Bool
+           (if bst-all-zero (snd mij) then (snd dt , fst dt)
+            else (if fst mij
+                  then (bst-badd (bst-bmul s2 (snd mij)) (snd dt) , fst dt)
+                  else (snd dt , bst-badd (bst-bmul s2 (snd mij)) (fst dt))))
+           (λ eij →
+             if eqb i j
+             then h3d-rump-cols s2 i (suc j) mrest allM rowL lrest eij off
+             else
+               bst-force-bin Bool (bst-badd (h3d-gp-abs (fst eij) (snd eij)) off) (λ off2 →
+                 h3d-rump-cols s2 i (suc j) mrest allM rowL lrest diag off2))))
+      else false

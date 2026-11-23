@@ -1,0 +1,16 @@
+h3d-quad-rows : List BZ → List BZ → List (List BZ) → H3dGP → Bool
+h3d-quad-rows curV allV curM acc = case curV of
+  nil → (case curM of nil → eqb (bst-bin-cmp (fst acc) (snd acc)) 0; cons _ _ → false)
+  cons vi vrest → case curM of
+    nil → false
+    cons rowM mrest →
+      if bst-all-zero (snd vi) then h3d-quad-rows vrest allV mrest acc
+      else
+        h3d-force-gp Bool (h3d-gp-dot rowM allV h3d-gp-zero) (λ rv →
+        h3d-force-gp Bool
+          (if fst vi
+           then (bst-badd (fst acc) (bst-bmul (snd vi) (fst rv)) ,
+                 bst-badd (snd acc) (bst-bmul (snd vi) (snd rv)))
+           else (bst-badd (fst acc) (bst-bmul (snd vi) (snd rv)) ,
+                 bst-badd (snd acc) (bst-bmul (snd vi) (fst rv))))
+          (λ acc2 → h3d-quad-rows vrest allV mrest acc2))

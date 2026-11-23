@@ -1,0 +1,20 @@
+-- THEOREM 2B (Universal DPO Microscopic Reversibility on Arbitrary Bond Vectors):
+rxn-dpo-rev-cons : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (gx : A) → (gr : List A) →
+  ((l r : List A) → rxn-dpo-step A add neg (rxn-dpo-step A add neg gr l r) r l ≡ gr) →
+  (l r : List A) →
+  rxn-dpo-step A add neg (rxn-dpo-step A add neg (cons gx gr) l r) r l ≡ cons gx gr
+rxn-dpo-rev-cons A z add neg ab gx gr ih l r =
+  case l return λ ls →
+    rxn-dpo-step A add neg (rxn-dpo-step A add neg (cons gx gr) ls r) r ls ≡ cons gx gr of
+    nil →
+      (case r return λ rs → rxn-dpo-step A add neg (cons gx gr) rs nil ≡ cons gx gr of
+         nil → refl
+         cons rx rr → refl)
+    cons lx lr →
+      (case r return λ rs →
+         rxn-dpo-step A add neg
+           (rxn-dpo-step A add neg (cons gx gr) (cons lx lr) rs) rs (cons lx lr) ≡ cons gx gr of
+         nil → refl
+         cons rx rr →
+           (λ i → cons (rxn-single-rev A z add neg ab gx lx rx i) (ih lr rr i)))

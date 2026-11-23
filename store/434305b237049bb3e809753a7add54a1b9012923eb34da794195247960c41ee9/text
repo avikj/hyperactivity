@@ -1,0 +1,12 @@
+-- THEOREM 1C (Universal Window-Indexed Warrant Transport under Monotone Window Coarsening):
+rxn-warrant-transport : (W X V : Type) →
+  (LeW : W → W → Type) →
+  (Sem : W → X → X → Type) →
+  ((w1 w2 : W) → LeW w1 w2 → (x y : X) → Sem w1 x y → Sem w2 x y) →
+  (P : X → V) →
+  (wFine wCoarse : W) →
+  LeW wFine wCoarse →
+  ((x y : X) → Sem wCoarse x y → P x ≡ P y) →
+  (a b : X) → Sem wFine a b → P a ≡ P b
+rxn-warrant-transport W X V LeW Sem coarsen P wFine wCoarse hle warrant a b eqFine =
+  warrant a b (coarsen wFine wCoarse hle a b eqFine)

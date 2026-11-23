@@ -1,0 +1,13 @@
+-- Executable Window-Relative Entity Resolver vs. All 16 Static Canonicalizer Assignments:
+-- Each benchmark pair has certified tunnelling splitting lower/upper bounds [gapLo, gapHi] in BQ:
+--   * Class 1 (Symmetric Amidine N1=C-N2-H <-> H-N1-C=N2): gap > 3/2 (active proton transfer)
+--   * Class 2 (Lactam-Lactim O=C-N-H <-> H-O-C=N):          coupled gap > 3/2 (active prototropic equilibrium)
+--   * Class 3 (Locked C-H constitutional isomer, t_D = 0):  gap = 0
+--   * Class 4 (Locked stereocenter, t_D = 0):               gap = 0
+-- At window resolution Gamma, two states merge into ONE entity iff gap > Gamma!
+--   * Crystal diffraction / cryogenic window (Gamma_crystal = 2):  [false, false, false, false]
+--   * Bench / aqueous bioassay window       (Gamma_bench   = 1):  [true,  true,  false, false]
+rxn-resolve-at : Nat → List Nat → List Bool
+rxn-resolve-at twoGamma twoGaps = case twoGaps of
+  nil → nil
+  cons g gr → cons (leb (suc twoGamma) g) (rxn-resolve-at twoGamma gr)

@@ -1,0 +1,10 @@
+-- Complete Even + Odd Z_2 block builder (including fixed-negative states tau(|i>) = -|i> in the Odd block!):
+h3d-build-odd : Nat → List (Nat × Bool) → List ScKet
+h3d-build-odd i ts = case ts of
+  nil → nil
+  cons p rest →
+    if eqb i (fst p)
+    then (if snd p then h3d-build-odd (suc i) rest else cons (inl i) (h3d-build-odd (suc i) rest))
+    else (if leb i (fst p)
+          then cons (inr (i , (fst p , not (snd p)))) (h3d-build-odd (suc i) rest)
+          else h3d-build-odd (suc i) rest)

@@ -1,0 +1,27 @@
+-- (B) Exact Barrett-Crane 4D Quantum Gravity 3-3 Curvature Awakening & Interior Hinge Area Variance:
+--     * Z_LHS^BC = 103 / 2592,   Z_RHS^BC = 107 / 648 = 428 / 2592  (Z_LHS^BC < Z_RHS^BC!)
+--     * Interior hinge area^2 a^2(k_A) = k_A*(k_A + 2) in {0, 8}:
+--         <a^2> = 8*w_2 / (w_0 + w_2) = 500 / 103
+--         Var(a^2) = 64*w_0*w_2 / (w_0 + w_2)^2 = 162000 / 10609 > 0!
+r4d-bc-33-verdict :
+  r4d-bc-lhs-term Bool 0 (λ w0 →
+  r4d-bc-lhs-term Bool 2 (λ w2 →
+  r4d-bc-rhs-term Bool 1 (λ v1 →
+  r4d-bc-rhs-term Bool 3 (λ v3 →
+  bst-force-uf Bool (r4d-uf-add w0 w2) (λ zLn zLd →
+  bst-force-uf Bool (r4d-uf-add v1 v3) (λ zRn zRd →
+  (λ zL zR meanA2 varA2 →
+    both (both (bst-uf-eq zL (bin-of-nat 103 , bst-bmul (bin-of-nat 32) (bin-of-nat 81)))
+               (bst-uf-eq zR (bin-of-nat 107 , bst-bmul (bin-of-nat 8) (bin-of-nat 81))))
+         (both (bst-uf-lt zL zR)
+               (both (bst-uf-eq meanA2 (bst-bmul (bin-of-nat 20) (bin-of-nat 25) , bin-of-nat 103))
+                     (both (bst-uf-eq varA2
+                             (bst-bmul (bin-of-nat 162) (bst-bmul (bin-of-nat 25) (bin-of-nat 40)) ,
+                              bst-bmul (bin-of-nat 103) (bin-of-nat 103)))
+                           (bst-uf-lt (nil , bin-one) varA2)))))
+  (zLn , zLd)
+  (zRn , zRd)
+  (bst-bmul (bin-of-nat 8) (bst-bmul (fst w2) zLd) , bst-bmul (snd w2) zLn)
+  (bst-bmul (bin-of-nat 64) (bst-bmul (fst w0) (bst-bmul (fst w2) (bst-bmul zLd zLd))) ,
+   bst-bmul (snd w0) (bst-bmul (snd w2) (bst-bmul zLn zLn))))))))) ≡ true
+r4d-bc-33-verdict = refl

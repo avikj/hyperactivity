@@ -1,0 +1,12 @@
+-- THEOREM 1C (Universal Telescoping Tail Theorem):
+-- sum_{k=0}^{m-1} (f(n + k) - f(n + k + 1)) = f(n) - f(n + m) over ANY abelian group!
+bst-telescope-sum : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → BstAb A z add neg →
+  (f : Nat → A) → (m n : Nat) →
+  bst-tele-sum A z add neg f n m ≡ add (f n) (neg (f (bst-shift n m)))
+bst-telescope-sum A z add neg ab f m =
+  case m return λ k → (n : Nat) → bst-tele-sum A z add neg f n k ≡ add (f n) (neg (f (bst-shift n k))) of
+    zero → λ n → sym (fst (snd (snd (snd ab))) (f n))
+    suc k → λ n →
+      concat
+        (cong (λ t → add (add (f n) (neg (f (suc n)))) t) (rec k (suc n)))
+        (bst-tele-cancel A z add neg ab (f n) (f (suc n)) (f (bst-shift (suc n) k)))

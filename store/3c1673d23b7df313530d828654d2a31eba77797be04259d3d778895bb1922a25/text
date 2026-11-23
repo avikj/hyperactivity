@@ -1,0 +1,170 @@
+-- THEOREM 1C (Universal Cauchy-Lagrange Variance Positivity Identity):
+-- (w0*x0 + w1*x1)^2 + (w0*w1)*(x0 - x1)^2 == (w0*x0^2 + w1*x1^2)*(w0 + w1) over ANY commutative ring!
+r4d-var-lagrange : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  R4dAb A z add neg → LorRing A z one add mul neg →
+  (w0 w1 x0 x1 : A) →
+  add (mul (add (mul w0 x0) (mul w1 x1)) (add (mul w0 x0) (mul w1 x1)))
+      (mul (mul w0 w1) (mul (add x0 (neg x1)) (add x0 (neg x1)))) ≡
+  mul (add (mul w0 (mul x0 x0)) (mul w1 (mul x1 x1))) (add w0 w1)
+r4d-var-lagrange A z one add mul neg ab r w0 w1 x0 x1 =
+  lor-tr A
+    (add (mul (add (mul w0 x0) (mul w1 x1)) (add (mul w0 x0) (mul w1 x1)))
+         (mul (mul w0 w1) (mul (add x0 (neg x1)) (add x0 (neg x1)))))
+    (add (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+              (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0))))
+         (add (add (mul (mul w0 w1) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x1)))
+              (neg (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0))))))
+    (mul (add (mul w0 (mul x0 x0)) (mul w1 (mul x1 x1))) (add w0 w1))
+    (λ i → add
+      (lor-tr A
+        (mul (add (mul w0 x0) (mul w1 x1)) (add (mul w0 x0) (mul w1 x1)))
+        (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+             (add (mul (mul w0 w1) (mul x0 x1)) (mul (mul w0 w1) (mul x1 x0))))
+        (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+             (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0))))
+        (lor-tr A
+          (mul (add (mul w0 x0) (mul w1 x1)) (add (mul w0 x0) (mul w1 x1)))
+          (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x1)))
+               (add (mul (mul w0 w1) (mul x1 x0)) (mul (mul w1 w1) (mul x1 x1))))
+          (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+               (add (mul (mul w0 w1) (mul x0 x1)) (mul (mul w0 w1) (mul x1 x0))))
+          (lor-tr A
+            (mul (add (mul w0 x0) (mul w1 x1)) (add (mul w0 x0) (mul w1 x1)))
+            (add (add (mul (mul w0 x0) (mul w0 x0)) (mul (mul w0 x0) (mul w1 x1)))
+                 (add (mul (mul w1 x1) (mul w0 x0)) (mul (mul w1 x1) (mul w1 x1))))
+            (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x1)))
+                 (add (mul (mul w0 w1) (mul x1 x0)) (mul (mul w1 w1) (mul x1 x1))))
+            (r4d-foil A z one add mul neg r (mul w0 x0) (mul w1 x1) (mul w0 x0) (mul w1 x1))
+            (λ j → add
+              (add (r4d-mul4-mid A z one add mul neg r w0 x0 w0 x0 j)
+                   (r4d-mul4-mid A z one add mul neg r w0 x0 w1 x1 j))
+              (add (lor-tr A (mul (mul w1 x1) (mul w0 x0))
+                             (mul (mul w1 w0) (mul x1 x0))
+                             (mul (mul w0 w1) (mul x1 x0))
+                     (r4d-mul4-mid A z one add mul neg r w1 x1 w0 x0)
+                     (cong (λ u → mul u (mul x1 x0)) (r4d-mcomm A z one add mul neg r w1 w0)) j)
+                   (r4d-mul4-mid A z one add mul neg r w1 x1 w1 x1 j))))
+          (lor-tr A
+            (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x1)))
+                 (add (mul (mul w0 w1) (mul x1 x0)) (mul (mul w1 w1) (mul x1 x1))))
+            (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x0)))
+                 (add (mul (mul w0 w1) (mul x0 x1)) (mul (mul w1 w1) (mul x1 x1))))
+            (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+                 (add (mul (mul w0 w1) (mul x0 x1)) (mul (mul w0 w1) (mul x1 x0))))
+            (r4d-swap4 A z add neg ab
+              (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x1))
+              (mul (mul w0 w1) (mul x1 x0)) (mul (mul w1 w1) (mul x1 x1)))
+            (lor-tr A
+              (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x0)))
+                   (add (mul (mul w0 w1) (mul x0 x1)) (mul (mul w1 w1) (mul x1 x1))))
+              (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x0)))
+                   (add (mul (mul w1 w1) (mul x1 x1)) (mul (mul w0 w1) (mul x0 x1))))
+              (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+                   (add (mul (mul w0 w1) (mul x0 x1)) (mul (mul w0 w1) (mul x1 x0))))
+              (cong (λ t → add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x0))) t)
+                    (r4d-comm A z add neg ab (mul (mul w0 w1) (mul x0 x1)) (mul (mul w1 w1) (mul x1 x1))))
+              (lor-tr A
+                (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x0)))
+                     (add (mul (mul w1 w1) (mul x1 x1)) (mul (mul w0 w1) (mul x0 x1))))
+                (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+                     (add (mul (mul w0 w1) (mul x1 x0)) (mul (mul w0 w1) (mul x0 x1))))
+                (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+                     (add (mul (mul w0 w1) (mul x0 x1)) (mul (mul w0 w1) (mul x1 x0))))
+                (r4d-swap4 A z add neg ab
+                  (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x0))
+                  (mul (mul w1 w1) (mul x1 x1)) (mul (mul w0 w1) (mul x0 x1)))
+                (cong (λ t → add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1))) t)
+                      (r4d-comm A z add neg ab (mul (mul w0 w1) (mul x1 x0)) (mul (mul w0 w1) (mul x0 x1))))))))
+        (cong (λ t → add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1))) t)
+              (sym (r4d-ldist A z one add mul neg r (mul w0 w1) (mul x0 x1) (mul x1 x0)))) i)
+      (lor-tr A
+        (mul (mul w0 w1) (mul (add x0 (neg x1)) (add x0 (neg x1))))
+        (mul (mul w0 w1) (add (add (mul x0 x0) (mul x1 x1)) (neg (add (mul x0 x1) (mul x1 x0)))))
+        (add (add (mul (mul w0 w1) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x1)))
+             (neg (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0)))))
+        (cong (λ t → mul (mul w0 w1) t)
+          (lor-tr A
+            (mul (add x0 (neg x1)) (add x0 (neg x1)))
+            (add (add (mul x0 x0) (neg (mul x0 x1))) (add (neg (mul x1 x0)) (mul x1 x1)))
+            (add (add (mul x0 x0) (mul x1 x1)) (neg (add (mul x0 x1) (mul x1 x0))))
+            (lor-tr A
+              (mul (add x0 (neg x1)) (add x0 (neg x1)))
+              (add (add (mul x0 x0) (mul x0 (neg x1))) (add (mul (neg x1) x0) (mul (neg x1) (neg x1))))
+              (add (add (mul x0 x0) (neg (mul x0 x1))) (add (neg (mul x1 x0)) (mul x1 x1)))
+              (r4d-foil A z one add mul neg r x0 (neg x1) x0 (neg x1))
+              (λ j → add
+                (add (mul x0 x0) (r4d-neg-mr A z one add mul neg r x0 x1 j))
+                (add (r4d-neg-ml A z one add mul neg r x1 x0 j)
+                     (r4d-mul-neg2 A z one add mul neg ab r x1 x1 j))))
+            (lor-tr A
+              (add (add (mul x0 x0) (neg (mul x0 x1))) (add (neg (mul x1 x0)) (mul x1 x1)))
+              (add (add (mul x0 x0) (mul x1 x1)) (add (neg (mul x0 x1)) (neg (mul x1 x0))))
+              (add (add (mul x0 x0) (mul x1 x1)) (neg (add (mul x0 x1) (mul x1 x0))))
+              (lor-tr A
+                (add (add (mul x0 x0) (neg (mul x0 x1))) (add (neg (mul x1 x0)) (mul x1 x1)))
+                (add (add (mul x0 x0) (neg (mul x0 x1))) (add (mul x1 x1) (neg (mul x1 x0))))
+                (add (add (mul x0 x0) (mul x1 x1)) (add (neg (mul x0 x1)) (neg (mul x1 x0))))
+                (cong (λ u → add (add (mul x0 x0) (neg (mul x0 x1))) u)
+                      (r4d-comm A z add neg ab (neg (mul x1 x0)) (mul x1 x1)))
+                (r4d-swap4 A z add neg ab (mul x0 x0) (neg (mul x0 x1)) (mul x1 x1) (neg (mul x1 x0))))
+              (cong (λ u → add (add (mul x0 x0) (mul x1 x1)) u)
+                    (sym (r4d-neg-add A z one add mul neg r (mul x0 x1) (mul x1 x0)))))))
+        (lor-tr A
+          (mul (mul w0 w1) (add (add (mul x0 x0) (mul x1 x1)) (neg (add (mul x0 x1) (mul x1 x0)))))
+          (add (mul (mul w0 w1) (add (mul x0 x0) (mul x1 x1)))
+               (mul (mul w0 w1) (neg (add (mul x0 x1) (mul x1 x0)))))
+          (add (add (mul (mul w0 w1) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x1)))
+               (neg (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0)))))
+          (r4d-ldist A z one add mul neg r (mul w0 w1) (add (mul x0 x0) (mul x1 x1)) (neg (add (mul x0 x1) (mul x1 x0))))
+          (λ j → add
+            (r4d-ldist A z one add mul neg r (mul w0 w1) (mul x0 x0) (mul x1 x1) j)
+            (r4d-neg-mr A z one add mul neg r (mul w0 w1) (add (mul x0 x1) (mul x1 x0)) j))) i))
+    (lor-tr A
+      (add (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+                (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0))))
+           (add (add (mul (mul w0 w1) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x1)))
+                (neg (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0))))))
+      (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x0)))
+           (add (mul (mul w0 w1) (mul x1 x1)) (mul (mul w1 w1) (mul x1 x1))))
+      (mul (add (mul w0 (mul x0 x0)) (mul w1 (mul x1 x1))) (add w0 w1))
+      (lor-tr A
+        (add (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+                  (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0))))
+             (add (add (mul (mul w0 w1) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x1)))
+                  (neg (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0))))))
+        (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+             (add (mul (mul w0 w1) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x1))))
+        (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x0)))
+             (add (mul (mul w0 w1) (mul x1 x1)) (mul (mul w1 w1) (mul x1 x1))))
+        (r4d-cancel-pm A z add neg ab
+          (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+          (add (mul (mul w0 w1) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x1)))
+          (mul (mul w0 w1) (add (mul x0 x1) (mul x1 x0))))
+        (lor-tr A
+          (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1)))
+               (add (mul (mul w0 w1) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x1))))
+          (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x0)))
+               (add (mul (mul w1 w1) (mul x1 x1)) (mul (mul w0 w1) (mul x1 x1))))
+          (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x0)))
+               (add (mul (mul w0 w1) (mul x1 x1)) (mul (mul w1 w1) (mul x1 x1))))
+          (r4d-swap4 A z add neg ab
+            (mul (mul w0 w0) (mul x0 x0)) (mul (mul w1 w1) (mul x1 x1))
+            (mul (mul w0 w1) (mul x0 x0)) (mul (mul w0 w1) (mul x1 x1)))
+          (cong (λ t → add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x0))) t)
+                (r4d-comm A z add neg ab (mul (mul w1 w1) (mul x1 x1)) (mul (mul w0 w1) (mul x1 x1))))))
+      (sym (lor-tr A
+        (mul (add (mul w0 (mul x0 x0)) (mul w1 (mul x1 x1))) (add w0 w1))
+        (add (add (mul (mul w0 (mul x0 x0)) w0) (mul (mul w0 (mul x0 x0)) w1))
+             (add (mul (mul w1 (mul x1 x1)) w0) (mul (mul w1 (mul x1 x1)) w1)))
+        (add (add (mul (mul w0 w0) (mul x0 x0)) (mul (mul w0 w1) (mul x0 x0)))
+             (add (mul (mul w0 w1) (mul x1 x1)) (mul (mul w1 w1) (mul x1 x1))))
+        (r4d-foil A z one add mul neg r (mul w0 (mul x0 x0)) (mul w1 (mul x1 x1)) w0 w1)
+        (λ j → add
+          (add (r4d-mul3-swap A z one add mul neg r w0 (mul x0 x0) w0 j)
+               (r4d-mul3-swap A z one add mul neg r w0 (mul x0 x0) w1 j))
+          (add (lor-tr A (mul (mul w1 (mul x1 x1)) w0)
+                         (mul (mul w1 w0) (mul x1 x1))
+                         (mul (mul w0 w1) (mul x1 x1))
+                 (r4d-mul3-swap A z one add mul neg r w1 (mul x1 x1) w0)
+                 (cong (λ u → mul u (mul x1 x1)) (r4d-mcomm A z one add mul neg r w1 w0)) j)
+               (r4d-mul3-swap A z one add mul neg r w1 (mul x1 x1) w1 j))))))

@@ -1,0 +1,8 @@
+h3d-force-ts : (C : Type) → List (Nat × Bool) → (List (Nat × Bool) → C) → C
+h3d-force-ts C ts k = case ts of
+  nil → k nil
+  cons p rest →
+    h3d-force-nat C (fst p) (λ ti →
+    case snd p of
+      false → h3d-force-ts C rest (λ fr → k (cons (ti , false) fr))
+      true  → h3d-force-ts C rest (λ fr → k (cons (ti , true) fr)))

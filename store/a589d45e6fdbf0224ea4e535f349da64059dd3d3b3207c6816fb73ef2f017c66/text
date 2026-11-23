@@ -1,0 +1,29 @@
+-- (B) Convergent Gauge-Fixed Lorentzian EPRL 4-Simplex Vertex Amplitudes at gamma = 0, gamma = 1, and gamma = 1/4:
+--     * gamma = 0: (0..0) -> 4096/50625,   (2..2) -> -28672/1366875
+--     * gamma = 1: (0..0) -> 16/625,       (2..2) -> -112/16875
+--     * gamma = 1/4 (black-hole Barbero-Immirzi regime): 1/16 < (4*pi)^4 A_v^Lor(0..0; 1/4) < 4096/50625!
+bst-lor-vertex-verdict :
+  bst-uf-pow4 Bool bst-b4-gamma0 (λ p0 →
+  bst-uf-pow4 Bool bst-b4-gamma1 (λ p1 →
+  bst-force-bq-lit Bool bst-15j-00000 (λ s0 j0 →
+  bst-force-bq-lit Bool bst-15j-22222 (λ s2 j2 →
+  bst-b4-interval Bool 1 16 6 (λ loQ hiQ →
+  bst-uf-pow4 Bool loQ (λ pQlo →
+  bst-uf-pow4 Bool hiQ (λ pQhi →
+  bst-force-bin Bool (bst-bpow4 (bin-of-nat 15)) (λ f15p4 →
+  bst-force-bin Bool (bst-bpow4 (bin-of-nat 5)) (λ f5p4 →
+  (λ vQlo vQhi →
+    both (both (bst-sq-eq (bst-sq-mul-pos p0 s0 j0) (true , (bin-pow2 12 , f15p4)))
+               (bst-sq-eq (bst-sq-mul-pos p1 s0 j0) (true , (bin-of-nat 16 , f5p4))))
+         (both (both (bst-sq-eq (bst-sq-mul-pos p0 s2 j2)
+                                (false , (bst-bmul (bin-of-nat 7) (bin-pow2 12) ,
+                                          bst-bmul (bin-of-nat 27) f15p4)))
+                     (bst-sq-eq (bst-sq-mul-pos p1 s2 j2)
+                                (false , (bst-bmul (bin-of-nat 7) (bin-of-nat 16) ,
+                                          bst-bmul (bin-of-nat 27) f5p4))))
+               (both (bst-uf-lt (bin-one , bin-of-nat 16) vQlo)
+                     (both (bst-uf-lt vQlo vQhi)
+                           (bst-uf-lt vQhi (bin-pow2 12 , f15p4))))))
+  (fst pQlo , bst-bmul (bin-of-nat 16) (snd pQlo))
+  (fst pQhi , bst-bmul (bin-of-nat 16) (snd pQhi))))))))))) ≡ true
+bst-lor-vertex-verdict = refl

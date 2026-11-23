@@ -1,0 +1,14 @@
+r4d-bc-f2 : (C : Type) → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat →
+  Nat → Nat → BstUF → List Nat → List Nat → List Nat → BstUF → (BstUF → C) → C
+r4d-bc-f2 C j01 j02 j03 j04 j12 j13 j14 j23 j24 j34 k0 k1 wt1 ks2 ks3 ks4 acc cont = case ks2 of
+  nil → cont acc
+  cons k2 r2 →
+    if not (tri-ok k0 k1 k2) then r4d-bc-f2 C j01 j02 j03 j04 j12 j13 j14 j23 j24 j34 k0 k1 wt1 r2 ks3 ks4 acc cont
+    else
+      r4d-bq-sq-uf C (bq-mul (sf-delta2 k0 k1 k2) (sf-racah-W k0 k1 k2 j12 j02 j01)) (λ wLsq →
+      if bst-all-zero (fst wLsq) then r4d-bc-f2 C j01 j02 j03 j04 j12 j13 j14 j23 j24 j34 k0 k1 wt1 r2 ks3 ks4 acc cont
+      else
+        r4d-tet-nsq-4 C j02 j12 j23 j24 k2 (λ n2 →
+        bst-force-uf C (r4d-uf-mul wt1 (r4d-uf-mul n2 wLsq)) (λ wn wd →
+        r4d-bc-f3 C j01 j02 j03 j04 j12 j13 j14 j23 j24 j34 k0 k1 k2 (wn , wd) ks3 ks4 acc (λ acc2 →
+          r4d-bc-f2 C j01 j02 j03 j04 j12 j13 j14 j23 j24 j34 k0 k1 wt1 r2 ks3 ks4 acc2 cont))))

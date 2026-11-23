@@ -1,0 +1,12 @@
+-- Certified rational interval [b_lo(gamma), b_hi(gamma)] for gamma^2 = p2/q2 using N terms + tail p2/(q2*N^2):
+bst-b4-interval : (C : Type) → Nat → Nat → Nat → (BstUF → BstUF → C) → C
+bst-b4-interval C p2 q2 N cont =
+  bst-force-bin C (bin-of-nat p2) (λ bp →
+  bst-force-bin C (bin-of-nat q2) (λ bq →
+  bst-euler-acc C bp bq 1 N nil bin-one (λ eloN eloD →
+  bst-force-bin C (bst-bmul bq (bin-of-nat (times N N))) (λ qN2 →
+  bst-force-bin C (bst-badd (bst-bmul eloN qN2) (bst-bmul bp eloD)) (λ ehiN →
+  bst-force-bin C (bst-bmul eloD qN2) (λ ehiD →
+  bst-force-uf C (bst-master-uf p2 q2 ehiN ehiD) (λ bloN bloD →
+  bst-force-uf C (bst-master-uf p2 q2 eloN eloD) (λ bhiN bhiD →
+    cont (bloN , bloD) (bhiN , bhiD)))))))))

@@ -1,0 +1,27 @@
+-- (B) 3D Neutral Helium (He, Z = +2):
+--     * Parahelium (^1S, dim 87): E_0 < 3/2  (2*H - 3*G has v^T M v = -16 < 0)
+--     * 1st Ionization (!(0,0), dim 72 -> 38+34): E_0 > 3  (H - 3*G PD => I_1 > +3/2 > 0!)
+--     * Orthohelium (^3S, dim 57 -> 29+28): 13/2 < E_0 < 7 (Delta E_{para-ortho} > +5 > 0!)
+--     * 2nd Ionization (u_1,u_2 > 0, dim 36 -> 19+17): E_0 > 7 (total 2e binding > +11/2 > 0!)
+h3d-helium-verdict :
+  both
+    (both
+      (h3d-force-mat Bool (h3d-k4-mat false (true , bin-two) (sc-n (h3-i bin-one)) h3d-b-he-para)
+        (λ fm → h3d-quad-neg h3d-v-he-para fm))
+      (h3d-z2-pd 7 2
+        (h3d-k4-mat false bz-one (sc-n (h3-i bin-one)) h3d-b-he-ion1)
+        (h3d-build-ts23 false h3d-b-he-ion1 h3d-b-he-ion1)
+        h3d-L-he-ion1-e h3d-L-he-ion1-o))
+    (both
+      (both
+        (h3d-force-mat Bool (h3d-k4-mat true bz-one (sc-n (h3-i (h3-i bin-one))) h3d-b-he-ortho)
+          (λ fm → h3d-quad-neg h3d-v-he-ortho fm))
+        (h3d-z2-pd 7 6
+          (h3d-k4-mat true (true , bin-two) (sc-n (h3-i (h3-o (h3-i bin-one)))) h3d-b-he-ortho)
+          (h3d-build-ts23 true h3d-b-he-ortho h3d-b-he-ortho)
+          h3d-L-he-ortho-e h3d-L-he-ortho-o))
+      (h3d-z2-pd 6 3
+        (h3d-k4-mat false bz-one (sc-n (h3-i (h3-i bin-one))) h3d-b-he-ion2)
+        (h3d-build-ts23 false h3d-b-he-ion2 h3d-b-he-ion2)
+        h3d-L-he-ion2-e h3d-L-he-ion2-o)) ≡ true
+h3d-helium-verdict = refl

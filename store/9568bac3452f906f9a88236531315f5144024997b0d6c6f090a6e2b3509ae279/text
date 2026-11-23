@@ -1,0 +1,30 @@
+-- (B) Exact 3D K_4 Spin-Network Prototropic Tautomer vs. Locked C-H Isomer Spectral Verdicts:
+--     1) Amidine (N1=C-N2-H): Even < 13/2 (2*H - 13*I < 0), Odd > 8 (H - 8*I PD, s=256) => gap > 3/2!
+--     2) Lactam-Lactim: Lactam w1 < 7, Lactim w2 > 17/2 (s=32) => Delta E_taut > 3/2, AND coupled < 6!
+--     3) Locked C-H isomer (t_D = 0): exact operator degeneracy H_+(t_D=0) == H_-(t_D=0)!
+rxn-tautomer-spectra-verdict :
+  both
+    (both
+      (qmol-bz-pos (bz-neg (qmol-quad
+        (sc-proj-mat (tc-k4-mat true rxn-pot-amid (sc-p bin-two) (sc-n (sc-i (sc-o (sc-i bin-one)))) tc-basis-12)
+                     rxn-ek12)
+        rxn-v-amid-even)))
+      (sc-rump-pd (bin-pow2 8)
+        (sc-proj-mat (tc-k4-mat true rxn-pot-amid bz-one (sc-n (bin-pow2 3)) tc-basis-12) rxn-ok12)
+        rxn-L-amid-odd))
+    (both
+      (both
+        (qmol-bz-pos (bz-neg (qmol-quad
+          (tc-k4-mat true rxn-pot-lac bz-one (sc-n (sc-i (sc-i bin-one))) tc-basis-w1)
+          rxn-v-lac-w1)))
+        (both
+          (sc-rump-pd (bin-pow2 5)
+            (tc-k4-mat true rxn-pot-lac (sc-p bin-two) (sc-n (sc-i (sc-o (sc-o (sc-o bin-one))))) tc-basis-w2)
+            rxn-L-lac-w2)
+          (qmol-bz-pos (bz-neg (qmol-quad
+            (tc-k4-mat true rxn-pot-lac bz-one (sc-n (sc-o (sc-i bin-one))) tc-basis-12)
+            rxn-v-lac-coupled)))))
+      (tc-mat-eq
+        (sc-proj-mat (tc-k4-mat false rxn-pot-amid bz-one bz-zero tc-basis-12) rxn-ek12)
+        (sc-proj-mat (tc-k4-mat false rxn-pot-amid bz-one bz-zero tc-basis-12) rxn-ok12))) ≡ true
+rxn-tautomer-spectra-verdict = refl

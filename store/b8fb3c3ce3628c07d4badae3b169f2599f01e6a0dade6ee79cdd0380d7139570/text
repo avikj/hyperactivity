@@ -1,0 +1,18 @@
+-- THEOREM 1B (Universal Regge Hinge Action Gluing Theorem):
+r4d-regge-gluing : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  R4dAb A z add neg → LorRing A z one add mul neg →
+  (ah pi1 pi2 th1 th2 : A) →
+  mul ah (add (add pi1 pi2) (neg (add th1 th2))) ≡
+  add (mul ah (add pi1 (neg th1))) (mul ah (add pi2 (neg th2)))
+r4d-regge-gluing A z one add mul neg ab r ah pi1 pi2 th1 th2 =
+  lor-tr A
+    (mul ah (add (add pi1 pi2) (neg (add th1 th2))))
+    (mul ah (add (add pi1 (neg th1)) (add pi2 (neg th2))))
+    (add (mul ah (add pi1 (neg th1))) (mul ah (add pi2 (neg th2))))
+    (cong (λ t → mul ah t)
+      (lor-tr A (add (add pi1 pi2) (neg (add th1 th2)))
+                (add (add pi1 pi2) (add (neg th1) (neg th2)))
+                (add (add pi1 (neg th1)) (add pi2 (neg th2)))
+        (cong (λ u → add (add pi1 pi2) u) (r4d-neg-add A z one add mul neg r th1 th2))
+        (r4d-swap4 A z add neg ab pi1 pi2 (neg th1) (neg th2))))
+    (r4d-ldist A z one add mul neg r ah (add pi1 (neg th1)) (add pi2 (neg th2)))

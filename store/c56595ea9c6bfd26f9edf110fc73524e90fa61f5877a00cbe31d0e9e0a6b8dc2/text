@@ -1,0 +1,21 @@
+h3d-el-step : (A : Type) → (z one : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (x u w : Nat) →
+  add (if eqb x u then neg one else z) (qgm-edge-div A z add neg x u w one) ≡
+  (if eqb x w then neg one else z)
+h3d-el-step A z one add neg ab x u w =
+  qgm-tr A
+    (add (if eqb x u then neg one else z) (add (if eqb x u then one else z) (if eqb x w then neg one else z)))
+    (add (add (if eqb x u then neg one else z) (if eqb x u then one else z)) (if eqb x w then neg one else z))
+    (if eqb x w then neg one else z)
+    (sym (qgm-assoc A z add neg ab
+      (if eqb x u then neg one else z) (if eqb x u then one else z) (if eqb x w then neg one else z)))
+    (qgm-tr A
+      (add (add (if eqb x u then neg one else z) (if eqb x u then one else z)) (if eqb x w then neg one else z))
+      (add z (if eqb x w then neg one else z))
+      (if eqb x w then neg one else z)
+      (cong (λ t → add t (if eqb x w then neg one else z))
+        (case eqb x u return λ b → add (if b then neg one else z) (if b then one else z) ≡ z of
+          true  → lor-tr A (add (neg one) one) (add one (neg one)) z
+                    (qgm-comm A z add neg ab (neg one) one) (qgm-inv A z add neg ab one)
+          false → qgm-zl A z add neg ab z))
+      (qgm-zl A z add neg ab (if eqb x w then neg one else z)))

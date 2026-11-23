@@ -1,0 +1,20 @@
+rxn-neg-sub : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (l k : A) → neg (add l (neg k)) ≡ add (neg l) k
+rxn-neg-sub A z add neg ab l k =
+  lor-tr A (neg (add l (neg k))) (add (neg l) (neg (neg k))) (add (neg l) k)
+    (qgm-neghom A z add neg ab l (neg k))
+    (cong (λ t → add (neg l) t)
+      (lor-tr A (neg (neg k)) (add (neg (neg k)) (add (neg k) k)) k
+        (sym (lor-tr A (add (neg (neg k)) (add (neg k) k)) (add (neg (neg k)) z) (neg (neg k))
+          (cong (λ u → add (neg (neg k)) u)
+                (lor-tr A (add (neg k) k) (add k (neg k)) z
+                  (qgm-comm A z add neg ab (neg k) k) (qgm-inv A z add neg ab k)))
+          (qgm-zr A z add neg ab (neg (neg k)))))
+        (lor-tr A (add (neg (neg k)) (add (neg k) k)) (add (add (neg (neg k)) (neg k)) k) k
+          (sym (qgm-assoc A z add neg ab (neg (neg k)) (neg k) k))
+          (lor-tr A (add (add (neg (neg k)) (neg k)) k) (add z k) k
+            (cong (λ u → add u k)
+              (lor-tr A (add (neg (neg k)) (neg k)) (add (neg k) (neg (neg k))) z
+                (qgm-comm A z add neg ab (neg (neg k)) (neg k))
+                (qgm-inv A z add neg ab (neg k))))
+            (qgm-zl A z add neg ab k)))))

@@ -1,0 +1,12 @@
+-- Squared norm (k+1)*Delta^2(f0,f1,k)*Delta^2(f2,f3,k) of an interior tetrahedron (w0<w1<w2<w3) in BstUF:
+r4d-tet-nsq : (C : Type) → Nat → Nat → Nat → Nat → (Nat → Nat → Nat → Nat) → Nat → (BstUF → C) → C
+r4d-tet-nsq C w0 w1 w2 w3 triFn k cont =
+  (λ j0 j1 j2 j3 →
+    if both (tri-ok j0 j1 k) (tri-ok j2 j3 k)
+    then
+      (bst-force-bq-lit C (sf-delta2 j0 j1 k) (λ _ d01 →
+       bst-force-bq-lit C (sf-delta2 j2 j3 k) (λ _ d23 →
+       bst-force-uf C (bst-bmul (bin-of-nat (suc k)) (bst-bmul (fst d01) (fst d23)) ,
+                       bst-bmul (snd d01) (snd d23)) (λ n d → cont (n , d)))))
+    else cont (nil , bin-one))
+  (triFn w1 w2 w3) (triFn w0 w2 w3) (triFn w0 w1 w3) (triFn w0 w1 w2)

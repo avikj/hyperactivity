@@ -1,0 +1,13 @@
+rxn-sum-add : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (g d : List A) → rxn-len A g ≡ rxn-len A d →
+  rxn-vec-sum A z add (rxn-add-delta A add g d) ≡ add (rxn-vec-sum A z add g) (rxn-vec-sum A z add d)
+rxn-sum-add A z add neg ab g =
+  case g return λ gs → (d : List A) → rxn-len A gs ≡ rxn-len A d →
+    rxn-vec-sum A z add (rxn-add-delta A add gs d) ≡
+    add (rxn-vec-sum A z add gs) (rxn-vec-sum A z add d) of
+    nil → λ d hd →
+      (case d return λ ds → zero ≡ rxn-len A ds →
+         z ≡ add z (rxn-vec-sum A z add ds) of
+         nil → λ _ → sym (qgm-zl A z add neg ab z)
+         cons _ dr → λ p → Empty-rec (rxn-zero-neq-suc (rxn-len A dr) p)) hd
+    cons gx gr → rxn-sum-add-cons A z add neg ab gx gr (rec gr)

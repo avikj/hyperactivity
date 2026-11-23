@@ -1,0 +1,31 @@
+rxn-dpo-dia-cons : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (gx : A) → (gr : List A) →
+  ((d1 d2 : List A) →
+     rxn-add-delta A add (rxn-add-delta A add gr d1) d2 ≡
+     rxn-add-delta A add (rxn-add-delta A add gr d2) d1) →
+  (d1 d2 : List A) →
+  rxn-add-delta A add (rxn-add-delta A add (cons gx gr) d1) d2 ≡
+  rxn-add-delta A add (rxn-add-delta A add (cons gx gr) d2) d1
+rxn-dpo-dia-cons A z add neg ab gx gr ih d1 d2 =
+  case d1 return λ a1 →
+    rxn-add-delta A add (rxn-add-delta A add (cons gx gr) a1) d2 ≡
+    rxn-add-delta A add (rxn-add-delta A add (cons gx gr) d2) a1 of
+    nil →
+      (case d2 return λ a2 →
+         rxn-add-delta A add (cons gx gr) a2 ≡
+         rxn-add-delta A add (rxn-add-delta A add (cons gx gr) a2) nil of
+         nil → refl
+         cons x2 r2 → refl)
+    cons x1 r1 →
+      (case d2 return λ a2 →
+         rxn-add-delta A add (cons (add gx x1) (rxn-add-delta A add gr r1)) a2 ≡
+         rxn-add-delta A add (rxn-add-delta A add (cons gx gr) a2) (cons x1 r1) of
+         nil → refl
+         cons x2 r2 →
+           (λ i → cons
+             (lor-tr A (add (add gx x1) x2) (add gx (add x1 x2)) (add (add gx x2) x1)
+               (qgm-assoc A z add neg ab gx x1 x2)
+               (lor-tr A (add gx (add x1 x2)) (add gx (add x2 x1)) (add (add gx x2) x1)
+                 (cong (λ t → add gx t) (qgm-comm A z add neg ab x1 x2))
+                 (sym (qgm-assoc A z add neg ab gx x2 x1))) i)
+             (ih r1 r2 i)))

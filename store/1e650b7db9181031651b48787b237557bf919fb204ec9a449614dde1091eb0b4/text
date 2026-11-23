@@ -1,0 +1,12 @@
+r4d-mul-neg2 : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  R4dAb A z add neg → LorRing A z one add mul neg →
+  (x y : A) → mul (neg x) (neg y) ≡ mul x y
+r4d-mul-neg2 A z one add mul neg ab r x y =
+  lor-tr A
+    (mul (neg x) (neg y))
+    (neg (neg (mul x y)))
+    (mul x y)
+    (lor-tr A (mul (neg x) (neg y)) (neg (mul x (neg y))) (neg (neg (mul x y)))
+      (r4d-neg-ml A z one add mul neg r x (neg y))
+      (cong neg (r4d-neg-mr A z one add mul neg r x y)))
+    (r4d-neg-neg A z add neg ab (mul x y))

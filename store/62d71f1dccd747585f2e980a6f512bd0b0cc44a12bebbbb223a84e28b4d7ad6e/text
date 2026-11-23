@@ -1,0 +1,9 @@
+r4d-cycle3-zero : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → R4dAb A z add neg →
+  (x y w : A) → add (add x (neg y)) (add (add y (neg w)) (add w (neg x))) ≡ z
+r4d-cycle3-zero A z add neg ab x y w =
+  lor-tr A
+    (add (add x (neg y)) (add (add y (neg w)) (add w (neg x))))
+    (add (add x (neg y)) (add y (neg x)))
+    z
+    (cong (λ t → add (add x (neg y)) t) (bst-tele-cancel A z add neg (fst ab) y w x))
+    (concat (bst-tele-cancel A z add neg (fst ab) x y x) (r4d-inv-r A z add neg ab x))

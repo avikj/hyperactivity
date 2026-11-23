@@ -1,0 +1,21 @@
+rxn-sum-add-cons : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (gx : A) → (gr : List A) →
+  ((d : List A) → rxn-len A gr ≡ rxn-len A d →
+     rxn-vec-sum A z add (rxn-add-delta A add gr d) ≡
+     add (rxn-vec-sum A z add gr) (rxn-vec-sum A z add d)) →
+  (d : List A) → suc (rxn-len A gr) ≡ rxn-len A d →
+  rxn-vec-sum A z add (rxn-add-delta A add (cons gx gr) d) ≡
+  add (add gx (rxn-vec-sum A z add gr)) (rxn-vec-sum A z add d)
+rxn-sum-add-cons A z add neg ab gx gr ih d hd =
+  (case d return λ ds → suc (rxn-len A gr) ≡ rxn-len A ds →
+     rxn-vec-sum A z add (rxn-add-delta A add (cons gx gr) ds) ≡
+     add (add gx (rxn-vec-sum A z add gr)) (rxn-vec-sum A z add ds) of
+     nil → λ p → Empty-rec (rxn-zero-neq-suc (rxn-len A gr) (sym p))
+     cons dx dr → λ p →
+       lor-tr A
+         (add (add gx dx) (rxn-vec-sum A z add (rxn-add-delta A add gr dr)))
+         (add (add gx dx) (add (rxn-vec-sum A z add gr) (rxn-vec-sum A z add dr)))
+         (add (add gx (rxn-vec-sum A z add gr)) (add dx (rxn-vec-sum A z add dr)))
+         (cong (λ t → add (add gx dx) t)
+               (ih dr (cong rxn-pred p)))
+         (qgm-swap4 A z add neg ab gx dx (rxn-vec-sum A z add gr) (rxn-vec-sum A z add dr))) hd

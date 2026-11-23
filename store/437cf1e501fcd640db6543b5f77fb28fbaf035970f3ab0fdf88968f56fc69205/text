@@ -1,0 +1,20 @@
+r4d-bf-lhs-k5 : (C : Type) → (Nat → Nat → Nat → Nat) → (Nat → Nat → Nat → Nat → Nat) →
+  Nat → Nat → BstUF → BstUF → List Nat → R4dFrac → (R4dFrac → C) → C
+r4d-bf-lhs-k5 C tf bndK k3 k4 n3 n4 ks5 acc cont = case ks5 of
+  nil → cont acc
+  cons k5 rest5 →
+    (λ tk →
+      r4d-simp-bf C 0 1 2 4 5 tf tk true (λ r3 →
+      if r4d-fr-is-zero r3 then r4d-bf-lhs-k5 C tf bndK k3 k4 n3 n4 rest5 acc cont else
+      r4d-simp-bf C 0 1 2 3 5 tf tk false (λ r4 →
+      if r4d-fr-is-zero r4 then r4d-bf-lhs-k5 C tf bndK k3 k4 n3 n4 rest5 acc cont else
+      r4d-simp-bf C 0 1 2 3 4 tf tk true (λ r5 →
+      if r4d-fr-is-zero r5 then r4d-bf-lhs-k5 C tf bndK k3 k4 n3 n4 rest5 acc cont else
+      r4d-tet-nsq C 0 1 2 5 tf k5 (λ n5 →
+      r4d-force-fr C
+        (r4d-fr-add acc
+          (r4d-fr-mul (r4d-fr-mul r3 (r4d-fr-mul r4 r5))
+                      ((bst-bmul (fst n3) (bst-bmul (fst n4) (fst n5)) , nil) ,
+                       bst-bmul (snd n3) (bst-bmul (snd n4) (snd n5)))))
+        (λ acc2 → r4d-bf-lhs-k5 C tf bndK k3 k4 n3 n4 rest5 acc2 cont))))))
+    (r4d-lhs-tetK bndK k3 k4 k5)

@@ -1,0 +1,16 @@
+h3d-gp-dot : List BZ → List BZ → H3dGP → H3dGP
+h3d-gp-dot xs ys acc = case xs of
+  nil → acc
+  cons x xr → case ys of
+    nil → acc
+    cons y yr →
+      if bst-all-zero (snd x) then h3d-gp-dot xr yr acc
+      else (if bst-all-zero (snd y) then h3d-gp-dot xr yr acc
+            else
+              (λ prod →
+                h3d-force-gp H3dGP
+                  (if bit-eq (fst x) (fst y)
+                   then (bst-badd (fst acc) prod , snd acc)
+                   else (fst acc , bst-badd (snd acc) prod))
+                  (λ acc2 → h3d-gp-dot xr yr acc2))
+              (bst-bmul (snd x) (snd y)))

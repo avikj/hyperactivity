@@ -1,0 +1,14 @@
+-- THEOREM 1B (Universal False-Merge vs. False-Split Dilemma for Any Decidable Static Identifier):
+rxn-static-false-merge-or-split : (X I : Type) →
+  (SemFast SemSlow : X → X → Type) →
+  (canon : X → I) →
+  ((i j : I) → Sum (i ≡ j) (i ≡ j → Empty)) →
+  (a b : X) →
+  (SemFast a b → Empty) →
+  SemSlow a b →
+  Sum ((canon a ≡ canon b) × (SemFast a b → Empty))
+      (SemSlow a b × (canon a ≡ canon b → Empty))
+rxn-static-false-merge-or-split X I SemFast SemSlow canon decI a b notFast eqSlow =
+  case decI (canon a) (canon b) of
+    inl eqId  → inl (eqId , notFast)
+    inr neqId → inr (eqSlow , neqId)

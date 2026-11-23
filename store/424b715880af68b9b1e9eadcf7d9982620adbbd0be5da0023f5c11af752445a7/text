@@ -1,0 +1,8 @@
+bst-half-diag-off : (S A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (w : A) → (boostProd overlap : S → A) → (configs : List S) →
+  ((s : S) → boostProd s ≡ w) →
+  qent-sum S A z add overlap configs ≡ z →
+  qent-sum S A z add (λ s → mul (boostProd s) (overlap s)) configs ≡ z
+bst-half-diag-off S A z add mul sr w boostProd overlap configs hw horth =
+  concat (bst-const-factor S A z add mul sr w boostProd overlap configs hw)
+         (concat (cong (λ t → mul w t) horth) (qent-mul-zr A z add mul sr w))
