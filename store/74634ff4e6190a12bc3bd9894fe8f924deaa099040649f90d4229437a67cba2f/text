@@ -1,0 +1,15 @@
+-- THEOREM 2B (Universal Lorentzian Destructive-Interference Breaking / Pure-Gauge Zero-Mode Awakening):
+grv-interference-break : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  LorRing A z one add mul neg →
+  (g1 g3 w1 w3 : A) → w3 ≡ neg w1 →
+  add (mul g1 w1) (mul g3 w3) ≡ mul (add g1 (neg g3)) w1
+grv-interference-break A z one add mul neg r g1 g3 w1 w3 hw =
+  lor-tr A
+    (add (mul g1 w1) (mul g3 w3))
+    (add (mul g1 w1) (mul (neg g3) w1))
+    (mul (add g1 (neg g3)) w1)
+    (cong (λ t → add (mul g1 w1) t)
+      (lor-tr A (mul g3 w3) (neg (mul g3 w1)) (mul (neg g3) w1)
+        (concat (cong (λ u → mul g3 u) hw) (r4d-neg-mr A z one add mul neg r g3 w1))
+        (sym (r4d-neg-ml A z one add mul neg r g3 w1))))
+    (sym (r4d-rdist A z one add mul neg r g1 (neg g3) w1))

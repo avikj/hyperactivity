@@ -1,0 +1,8 @@
+emg-var-subadd : (W A : Type) → (z : A) → (add mul : A → A → A) → (Pos Nonneg : A → Type) →
+  ScOrd A z add mul Pos Nonneg → (fs : List (W → A)) → (x : W) →
+  emg-forms-ok W A Nonneg fs x → Nonneg (emg-form-sum W A z add fs x)
+emg-var-subadd W A z add mul Pos Nonneg ord fs x =
+  case fs return λ flist → emg-forms-ok W A Nonneg flist x → Nonneg (emg-form-sum W A z add flist x) of
+    nil → λ _ → fst ord
+    cons f fr → λ ok →
+      fst (snd (snd (snd ord))) (f x) (emg-form-sum W A z add fr x) (fst ok) (rec fr (snd ok))

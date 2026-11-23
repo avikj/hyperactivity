@@ -1,0 +1,13 @@
+emg-li-entry : Bool → BZ → BZ → EmgLiState → EmgLiState → BZ
+emg-li-entry isQuart qsh psh sa sb =
+  (λ u1 u2 u3 fa w1 w2 w3 fb →
+    if both (eqb u1 w1) (both (eqb u2 w2) (eqb u3 w3))
+    then
+      (if qgm-vec-eq fa fb
+       then bz-add (bz-mul qsh (bz-add (bz-mul qgm-gE-spin-half (qgm-flux-sq fa)) (sc-p (bin-pow2 3)))) psh
+       else (if h3d-is-k4-plaq fa fb then bz-neg qsh else bz-zero))
+    else
+      bz-mul qsh (bz-mul (bz-neg qgm-tD-spin-half)
+        (if isQuart then emg-quartet-hop sa sb else emg-doublet-hop sa sb)))
+  (fst (fst sa)) (fst (snd (fst sa))) (snd (snd (fst sa))) (snd sa)
+  (fst (fst sb)) (fst (snd (fst sb))) (snd (snd (fst sb))) (snd sb)

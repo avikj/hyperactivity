@@ -1,0 +1,42 @@
+taut-schur-cons : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (c bk : A) → (br : List A) →
+  ((qs : List A) → rxn-len A br ≡ rxn-len A qs →
+     add (mul c (taut-tail-form A z add mul c br qs)) (taut-norm2 A z add mul br) ≡
+     taut-sos-vec A z add mul c br qs) →
+  (qs : List A) → suc (rxn-len A br) ≡ rxn-len A qs →
+  add (mul c (taut-tail-form A z add mul c (cons bk br) qs)) (taut-norm2 A z add mul (cons bk br)) ≡
+  taut-sos-vec A z add mul c (cons bk br) qs
+taut-schur-cons A z add mul neg r c bk br ih qs hlen =
+  (case qs return λ qlist → suc (rxn-len A br) ≡ rxn-len A qlist →
+     add (mul c (taut-tail-form A z add mul c (cons bk br) qlist)) (taut-norm2 A z add mul (cons bk br)) ≡
+     taut-sos-vec A z add mul c (cons bk br) qlist of
+     nil → λ p → Empty-rec (rxn-zero-neq-suc (rxn-len A br) (sym p))
+     cons qk qr → λ p →
+       lor-tr A
+         (add (mul c (add (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))
+                          (taut-tail-form A z add mul c br qr)))
+              (add (mul bk bk) (taut-norm2 A z add mul br)))
+         (add (add (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))) (mul bk bk))
+              (add (mul c (taut-tail-form A z add mul c br qr)) (taut-norm2 A z add mul br)))
+         (add (mul (add (mul c qk) bk) (add (mul c qk) bk))
+              (taut-sos-vec A z add mul c br qr))
+         (lor-tr A
+           (add (mul c (add (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))
+                            (taut-tail-form A z add mul c br qr)))
+                (add (mul bk bk) (taut-norm2 A z add mul br)))
+           (add (add (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk))))
+                     (mul c (taut-tail-form A z add mul c br qr)))
+                (add (mul bk bk) (taut-norm2 A z add mul br)))
+           (add (add (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))) (mul bk bk))
+                (add (mul c (taut-tail-form A z add mul c br qr)) (taut-norm2 A z add mul br)))
+           (cong (λ t → add t (add (mul bk bk) (taut-norm2 A z add mul br)))
+                 (taut-ldist A z add mul neg r c
+                   (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))
+                   (taut-tail-form A z add mul c br qr)))
+           (sc-swap4 A z add mul neg r
+             (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk))))
+             (mul c (taut-tail-form A z add mul c br qr))
+             (mul bk bk)
+             (taut-norm2 A z add mul br)))
+         (λ i → add (taut-schur-1d A z add mul neg r c bk qk i)
+                    (ih qr (cong rxn-pred p) i))) hlen

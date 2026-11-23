@@ -1,0 +1,10 @@
+-- First-Principles Polynomial Boost Integrator for SL(2,C) Haar Measure at gamma = 0 (u = tanh(r/2)):
+grv-poly-step : List Bool → List Bool → GrvZ → List GrvZ → List GrvZ
+grv-poly-step a b prev xs = case xs of
+  nil → cons (snd prev , fst prev) nil
+  cons cur rest →
+    grv-force-z (List GrvZ) cur (λ c0 →
+    grv-force-z (List GrvZ)
+      (bst-badd (bst-bmul a (fst c0)) (bst-bmul b (snd prev)) ,
+       bst-badd (bst-bmul a (snd c0)) (bst-bmul b (fst prev)))
+      (λ out → cons out (grv-poly-step a b c0 rest)))

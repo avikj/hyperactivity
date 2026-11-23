@@ -1,0 +1,16 @@
+-- Square-root-free Lorentzian booster kernel Bhat_4^0(dj1..dj4; di, dk) = 4*pi*B_4^0 / sqrt(nsq(di)*nsq(dk)):
+grv-bhat0 : (C : Type) → Nat → Nat → Nat → Nat → Nat → Nat → (R4dFrac → C) → C
+grv-bhat0 C dj1 dj2 dj3 dj4 di dk cont =
+  (λ halfS n3 →
+    grv-bhat-m1 C dj1 dj2 dj3 dj4 di dk halfS (suc dj1) grv-empty-buckets (λ b →
+    grv-add-orbit C r4d-fr-zero (fst b) n3 0 (λ t0 →
+    grv-add-orbit C t0 (fst (snd b)) (monus n3 1) 1 (λ t1 →
+    grv-add-orbit C t1 (fst (snd (snd b))) (monus n3 2) 2 (λ t2 →
+    grv-add-orbit C t2 (fst (snd (snd (snd b)))) (monus n3 3) 3 (λ t3 →
+    grv-add-orbit C t3 (snd (snd (snd (snd b)))) (monus n3 4) 4 (λ tot →
+    if r4d-fr-is-zero tot then cont r4d-fr-zero
+    else
+      (bst-force-bin C (bst-bpow4 (grv-d2 2 16)) (λ d216p4 →
+       grv-force-fr C (fst tot , bst-bmul d216p4 (snd tot)) cont)))))))))
+  (nat-half (plus (plus dj1 dj2) (plus dj3 dj4)))
+  (plus (plus (grv-is-j3 dj1) (grv-is-j3 dj2)) (plus (grv-is-j3 dj3) (grv-is-j3 dj4)))

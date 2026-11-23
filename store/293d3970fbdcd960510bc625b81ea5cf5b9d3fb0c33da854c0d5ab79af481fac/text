@@ -1,0 +1,45 @@
+emg-schur-tail-psd : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) →
+  (Pos Nonneg : A → Type) → ScRing A z add mul neg → ScOrd A z add mul Pos Nonneg →
+  (c fval : A) → (bs qs : List A) → emg-len A bs ≡ emg-len A qs →
+  Nonneg (add (mul c fval) (neg (emg-norm2 A z add mul bs))) →
+  Nonneg (mul c (add fval (emg-tail-form A z add mul c bs qs)))
+emg-schur-tail-psd A z add mul neg Pos Nonneg r ord c fval bs qs hlen hcore =
+  transport
+    (λ i → Nonneg
+      (lor-tr A
+        (add (add (mul c fval) (neg (emg-norm2 A z add mul bs)))
+             (emg-sos-vec A z add mul c bs qs))
+        (add (add (mul c fval) (mul c (emg-tail-form A z add mul c bs qs)))
+             (add (neg (emg-norm2 A z add mul bs)) (emg-norm2 A z add mul bs)))
+        (mul c (add fval (emg-tail-form A z add mul c bs qs)))
+        (lor-tr A
+          (add (add (mul c fval) (neg (emg-norm2 A z add mul bs)))
+               (emg-sos-vec A z add mul c bs qs))
+          (add (add (mul c fval) (neg (emg-norm2 A z add mul bs)))
+               (add (mul c (emg-tail-form A z add mul c bs qs)) (emg-norm2 A z add mul bs)))
+          (add (add (mul c fval) (mul c (emg-tail-form A z add mul c bs qs)))
+               (add (neg (emg-norm2 A z add mul bs)) (emg-norm2 A z add mul bs)))
+          (cong (λ t → add (add (mul c fval) (neg (emg-norm2 A z add mul bs))) t)
+                (sym (emg-schur-vec-id A z add mul neg r c bs qs hlen)))
+          (sc-swap4 A z add mul neg r
+            (mul c fval) (neg (emg-norm2 A z add mul bs))
+            (mul c (emg-tail-form A z add mul c bs qs)) (emg-norm2 A z add mul bs)))
+        (lor-tr A
+          (add (add (mul c fval) (mul c (emg-tail-form A z add mul c bs qs)))
+               (add (neg (emg-norm2 A z add mul bs)) (emg-norm2 A z add mul bs)))
+          (add (mul c (add fval (emg-tail-form A z add mul c bs qs))) z)
+          (mul c (add fval (emg-tail-form A z add mul c bs qs)))
+          (λ j → add
+            (sym (emg-ldist A z add mul neg r c fval (emg-tail-form A z add mul c bs qs)) j)
+            (lor-tr A
+              (add (neg (emg-norm2 A z add mul bs)) (emg-norm2 A z add mul bs))
+              (add (emg-norm2 A z add mul bs) (neg (emg-norm2 A z add mul bs)))
+              z
+              (emg-comm A z add mul neg r (neg (emg-norm2 A z add mul bs)) (emg-norm2 A z add mul bs))
+              (emg-inv A z add mul neg r (emg-norm2 A z add mul bs)) j))
+          (emg-zr A z add mul neg r (mul c (add fval (emg-tail-form A z add mul c bs qs))))) i))
+    (fst (snd (snd (snd ord)))
+      (add (mul c fval) (neg (emg-norm2 A z add mul bs)))
+      (emg-sos-vec A z add mul c bs qs)
+      hcore
+      (emg-sos-vec-nonneg A z add mul Pos Nonneg ord c bs qs))

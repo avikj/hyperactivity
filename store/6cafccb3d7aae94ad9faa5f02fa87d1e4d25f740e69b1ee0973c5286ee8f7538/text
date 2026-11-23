@@ -1,0 +1,16 @@
+taut-mul-zr : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (x : A) → mul x z ≡ z
+taut-mul-zr A z add mul neg r x =
+  lor-tr A (mul x z) (add (mul x z) (add (mul x z) (neg (mul x z)))) z
+    (sym (lor-tr A (add (mul x z) (add (mul x z) (neg (mul x z)))) (add (mul x z) z) (mul x z)
+      (cong (λ t → add (mul x z) t) (taut-inv A z add mul neg r (mul x z)))
+      (taut-zr A z add mul neg r (mul x z))))
+    (lor-tr A (add (mul x z) (add (mul x z) (neg (mul x z))))
+              (add (add (mul x z) (mul x z)) (neg (mul x z))) z
+      (sym (taut-assoc A z add mul neg r (mul x z) (mul x z) (neg (mul x z))))
+      (lor-tr A (add (add (mul x z) (mul x z)) (neg (mul x z))) (add (mul x z) (neg (mul x z))) z
+        (cong (λ t → add t (neg (mul x z)))
+              (lor-tr A (add (mul x z) (mul x z)) (mul x (add z z)) (mul x z)
+                (sym (taut-ldist A z add mul neg r x z z))
+                (cong (λ u → mul x u) (taut-zl A z add mul neg r z))))
+        (taut-inv A z add mul neg r (mul x z))))

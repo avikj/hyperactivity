@@ -1,0 +1,18 @@
+emg-star-mesh-2 : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (a0 a1 b : A) →
+  add (add (mul (add a0 (neg b)) (add a0 (neg b))) (mul (add a1 (neg b)) (add a1 (neg b))))
+      (add (mul (add a0 (neg b)) (add a0 (neg b))) (mul (add a1 (neg b)) (add a1 (neg b)))) ≡
+  add (mul (add (add a0 (neg b)) (add a1 (neg b))) (add (add a0 (neg b)) (add a1 (neg b))))
+      (mul (add a0 (neg a1)) (add a0 (neg a1)))
+emg-star-mesh-2 A z add mul neg r a0 a1 b =
+  lor-tr A
+    (add (add (mul (add a0 (neg b)) (add a0 (neg b))) (mul (add a1 (neg b)) (add a1 (neg b))))
+         (add (mul (add a0 (neg b)) (add a0 (neg b))) (mul (add a1 (neg b)) (add a1 (neg b)))))
+    (add (mul (add (add a0 (neg b)) (add a1 (neg b))) (add (add a0 (neg b)) (add a1 (neg b))))
+         (mul (add (add a0 (neg b)) (neg (add a1 (neg b)))) (add (add a0 (neg b)) (neg (add a1 (neg b))))))
+    (add (mul (add (add a0 (neg b)) (add a1 (neg b))) (add (add a0 (neg b)) (add a1 (neg b))))
+         (mul (add a0 (neg a1)) (add a0 (neg a1))))
+    (sym (emg-para2 A z add mul neg r (add a0 (neg b)) (add a1 (neg b))))
+    (cong (λ d → add (mul (add (add a0 (neg b)) (add a1 (neg b))) (add (add a0 (neg b)) (add a1 (neg b))))
+                     (mul d d))
+          (emg-diff-cancel A z add mul neg r a0 a1 b))

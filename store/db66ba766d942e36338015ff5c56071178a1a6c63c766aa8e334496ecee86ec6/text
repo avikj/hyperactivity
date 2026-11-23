@@ -1,0 +1,19 @@
+emg-clifford-anticomm : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (u v : EmgVec3 A) →
+  emg-cl-pair A
+    (add (emg-v3-dot A add mul u v) (emg-v3-dot A add mul v u))
+    (emg-v3-add A add (emg-v3-cross A add mul neg u v) (emg-v3-cross A add mul neg v u)) ≡
+  emg-cl-pair A
+    (add (emg-v3-dot A add mul u v) (emg-v3-dot A add mul u v))
+    (emg-v3-make A z z z)
+emg-clifford-anticomm A z add mul neg r u v =
+  (λ i →
+    emg-cl-pair A
+      (add (emg-v3-dot A add mul u v)
+           (add (emg-mcomm A z add mul neg r (fst v) (fst u) i)
+                (add (emg-mcomm A z add mul neg r (fst (snd v)) (fst (snd u)) i)
+                     (emg-mcomm A z add mul neg r (snd (snd v)) (snd (snd u)) i))))
+      (emg-v3-make A
+        (emg-skew2 A z add mul neg r (fst (snd u)) (snd (snd v)) (snd (snd u)) (fst (snd v)) i)
+        (emg-skew2 A z add mul neg r (snd (snd u)) (fst v) (fst u) (snd (snd v)) i)
+        (emg-skew2 A z add mul neg r (fst u) (fst (snd v)) (fst (snd u)) (fst v) i)))

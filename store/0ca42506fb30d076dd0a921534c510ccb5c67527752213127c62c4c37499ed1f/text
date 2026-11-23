@@ -1,0 +1,17 @@
+-- Quartet 3-electron hop (3 spin-aligned up electrons u1 < u2 < u3 with full S_3 Slater sign!):
+emg-quartet-hop : EmgLiState → EmgLiState → BZ
+emg-quartet-hop sa sb =
+  (λ u1 u2 u3 fa w1 w2 w3 fb →
+    bz-add
+      (bz-add
+        (if both (eqb u2 w2) (eqb u3 w3) then emg-k4-hop-1e u1 fa w1 fb
+         else (if both (eqb u2 w1) (eqb u3 w3) then bz-neg (emg-k4-hop-1e u1 fa w2 fb)
+               else (if both (eqb u2 w1) (eqb u3 w2) then emg-k4-hop-1e u1 fa w3 fb else bz-zero)))
+        (if both (eqb u1 w1) (eqb u3 w3) then emg-k4-hop-1e u2 fa w2 fb
+         else (if both (eqb u1 w2) (eqb u3 w3) then bz-neg (emg-k4-hop-1e u2 fa w1 fb)
+               else (if both (eqb u1 w1) (eqb u3 w2) then bz-neg (emg-k4-hop-1e u2 fa w3 fb) else bz-zero))))
+      (if both (eqb u1 w1) (eqb u2 w2) then emg-k4-hop-1e u3 fa w3 fb
+       else (if both (eqb u1 w1) (eqb u2 w3) then bz-neg (emg-k4-hop-1e u3 fa w2 fb)
+             else (if both (eqb u1 w2) (eqb u2 w3) then emg-k4-hop-1e u3 fa w1 fb else bz-zero))))
+  (fst (fst sa)) (fst (snd (fst sa))) (snd (snd (fst sa))) (snd sa)
+  (fst (fst sb)) (fst (snd (fst sb))) (snd (snd (fst sb))) (snd sb)

@@ -1,0 +1,13 @@
+taut-sos-cons : (A : Type) → (z : A) → (add mul : A → A → A) → (Pos Nonneg : A → Type) →
+  ScOrd A z add mul Pos Nonneg → (c bk : A) → (br : List A) →
+  ((qs : List A) → Nonneg (taut-sos-vec A z add mul c br qs)) →
+  (qs : List A) → Nonneg (taut-sos-vec A z add mul c (cons bk br) qs)
+taut-sos-cons A z add mul Pos Nonneg ord c bk br ih qs =
+  case qs return λ qlist → Nonneg (taut-sos-vec A z add mul c (cons bk br) qlist) of
+    nil → fst ord
+    cons qk qr →
+      fst (snd (snd (snd ord)))
+        (mul (add (mul c qk) bk) (add (mul c qk) bk))
+        (taut-sos-vec A z add mul c br qr)
+        (fst (snd ord) (add (mul c qk) bk))
+        (ih qr)

@@ -1,0 +1,19 @@
+grv-mul4-swap : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  LorRing A z one add mul neg →
+  (p q u v : A) → mul (mul p q) (mul u v) ≡ mul (mul p u) (mul q v)
+grv-mul4-swap A z one add mul neg r p q u v =
+  lor-tr A
+    (mul (mul p q) (mul u v))
+    (mul p (mul q (mul u v)))
+    (mul (mul p u) (mul q v))
+    (r4d-massoc A z one add mul neg r p q (mul u v))
+    (lor-tr A
+      (mul p (mul q (mul u v)))
+      (mul p (mul u (mul q v)))
+      (mul (mul p u) (mul q v))
+      (cong (λ t → mul p t)
+        (lor-tr A (mul q (mul u v)) (mul (mul u q) v) (mul u (mul q v))
+          (concat (sym (r4d-massoc A z one add mul neg r q u v))
+                  (cong (λ w → mul w v) (r4d-mcomm A z one add mul neg r q u)))
+          (r4d-massoc A z one add mul neg r u q v)))
+      (sym (r4d-massoc A z one add mul neg r p u (mul q v))))

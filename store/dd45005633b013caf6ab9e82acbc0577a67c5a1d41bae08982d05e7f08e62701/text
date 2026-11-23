@@ -1,0 +1,61 @@
+-- THEOREM 1B (Universal Division-Free Kohn Nearsightedness / Gapped-Scaffold Strict Lower Bound):
+-- Cancels Pos(c) via ScOrd's multiplicative order cancellation with ZERO division, proving Pos(F(p) + Tail(p, q))!
+taut-scaffold-strict-pos : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) →
+  (Pos Nonneg : A → Type) → ScRing A z add mul neg → ScOrd A z add mul Pos Nonneg →
+  (c fval : A) → (bs qs : List A) → rxn-len A bs ≡ rxn-len A qs →
+  Pos c →
+  Pos (add (mul c fval) (neg (taut-norm2 A z add mul bs))) →
+  Pos (add fval (taut-tail-form A z add mul c bs qs))
+taut-scaffold-strict-pos A z add mul neg Pos Nonneg r ord c fval bs qs hlen hposC hcore =
+  snd (snd (snd (snd (snd (snd ord)))))
+    c
+    (add fval (taut-tail-form A z add mul c bs qs))
+    hposC
+    (transport
+      (λ i → Pos
+        (lor-tr A
+          (add (taut-sos-vec A z add mul c bs qs)
+               (add (mul c fval) (neg (taut-norm2 A z add mul bs))))
+          (add (add (mul c fval) (neg (taut-norm2 A z add mul bs)))
+               (taut-sos-vec A z add mul c bs qs))
+          (mul c (add fval (taut-tail-form A z add mul c bs qs)))
+          (taut-comm A z add mul neg r
+            (taut-sos-vec A z add mul c bs qs)
+            (add (mul c fval) (neg (taut-norm2 A z add mul bs))))
+          (lor-tr A
+            (add (add (mul c fval) (neg (taut-norm2 A z add mul bs)))
+                 (taut-sos-vec A z add mul c bs qs))
+            (add (add (mul c fval) (mul c (taut-tail-form A z add mul c bs qs)))
+                 (add (neg (taut-norm2 A z add mul bs)) (taut-norm2 A z add mul bs)))
+            (mul c (add fval (taut-tail-form A z add mul c bs qs)))
+            (lor-tr A
+              (add (add (mul c fval) (neg (taut-norm2 A z add mul bs)))
+                   (taut-sos-vec A z add mul c bs qs))
+              (add (add (mul c fval) (neg (taut-norm2 A z add mul bs)))
+                   (add (mul c (taut-tail-form A z add mul c bs qs)) (taut-norm2 A z add mul bs)))
+              (add (add (mul c fval) (mul c (taut-tail-form A z add mul c bs qs)))
+                   (add (neg (taut-norm2 A z add mul bs)) (taut-norm2 A z add mul bs)))
+              (cong (λ t → add (add (mul c fval) (neg (taut-norm2 A z add mul bs))) t)
+                    (sym (taut-schur-vec-id A z add mul neg r c bs qs hlen)))
+              (sc-swap4 A z add mul neg r
+                (mul c fval) (neg (taut-norm2 A z add mul bs))
+                (mul c (taut-tail-form A z add mul c bs qs)) (taut-norm2 A z add mul bs)))
+            (lor-tr A
+              (add (add (mul c fval) (mul c (taut-tail-form A z add mul c bs qs)))
+                   (add (neg (taut-norm2 A z add mul bs)) (taut-norm2 A z add mul bs)))
+              (add (mul c (add fval (taut-tail-form A z add mul c bs qs))) z)
+              (mul c (add fval (taut-tail-form A z add mul c bs qs)))
+              (λ j → add
+                (sym (taut-ldist A z add mul neg r c fval (taut-tail-form A z add mul c bs qs)) j)
+                (lor-tr A
+                  (add (neg (taut-norm2 A z add mul bs)) (taut-norm2 A z add mul bs))
+                  (add (taut-norm2 A z add mul bs) (neg (taut-norm2 A z add mul bs)))
+                  z
+                  (taut-comm A z add mul neg r (neg (taut-norm2 A z add mul bs)) (taut-norm2 A z add mul bs))
+                  (taut-inv A z add mul neg r (taut-norm2 A z add mul bs)) j))
+              (taut-zr A z add mul neg r (mul c (add fval (taut-tail-form A z add mul c bs qs)))))) i))
+      (fst (snd (snd (snd (snd ord))))
+        (taut-sos-vec A z add mul c bs qs)
+        (add (mul c fval) (neg (taut-norm2 A z add mul bs)))
+        (taut-sos-nonneg A z add mul Pos Nonneg ord c bs qs)
+        hcore))

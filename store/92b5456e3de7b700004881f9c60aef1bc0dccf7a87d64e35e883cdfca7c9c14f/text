@@ -1,0 +1,27 @@
+taut-bvec-cons : (cx : Bool) → (cr : List Bool) →
+  ((w1 w2 : List Bool) → rxn-bvec-eq cr w1 ≡ true → rxn-bvec-eq cr w2 ≡ true → rxn-bvec-eq w1 w2 ≡ true) →
+  (w1 w2 : List Bool) →
+  rxn-bvec-eq (cons cx cr) w1 ≡ true → rxn-bvec-eq (cons cx cr) w2 ≡ true → rxn-bvec-eq w1 w2 ≡ true
+taut-bvec-cons cx cr ih w1 w2 =
+  case w1 return λ a →
+    rxn-bvec-eq (cons cx cr) a ≡ true → rxn-bvec-eq (cons cx cr) w2 ≡ true → rxn-bvec-eq a w2 ≡ true of
+    nil → λ h1 _ → Empty-rec (taut-bool-false-neq-true h1)
+    cons a1 r1 →
+      (case w2 return λ b →
+         rxn-bvec-eq (cons cx cr) (cons a1 r1) ≡ true →
+         rxn-bvec-eq (cons cx cr) b ≡ true →
+         rxn-bvec-eq (cons a1 r1) b ≡ true of
+         nil → λ _ h2 → Empty-rec (taut-bool-false-neq-true h2)
+         cons b1 r2 → λ h1 h2 →
+           lor-tr Bool
+             (both (bit-eq a1 b1) (rxn-bvec-eq r1 r2))
+             (both true true)
+             true
+             (λ i → both
+               (taut-bit-eq-trans cx a1 b1
+                 (taut-both-left (bit-eq cx a1) (rxn-bvec-eq cr r1) h1)
+                 (taut-both-left (bit-eq cx b1) (rxn-bvec-eq cr r2) h2) i)
+               (ih r1 r2
+                 (taut-both-right (bit-eq cx a1) (rxn-bvec-eq cr r1) h1)
+                 (taut-both-right (bit-eq cx b1) (rxn-bvec-eq cr r2) h2) i))
+             refl)

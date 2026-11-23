@@ -1,0 +1,25 @@
+-- (B) Complete 5-Level 3-Electron Neutral Lithium Aufbau Shell Ladder on 3D K_4:
+--     E_0(Li 1s^2 2s ^2S) < 9/2 < 13/2 < E_0(Li+ + e-) < 27/4 < 7 < E_0(1s 2s^2) < 11 < E_0(^4P) < 25/2 < E_0(n0=0)!
+emg-lithium3d-verdict :
+  both
+    (both
+      (h3d-quad-neg emg-v-li-full
+        (emg-li-mat false (sc-p bin-two) (sc-n (h3-i (h3-o (h3-o bin-one)))) emg-b-li-full))
+      (both
+        (h3d-z2-pd 8 2
+          (emg-li-mat false (sc-p bin-two) (sc-n (h3-i (h3-o (h3-i bin-one)))) emg-b-li-ion1)
+          (emg-li-ts12 emg-b-li-ion1) emg-L-ion1-e emg-L-ion1-o)
+        (h3d-quad-neg emg-v-li-ion1
+          (emg-li-mat false (sc-p (bin-pow2 2)) (sc-n (h3-i (h3-i (h3-o (h3-i bin-one))))) emg-b-li-ion1))))
+    (both
+      (h3d-z2-pd 8 7
+        (emg-li-mat false bz-one (sc-n (h3-i (h3-i bin-one))) emg-b-li-core1)
+        (emg-li-ts12 emg-b-li-core1) emg-L-core1-e emg-L-core1-o)
+      (both
+        (h3d-force-mat Bool
+          (emg-li-mat true bz-one (sc-n (h3-i (h3-i (h3-o bin-one)))) emg-b-li-quartet)
+          (λ mq → h3d-rump-pd 8 mq emg-L-quartet))
+        (h3d-force-mat Bool
+          (emg-li-mat false (sc-p bin-two) (sc-n (h3-i (h3-o (h3-o (h3-i bin-one))))) emg-b-li-c0)
+          (λ mc0 → h3d-rump-pd 7 mc0 emg-L-c0)))) ≡ true
+emg-lithium3d-verdict = refl

@@ -1,0 +1,35 @@
+emg-neghom : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (x y : A) → neg (add x y) ≡ add (neg x) (neg y)
+emg-neghom A z add mul neg r x y =
+  lor-tr A
+    (neg (add x y))
+    (add (neg (add x y)) (add (add x y) (add (neg x) (neg y))))
+    (add (neg x) (neg y))
+    (sym (lor-tr A
+      (add (neg (add x y)) (add (add x y) (add (neg x) (neg y))))
+      (add (neg (add x y)) z)
+      (neg (add x y))
+      (cong (λ t → add (neg (add x y)) t)
+        (lor-tr A
+          (add (add x y) (add (neg x) (neg y)))
+          (add (add x (neg x)) (add y (neg y)))
+          z
+          (sc-swap4 A z add mul neg r x y (neg x) (neg y))
+          (lor-tr A (add (add x (neg x)) (add y (neg y))) (add z z) z
+            (λ i → add (emg-inv A z add mul neg r x i) (emg-inv A z add mul neg r y i))
+            (emg-zl A z add mul neg r z))))
+      (emg-zr A z add mul neg r (neg (add x y)))))
+    (lor-tr A
+      (add (neg (add x y)) (add (add x y) (add (neg x) (neg y))))
+      (add (add (neg (add x y)) (add x y)) (add (neg x) (neg y)))
+      (add (neg x) (neg y))
+      (sym (emg-assoc A z add mul neg r (neg (add x y)) (add x y) (add (neg x) (neg y))))
+      (lor-tr A
+        (add (add (neg (add x y)) (add x y)) (add (neg x) (neg y)))
+        (add z (add (neg x) (neg y)))
+        (add (neg x) (neg y))
+        (cong (λ t → add t (add (neg x) (neg y)))
+              (lor-tr A (add (neg (add x y)) (add x y)) (add (add x y) (neg (add x y))) z
+                (emg-comm A z add mul neg r (neg (add x y)) (add x y))
+                (emg-inv A z add mul neg r (add x y))))
+        (emg-zl A z add mul neg r (add (neg x) (neg y)))))

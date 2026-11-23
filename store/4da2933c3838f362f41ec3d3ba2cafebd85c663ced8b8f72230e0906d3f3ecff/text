@@ -1,0 +1,21 @@
+-- THEOREM 1A (Universal Magnetic-Reversal Parity Selection Rule):
+grv-parity-vanish : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  LorRing A z one add mul neg →
+  (wA wB ciA ciB ckA ckB : A) →
+  wB ≡ wA → ciB ≡ ciA → ckB ≡ neg ckA →
+  add (mul wA (mul ciA ckA)) (mul wB (mul ciB ckB)) ≡ z
+grv-parity-vanish A z one add mul neg r wA wB ciA ciB ckA ckB hw hci hck =
+  lor-tr A
+    (add (mul wA (mul ciA ckA)) (mul wB (mul ciB ckB)))
+    (add (mul wA (mul ciA ckA)) (neg (mul wA (mul ciA ckA))))
+    z
+    (cong (λ t → add (mul wA (mul ciA ckA)) t)
+      (lor-tr A
+        (mul wB (mul ciB ckB))
+        (mul wA (mul ciA (neg ckA)))
+        (neg (mul wA (mul ciA ckA)))
+        (λ j → mul (hw j) (mul (hci j) (hck j)))
+        (concat
+          (cong (λ u → mul wA u) (r4d-neg-mr A z one add mul neg r ciA ckA))
+          (r4d-neg-mr A z one add mul neg r wA (mul ciA ckA)))))
+    (fst r (mul wA (mul ciA ckA)))

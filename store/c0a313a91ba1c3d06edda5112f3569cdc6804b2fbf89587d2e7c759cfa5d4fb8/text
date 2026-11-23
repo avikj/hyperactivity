@@ -1,0 +1,29 @@
+-- THEOREM 1A (Universal Parallelogram & Star-Mesh Sublattice Elimination Identities):
+emg-para2 : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (u v : A) →
+  add (mul (add u v) (add u v)) (mul (add u (neg v)) (add u (neg v))) ≡
+  add (add (mul u u) (mul v v)) (add (mul u u) (mul v v))
+emg-para2 A z add mul neg r u v =
+  lor-tr A
+    (add (mul (add u v) (add u v)) (mul (add u (neg v)) (add u (neg v))))
+    (add (add (add (mul u u) (mul v v)) (add (mul u u) (mul v v)))
+         (add (add (mul u v) (mul v u)) (neg (add (mul u v) (mul v u)))))
+    (add (add (mul u u) (mul v v)) (add (mul u u) (mul v v)))
+    (lor-tr A
+      (add (mul (add u v) (add u v)) (mul (add u (neg v)) (add u (neg v))))
+      (add (add (add (mul u u) (mul v v)) (add (mul u v) (mul v u)))
+           (add (add (mul u u) (mul v v)) (neg (add (mul u v) (mul v u)))))
+      (add (add (add (mul u u) (mul v v)) (add (mul u u) (mul v v)))
+           (add (add (mul u v) (mul v u)) (neg (add (mul u v) (mul v u)))))
+      (λ i → add (sym (sc-foil A z add mul neg r u v) i) (sym (emg-foil-sub A z add mul neg r u v) i))
+      (sc-swap4 A z add mul neg r
+        (add (mul u u) (mul v v)) (add (mul u v) (mul v u))
+        (add (mul u u) (mul v v)) (neg (add (mul u v) (mul v u)))))
+    (lor-tr A
+      (add (add (add (mul u u) (mul v v)) (add (mul u u) (mul v v)))
+           (add (add (mul u v) (mul v u)) (neg (add (mul u v) (mul v u)))))
+      (add (add (add (mul u u) (mul v v)) (add (mul u u) (mul v v))) z)
+      (add (add (mul u u) (mul v v)) (add (mul u u) (mul v v)))
+      (cong (λ t → add (add (add (mul u u) (mul v v)) (add (mul u u) (mul v v))) t)
+            (emg-inv A z add mul neg r (add (mul u v) (mul v u))))
+      (emg-zr A z add mul neg r (add (add (mul u u) (mul v v)) (add (mul u u) (mul v v)))))

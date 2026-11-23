@@ -1,0 +1,14 @@
+grv-add-bucket : (C : Type) → Nat → GrvZ → GrvBuckets → (GrvBuckets → C) → C
+grv-add-bucket C nExt val b cont =
+  if eqb nExt 0 then (grv-force-z C (grv-z-add (fst b) val) (λ v → cont (v , snd b)))
+  else (if eqb nExt 1 then
+    (grv-force-z C (grv-z-add (fst (snd b)) val) (λ v → cont (fst b , (v , snd (snd b)))))
+  else (if eqb nExt 2 then
+    (grv-force-z C (grv-z-add (fst (snd (snd b))) val) (λ v →
+      cont (fst b , (fst (snd b) , (v , snd (snd (snd b)))))))
+  else (if eqb nExt 3 then
+    (grv-force-z C (grv-z-add (fst (snd (snd (snd b)))) val) (λ v →
+      cont (fst b , (fst (snd b) , (fst (snd (snd b)) , (v , snd (snd (snd (snd b)))))))))
+  else
+    (grv-force-z C (grv-z-add (snd (snd (snd (snd b)))) val) (λ v →
+      cont (fst b , (fst (snd b) , (fst (snd (snd b)) , (fst (snd (snd (snd b))) , v)))))))))

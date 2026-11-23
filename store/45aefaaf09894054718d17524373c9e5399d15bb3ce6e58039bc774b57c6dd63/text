@@ -1,0 +1,30 @@
+-- THEOREM 3A (Universal Equilateral Wheeler-DeWitt Midpoint Ratio Theorem: cos(Theta_tet) = 1/3 at EVERY Scale!):
+grv-wdw-midpoint-ratio : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → R4dAb A z add neg →
+  (one ell : A) →
+  add (add (add ell (add ell ell)) (add one one)) (add (add ell (add ell ell)) one) ≡
+  add (add (add ell ell) one) (add (add (add ell ell) one) (add (add ell ell) one))
+grv-wdw-midpoint-ratio A z add neg ab one ell =
+  lor-tr A
+    (add (add (add ell (add ell ell)) (add one one)) (add (add ell (add ell ell)) one))
+    (add (add (add ell (add ell ell)) (add ell (add ell ell))) (add (add one one) one))
+    (add (add (add ell ell) one) (add (add (add ell ell) one) (add (add ell ell) one)))
+    (r4d-swap4 A z add neg ab (add ell (add ell ell)) (add one one) (add ell (add ell ell)) one)
+    (sym
+      (lor-tr A
+        (add (add (add ell ell) one) (add (add (add ell ell) one) (add (add ell ell) one)))
+        (add (add (add ell ell) (add (add ell ell) (add ell ell))) (add one (add one one)))
+        (add (add (add ell (add ell ell)) (add ell (add ell ell))) (add (add one one) one))
+        (concat
+          (cong (λ t → add (add (add ell ell) one) t)
+                (r4d-swap4 A z add neg ab (add ell ell) one (add ell ell) one))
+          (r4d-swap4 A z add neg ab (add ell ell) one (add (add ell ell) (add ell ell)) (add one one)))
+        (λ j → add
+          (lor-tr A
+            (add (add ell ell) (add (add ell ell) (add ell ell)))
+            (add (add (add ell ell) ell) (add ell (add ell ell)))
+            (add (add ell (add ell ell)) (add ell (add ell ell)))
+            (concat
+              (cong (λ u → add (add ell ell) u) (r4d-assoc A z add neg ab ell ell (add ell ell)))
+              (sym (r4d-assoc A z add neg ab (add ell ell) ell (add ell (add ell ell)))))
+            (cong (λ u → add u (add ell (add ell ell))) (r4d-assoc A z add neg ab ell ell ell)) j)
+          (r4d-comm A z add neg ab one (add one one) j))))

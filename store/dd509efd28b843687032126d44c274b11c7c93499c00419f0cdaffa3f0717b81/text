@@ -1,0 +1,18 @@
+-- Doublet 3-electron hop (2 up u1 < u2 with fermionic crossing sign + 1 down d):
+emg-doublet-hop : EmgLiState → EmgLiState → BZ
+emg-doublet-hop sa sb =
+  (λ u1 u2 da fa w1 w2 db fb →
+    bz-add
+      (if both (eqb u1 w1) (eqb u2 w2) then emg-k4-hop-1e da fa db fb else bz-zero)
+      (if eqb da db
+       then
+         bz-add
+           (bz-add
+             (if eqb u2 w2 then emg-k4-hop-1e u1 fa w1 fb else bz-zero)
+             (if eqb u2 w1 then bz-neg (emg-k4-hop-1e u1 fa w2 fb) else bz-zero))
+           (bz-add
+             (if eqb u1 w1 then emg-k4-hop-1e u2 fa w2 fb else bz-zero)
+             (if eqb u1 w2 then bz-neg (emg-k4-hop-1e u2 fa w1 fb) else bz-zero))
+       else bz-zero))
+  (fst (fst sa)) (fst (snd (fst sa))) (snd (snd (fst sa))) (snd sa)
+  (fst (fst sb)) (fst (snd (fst sb))) (snd (snd (fst sb))) (snd sb)

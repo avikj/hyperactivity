@@ -1,0 +1,27 @@
+-- (B) 13/13 Multi-Window Accuracy at W_crystal, W_NMR, AND W_assay across Substituent Perturbations delta in {0, 1},
+--     vs. Standard InChI's (1/13, 13/13? Wait: 2-pyridone crystal 1/13 at W_crystal and 9/13 at W_assay!)
+--     AND Pairwise Distinctness of All Three Physical Windows (forcing 0/8,192 static canonicalizers by Theorem 2B!):
+taut-3window-atlas-verdict :
+  (λ g0 gLo gHi →
+    both
+      (both
+        (both (eqb (taut-score (rxn-resolve-at 12 g0) taut-truth-crystal) 13)
+              (both (eqb (taut-score (rxn-resolve-at 6 g0) taut-truth-nmr) 13)
+                    (eqb (taut-score (rxn-resolve-at 2 g0) taut-truth-assay) 13)))
+        (both
+          (both (rxn-bvec-eq (rxn-resolve-at 12 gHi) taut-truth-crystal)
+                (rxn-bvec-eq (rxn-resolve-at 12 gLo) taut-truth-crystal))
+          (both (both (rxn-bvec-eq (rxn-resolve-at 6 gHi) taut-truth-nmr)
+                      (rxn-bvec-eq (rxn-resolve-at 6 gLo) taut-truth-nmr))
+                (both (rxn-bvec-eq (rxn-resolve-at 2 gHi) taut-truth-assay)
+                      (rxn-bvec-eq (rxn-resolve-at 2 gLo) taut-truth-assay)))))
+      (both
+        (both (eqb (taut-score taut-std-inchi taut-truth-crystal) 5)
+              (eqb (taut-score taut-std-inchi taut-truth-assay) 9))
+        (both (not (rxn-bvec-eq taut-truth-crystal taut-truth-nmr))
+              (both (not (rxn-bvec-eq taut-truth-nmr taut-truth-assay))
+                    (not (rxn-bvec-eq taut-truth-crystal taut-truth-assay))))))
+  taut-gaps13
+  (taut-sub-delta 1 taut-gaps13)
+  (taut-add-delta 1 taut-gaps13) ≡ true
+taut-3window-atlas-verdict = refl

@@ -1,0 +1,86 @@
+-- Exact 3-Electron Hall-Post / Coleman Pair Decomposition over any Abelian Group:
+emg-hall-post-3e : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (h1 h2 h3 v12 v13 v23 : A) →
+  add (add (add h1 h2) (add h3 (add v12 (add v13 v23))))
+      (add (add h1 h2) (add h3 (add v12 (add v13 v23)))) ≡
+  add (add (add h1 h2) (add v12 v12))
+      (add (add (add h1 h3) (add v13 v13))
+           (add (add h2 h3) (add v23 v23)))
+emg-hall-post-3e A z add neg ab h1 h2 h3 v12 v13 v23 =
+  lor-tr A
+    (add (add (add h1 h2) (add h3 (add v12 (add v13 v23))))
+         (add (add h1 h2) (add h3 (add v12 (add v13 v23)))))
+    (add (add (add h1 h2) (add h1 h2))
+         (add (add h3 (add v12 (add v13 v23))) (add h3 (add v12 (add v13 v23)))))
+    (add (add (add h1 h2) (add v12 v12))
+         (add (add (add h1 h3) (add v13 v13))
+              (add (add h2 h3) (add v23 v23))))
+    (qgm-swap4 A z add neg ab
+      (add h1 h2) (add h3 (add v12 (add v13 v23)))
+      (add h1 h2) (add h3 (add v12 (add v13 v23))))
+    (lor-tr A
+      (add (add (add h1 h2) (add h1 h2))
+           (add (add h3 (add v12 (add v13 v23))) (add h3 (add v12 (add v13 v23)))))
+      (add (add (add h1 h2) (add h1 h2))
+           (add (add h3 h3) (add (add v12 v12) (add (add v13 v13) (add v23 v23)))))
+      (add (add (add h1 h2) (add v12 v12))
+           (add (add (add h1 h3) (add v13 v13))
+                (add (add h2 h3) (add v23 v23))))
+      (cong (λ t → add (add (add h1 h2) (add h1 h2)) t)
+        (lor-tr A
+          (add (add h3 (add v12 (add v13 v23))) (add h3 (add v12 (add v13 v23))))
+          (add (add h3 h3) (add (add v12 (add v13 v23)) (add v12 (add v13 v23))))
+          (add (add h3 h3) (add (add v12 v12) (add (add v13 v13) (add v23 v23))))
+          (qgm-swap4 A z add neg ab h3 (add v12 (add v13 v23)) h3 (add v12 (add v13 v23)))
+          (cong (λ u → add (add h3 h3) u)
+            (lor-tr A
+              (add (add v12 (add v13 v23)) (add v12 (add v13 v23)))
+              (add (add v12 v12) (add (add v13 v23) (add v13 v23)))
+              (add (add v12 v12) (add (add v13 v13) (add v23 v23)))
+              (qgm-swap4 A z add neg ab v12 (add v13 v23) v12 (add v13 v23))
+              (cong (λ w → add (add v12 v12) w)
+                    (qgm-swap4 A z add neg ab v13 v23 v13 v23))))))
+      (lor-tr A
+        (add (add (add h1 h2) (add h1 h2))
+             (add (add h3 h3) (add (add v12 v12) (add (add v13 v13) (add v23 v23)))))
+        (add (add (add h1 h2) (add h1 h2))
+             (add (add v12 v12) (add (add h3 h3) (add (add v13 v13) (add v23 v23)))))
+        (add (add (add h1 h2) (add v12 v12))
+             (add (add (add h1 h3) (add v13 v13))
+                  (add (add h2 h3) (add v23 v23))))
+        (cong (λ t → add (add (add h1 h2) (add h1 h2)) t)
+          (lor-tr A
+            (add (add h3 h3) (add (add v12 v12) (add (add v13 v13) (add v23 v23))))
+            (add (add (add h3 h3) (add v12 v12)) (add (add v13 v13) (add v23 v23)))
+            (add (add v12 v12) (add (add h3 h3) (add (add v13 v13) (add v23 v23))))
+            (sym (qgm-assoc A z add neg ab (add h3 h3) (add v12 v12) (add (add v13 v13) (add v23 v23))))
+            (lor-tr A
+              (add (add (add h3 h3) (add v12 v12)) (add (add v13 v13) (add v23 v23)))
+              (add (add (add v12 v12) (add h3 h3)) (add (add v13 v13) (add v23 v23)))
+              (add (add v12 v12) (add (add h3 h3) (add (add v13 v13) (add v23 v23))))
+              (cong (λ u → add u (add (add v13 v13) (add v23 v23)))
+                    (qgm-comm A z add neg ab (add h3 h3) (add v12 v12)))
+              (qgm-assoc A z add neg ab (add v12 v12) (add h3 h3) (add (add v13 v13) (add v23 v23))))))
+        (lor-tr A
+          (add (add (add h1 h2) (add h1 h2))
+               (add (add v12 v12) (add (add h3 h3) (add (add v13 v13) (add v23 v23)))))
+          (add (add (add h1 h2) (add v12 v12))
+               (add (add h1 h2) (add (add h3 h3) (add (add v13 v13) (add v23 v23)))))
+          (add (add (add h1 h2) (add v12 v12))
+               (add (add (add h1 h3) (add v13 v13))
+                    (add (add h2 h3) (add v23 v23))))
+          (qgm-swap4 A z add neg ab (add h1 h2) (add h1 h2) (add v12 v12)
+            (add (add h3 h3) (add (add v13 v13) (add v23 v23))))
+          (cong (λ t → add (add (add h1 h2) (add v12 v12)) t)
+            (lor-tr A
+              (add (add h1 h2) (add (add h3 h3) (add (add v13 v13) (add v23 v23))))
+              (add (add (add h1 h2) (add h3 h3)) (add (add v13 v13) (add v23 v23)))
+              (add (add (add h1 h3) (add v13 v13)) (add (add h2 h3) (add v23 v23)))
+              (sym (qgm-assoc A z add neg ab (add h1 h2) (add h3 h3) (add (add v13 v13) (add v23 v23))))
+              (lor-tr A
+                (add (add (add h1 h2) (add h3 h3)) (add (add v13 v13) (add v23 v23)))
+                (add (add (add h1 h3) (add h2 h3)) (add (add v13 v13) (add v23 v23)))
+                (add (add (add h1 h3) (add v13 v13)) (add (add h2 h3) (add v23 v23)))
+                (cong (λ u → add u (add (add v13 v13) (add v23 v23)))
+                      (qgm-swap4 A z add neg ab h1 h2 h3 h3))
+                (qgm-swap4 A z add neg ab (add h1 h3) (add h2 h3) (add v13 v13) (add v23 v23))))))))

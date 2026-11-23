@@ -1,0 +1,75 @@
+-- THEOREM 1B (Universal 2x2 Symmetric Block Quadratic Completion):
+--   a * ((a*x*x + b*y*x) + (x*b*y + d*y*y)) == (a*x + b*y)^2 + (a*d - b^2)*y^2!
+grv-2x2-pd-id : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) →
+  R4dAb A z add neg → LorRing A z one add mul neg →
+  (a b d x y : A) →
+  mul a (add (add (mul (mul a x) x) (mul (mul b y) x)) (add (mul x (mul b y)) (mul d (mul y y)))) ≡
+  add (mul (add (mul a x) (mul b y)) (add (mul a x) (mul b y)))
+      (mul (add (mul a d) (neg (mul b b))) (mul y y))
+grv-2x2-pd-id A z one add mul neg ab r a b d x y =
+  lor-tr A
+    (mul a (add (add (mul (mul a x) x) (mul (mul b y) x)) (add (mul x (mul b y)) (mul d (mul y y)))))
+    (add (add (mul (mul a x) (mul a x)) (mul (mul a x) (mul b y)))
+         (add (mul (mul b y) (mul a x)) (mul (mul a d) (mul y y))))
+    (add (mul (add (mul a x) (mul b y)) (add (mul a x) (mul b y)))
+         (mul (add (mul a d) (neg (mul b b))) (mul y y)))
+    (lor-tr A
+      (mul a (add (add (mul (mul a x) x) (mul (mul b y) x)) (add (mul x (mul b y)) (mul d (mul y y)))))
+      (add (add (mul a (mul (mul a x) x)) (mul a (mul (mul b y) x)))
+           (add (mul a (mul x (mul b y))) (mul a (mul d (mul y y)))))
+      (add (add (mul (mul a x) (mul a x)) (mul (mul a x) (mul b y)))
+           (add (mul (mul b y) (mul a x)) (mul (mul a d) (mul y y))))
+      (concat
+        (r4d-ldist A z one add mul neg r a
+          (add (mul (mul a x) x) (mul (mul b y) x))
+          (add (mul x (mul b y)) (mul d (mul y y))))
+        (λ j → add (r4d-ldist A z one add mul neg r a (mul (mul a x) x) (mul (mul b y) x) j)
+                   (r4d-ldist A z one add mul neg r a (mul x (mul b y)) (mul d (mul y y)) j)))
+      (λ j → add
+        (add (lor-tr A (mul a (mul (mul a x) x)) (mul (mul a (mul a x)) x) (mul (mul a x) (mul a x))
+               (sym (r4d-massoc A z one add mul neg r a (mul a x) x))
+               (concat (cong (λ u → mul u x) (r4d-mcomm A z one add mul neg r a (mul a x)))
+                       (r4d-massoc A z one add mul neg r (mul a x) a x)) j)
+             (lor-tr A (mul a (mul (mul b y) x)) (mul (mul a (mul b y)) x) (mul (mul a x) (mul b y))
+               (sym (r4d-massoc A z one add mul neg r a (mul b y) x))
+               (concat (cong (λ u → mul u x) (r4d-mcomm A z one add mul neg r a (mul b y)))
+                 (concat (r4d-massoc A z one add mul neg r (mul b y) a x)
+                         (r4d-mcomm A z one add mul neg r (mul b y) (mul a x)))) j))
+        (add (lor-tr A (mul a (mul x (mul b y))) (mul (mul a x) (mul b y)) (mul (mul b y) (mul a x))
+               (sym (r4d-massoc A z one add mul neg r a x (mul b y)))
+               (r4d-mcomm A z one add mul neg r (mul a x) (mul b y)) j)
+             (sym (r4d-massoc A z one add mul neg r a d (mul y y)) j))))
+    (sym
+      (lor-tr A
+        (add (mul (add (mul a x) (mul b y)) (add (mul a x) (mul b y)))
+             (mul (add (mul a d) (neg (mul b b))) (mul y y)))
+        (add (add (add (mul (mul a x) (mul a x)) (mul (mul a x) (mul b y)))
+                  (add (mul (mul b y) (mul a x)) (mul (mul b y) (mul b y))))
+             (add (mul (mul a d) (mul y y)) (neg (mul (mul b y) (mul b y)))))
+        (add (add (mul (mul a x) (mul a x)) (mul (mul a x) (mul b y)))
+             (add (mul (mul b y) (mul a x)) (mul (mul a d) (mul y y))))
+        (λ j → add (r4d-foil A z one add mul neg r (mul a x) (mul b y) (mul a x) (mul b y) j)
+                   (lor-tr A
+                     (mul (add (mul a d) (neg (mul b b))) (mul y y))
+                     (add (mul (mul a d) (mul y y)) (mul (neg (mul b b)) (mul y y)))
+                     (add (mul (mul a d) (mul y y)) (neg (mul (mul b y) (mul b y))))
+                     (r4d-rdist A z one add mul neg r (mul a d) (neg (mul b b)) (mul y y))
+                     (cong (λ u → add (mul (mul a d) (mul y y)) u)
+                       (concat (r4d-neg-ml A z one add mul neg r (mul b b) (mul y y))
+                               (cong neg (sym (grv-mul4-swap A z one add mul neg r b y b y))))) j))
+        (lor-tr A
+          (add (add (add (mul (mul a x) (mul a x)) (mul (mul a x) (mul b y)))
+                    (add (mul (mul b y) (mul a x)) (mul (mul b y) (mul b y))))
+               (add (mul (mul a d) (mul y y)) (neg (mul (mul b y) (mul b y)))))
+          (add (add (mul (mul a x) (mul a x)) (mul (mul a x) (mul b y)))
+               (add (add (mul (mul b y) (mul a x)) (mul (mul b y) (mul b y)))
+                    (add (mul (mul a d) (mul y y)) (neg (mul (mul b y) (mul b y))))))
+          (add (add (mul (mul a x) (mul a x)) (mul (mul a x) (mul b y)))
+               (add (mul (mul b y) (mul a x)) (mul (mul a d) (mul y y))))
+          (r4d-assoc A z add neg ab
+            (add (mul (mul a x) (mul a x)) (mul (mul a x) (mul b y)))
+            (add (mul (mul b y) (mul a x)) (mul (mul b y) (mul b y)))
+            (add (mul (mul a d) (mul y y)) (neg (mul (mul b y) (mul b y)))))
+          (cong (λ u → add (add (mul (mul a x) (mul a x)) (mul (mul a x) (mul b y))) u)
+            (r4d-cancel-pm A z add neg ab (mul (mul b y) (mul a x)) (mul (mul a d) (mul y y))
+              (mul (mul b y) (mul b y)))))))

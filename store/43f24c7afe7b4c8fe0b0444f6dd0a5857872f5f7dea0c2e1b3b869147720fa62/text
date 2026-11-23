@@ -1,0 +1,16 @@
+emg-foil-sub : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (u v : A) → add (add (mul u u) (mul v v)) (neg (add (mul u v) (mul v u))) ≡ mul (add u (neg v)) (add u (neg v))
+emg-foil-sub A z add mul neg r u v =
+  lor-tr A
+    (add (add (mul u u) (mul v v)) (neg (add (mul u v) (mul v u))))
+    (add (add (mul u u) (mul (neg v) (neg v))) (add (mul u (neg v)) (mul (neg v) u)))
+    (mul (add u (neg v)) (add u (neg v)))
+    (λ i → add (add (mul u u) (sym (sc-neg-sq A z add mul neg r v) i))
+               (lor-tr A
+                 (neg (add (mul u v) (mul v u)))
+                 (add (neg (mul u v)) (neg (mul v u)))
+                 (add (mul u (neg v)) (mul (neg v) u))
+                 (emg-neghom A z add mul neg r (mul u v) (mul v u))
+                 (λ j → add (sym (emg-neg-mr A z add mul neg r u v) j)
+                            (sym (emg-neg-ml A z add mul neg r v u) j)) i))
+    (sc-foil A z add mul neg r u (neg v))

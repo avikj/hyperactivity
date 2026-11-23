@@ -1,0 +1,59 @@
+taut-schur-1d : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (c bk qk : A) →
+  add (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))) (mul bk bk) ≡
+  mul (add (mul c qk) bk) (add (mul c qk) bk)
+taut-schur-1d A z add mul neg r c bk qk =
+  lor-tr A
+    (add (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))) (mul bk bk))
+    (add (add (mul (mul c qk) (mul c qk)) (mul bk bk))
+         (add (mul (mul c qk) bk) (mul bk (mul c qk))))
+    (mul (add (mul c qk) bk) (add (mul c qk) bk))
+    (lor-tr A
+      (add (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))) (mul bk bk))
+      (add (add (mul (mul c qk) (mul c qk)) (add (mul (mul c qk) bk) (mul bk (mul c qk))))
+           (add (mul bk bk) z))
+      (add (add (mul (mul c qk) (mul c qk)) (mul bk bk))
+           (add (mul (mul c qk) bk) (mul bk (mul c qk))))
+      (λ i → add
+        (lor-tr A
+          (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk))))
+          (add (mul c (mul c (mul qk qk))) (mul c (add (mul bk qk) (mul qk bk))))
+          (add (mul (mul c qk) (mul c qk)) (add (mul (mul c qk) bk) (mul bk (mul c qk))))
+          (taut-ldist A z add mul neg r c (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))
+          (λ j → add
+            (lor-tr A
+              (mul c (mul c (mul qk qk))) (mul c (mul (mul c qk) qk)) (mul (mul c qk) (mul c qk))
+              (cong (λ t → mul c t) (sym (taut-massoc A z add mul neg r c qk qk)))
+              (lor-tr A (mul c (mul (mul c qk) qk)) (mul c (mul qk (mul c qk))) (mul (mul c qk) (mul c qk))
+                (cong (λ t → mul c t) (taut-mcomm A z add mul neg r (mul c qk) qk))
+                (sym (taut-massoc A z add mul neg r c qk (mul c qk)))) j)
+            (lor-tr A
+              (mul c (add (mul bk qk) (mul qk bk)))
+              (add (mul c (mul bk qk)) (mul c (mul qk bk)))
+              (add (mul (mul c qk) bk) (mul bk (mul c qk)))
+              (taut-ldist A z add mul neg r c (mul bk qk) (mul qk bk))
+              (lor-tr A
+                (add (mul c (mul bk qk)) (mul c (mul qk bk)))
+                (add (mul bk (mul c qk)) (mul (mul c qk) bk))
+                (add (mul (mul c qk) bk) (mul bk (mul c qk)))
+                (λ k → add
+                  (lor-tr A (mul c (mul bk qk)) (mul (mul c bk) qk) (mul bk (mul c qk))
+                    (sym (taut-massoc A z add mul neg r c bk qk))
+                    (lor-tr A (mul (mul c bk) qk) (mul (mul bk c) qk) (mul bk (mul c qk))
+                      (cong (λ u → mul u qk) (taut-mcomm A z add mul neg r c bk))
+                      (taut-massoc A z add mul neg r bk c qk)) k)
+                  (sym (taut-massoc A z add mul neg r c qk bk) k))
+                (taut-comm A z add mul neg r (mul bk (mul c qk)) (mul (mul c qk) bk))) j)) i)
+        (sym (taut-zr A z add mul neg r (mul bk bk)) i))
+      (lor-tr A
+        (add (add (mul (mul c qk) (mul c qk)) (add (mul (mul c qk) bk) (mul bk (mul c qk))))
+             (add (mul bk bk) z))
+        (add (add (mul (mul c qk) (mul c qk)) (mul bk bk))
+             (add (add (mul (mul c qk) bk) (mul bk (mul c qk))) z))
+        (add (add (mul (mul c qk) (mul c qk)) (mul bk bk))
+             (add (mul (mul c qk) bk) (mul bk (mul c qk))))
+        (sc-swap4 A z add mul neg r
+          (mul (mul c qk) (mul c qk)) (add (mul (mul c qk) bk) (mul bk (mul c qk))) (mul bk bk) z)
+        (cong (λ t → add (add (mul (mul c qk) (mul c qk)) (mul bk bk)) t)
+              (taut-zr A z add mul neg r (add (mul (mul c qk) bk) (mul bk (mul c qk)))))))
+    (sc-foil A z add mul neg r (mul c qk) bk)

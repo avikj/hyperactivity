@@ -1,0 +1,19 @@
+-- Exact degree-2 polynomial Lagrange grid verification (k in {0, 1, 2}, i.e. Z = 2 He, Z = 3 Li+, Z = 4 Be2+)
+-- confirming that 8960*(E_hi - E_lo) and 256*(E_ion - E_hi) equal the closed-form Nat polynomials above:
+emg-all-z-grid-check : Nat → Bool
+emg-all-z-grid-check k =
+  (λ z →
+    (λ z2 sixteenZm5 →
+      both
+        (bst-uf-eq
+          (bst-bsub (bst-bsub (bst-bmul (bin-of-nat 8960) z2)
+                              (bst-bmul (bin-of-nat 4096) z))
+                    (bst-bmul (bin-of-nat 35) (bst-bmul sixteenZm5 sixteenZm5)) , bin-one)
+          (bin-of-nat (emg-2e-width-nat k) , bin-one))
+        (bst-uf-eq
+          (bst-bsub (bst-bmul sixteenZm5 sixteenZm5)
+                    (bst-bmul (bin-of-nat 128) z2) , bin-one)
+          (bin-of-nat (emg-2e-ion-margin-nat k) , bin-one)))
+    (bst-bmul z z)
+    (bst-bsub (bst-bmul (bin-of-nat 16) z) (bin-of-nat 5)))
+  (bin-of-nat (plus 2 k))

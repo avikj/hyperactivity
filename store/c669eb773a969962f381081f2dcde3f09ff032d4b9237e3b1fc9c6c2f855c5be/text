@@ -1,0 +1,11 @@
+taut-bvec-trans : (c w1 w2 : List Bool) →
+  rxn-bvec-eq c w1 ≡ true → rxn-bvec-eq c w2 ≡ true → rxn-bvec-eq w1 w2 ≡ true
+taut-bvec-trans c =
+  case c return λ clist → (w1 w2 : List Bool) →
+    rxn-bvec-eq clist w1 ≡ true → rxn-bvec-eq clist w2 ≡ true → rxn-bvec-eq w1 w2 ≡ true of
+    nil → λ w1 w2 →
+      (case w1 return λ a →
+         rxn-bvec-eq nil a ≡ true → rxn-bvec-eq nil w2 ≡ true → rxn-bvec-eq a w2 ≡ true of
+         nil → λ _ h2 → h2
+         cons a1 r1 → λ h1 _ → Empty-rec (taut-bool-false-neq-true h1))
+    cons cx cr → taut-bvec-cons cx cr (rec cr)

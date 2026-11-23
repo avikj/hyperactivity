@@ -1,0 +1,10 @@
+-- Normalizes (p, n) to (p - n, nil) or (nil, n - p) and forces every bit linearly:
+grv-force-z : (C : Type) → GrvZ → (GrvZ → C) → C
+grv-force-z C x k =
+  bst-force-bin C (fst x) (λ p →
+  bst-force-bin C (snd x) (λ n →
+    case bst-bin-cmp p n of
+      zero → bst-force-bin C (bst-bsub n p) (λ d → k (nil , d))
+      suc c → case c of
+        zero → k grv-z-zero
+        suc _ → bst-force-bin C (bst-bsub p n) (λ d → k (d , nil))))

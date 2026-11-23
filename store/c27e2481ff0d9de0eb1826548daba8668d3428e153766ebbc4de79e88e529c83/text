@@ -1,0 +1,42 @@
+emg-schur-vec-cons : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (c bk : A) → (br : List A) →
+  ((qs : List A) → emg-len A br ≡ emg-len A qs →
+     add (mul c (emg-tail-form A z add mul c br qs)) (emg-norm2 A z add mul br) ≡
+     emg-sos-vec A z add mul c br qs) →
+  (qs : List A) → suc (emg-len A br) ≡ emg-len A qs →
+  add (mul c (emg-tail-form A z add mul c (cons bk br) qs)) (emg-norm2 A z add mul (cons bk br)) ≡
+  emg-sos-vec A z add mul c (cons bk br) qs
+emg-schur-vec-cons A z add mul neg r c bk br ih qs hlen =
+  (case qs return λ qlist → suc (emg-len A br) ≡ emg-len A qlist →
+     add (mul c (emg-tail-form A z add mul c (cons bk br) qlist)) (emg-norm2 A z add mul (cons bk br)) ≡
+     emg-sos-vec A z add mul c (cons bk br) qlist of
+     nil → λ p → Empty-rec (emg-zero-neq-suc (emg-len A br) (sym p))
+     cons qk qr → λ p →
+       lor-tr A
+         (add (mul c (add (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))
+                          (emg-tail-form A z add mul c br qr)))
+              (add (mul bk bk) (emg-norm2 A z add mul br)))
+         (add (add (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))) (mul bk bk))
+              (add (mul c (emg-tail-form A z add mul c br qr)) (emg-norm2 A z add mul br)))
+         (add (mul (add (mul c qk) bk) (add (mul c qk) bk))
+              (emg-sos-vec A z add mul c br qr))
+         (lor-tr A
+           (add (mul c (add (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))
+                            (emg-tail-form A z add mul c br qr)))
+                (add (mul bk bk) (emg-norm2 A z add mul br)))
+           (add (add (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk))))
+                     (mul c (emg-tail-form A z add mul c br qr)))
+                (add (mul bk bk) (emg-norm2 A z add mul br)))
+           (add (add (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))) (mul bk bk))
+                (add (mul c (emg-tail-form A z add mul c br qr)) (emg-norm2 A z add mul br)))
+           (cong (λ t → add t (add (mul bk bk) (emg-norm2 A z add mul br)))
+                 (emg-ldist A z add mul neg r c
+                   (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk)))
+                   (emg-tail-form A z add mul c br qr)))
+           (sc-swap4 A z add mul neg r
+             (mul c (add (mul c (mul qk qk)) (add (mul bk qk) (mul qk bk))))
+             (mul c (emg-tail-form A z add mul c br qr))
+             (mul bk bk)
+             (emg-norm2 A z add mul br)))
+         (λ i → add (emg-schur-1d A z add mul neg r c bk qk i)
+                    (ih qr (cong emg-pred p) i))) hlen

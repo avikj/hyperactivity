@@ -1,0 +1,11 @@
+taut-bit-eq-trans : (x a b : Bool) → bit-eq x a ≡ true → bit-eq x b ≡ true → bit-eq a b ≡ true
+taut-bit-eq-trans x a b =
+  case x return λ x0 → bit-eq x0 a ≡ true → bit-eq x0 b ≡ true → bit-eq a b ≡ true of
+    false →
+      (case a return λ a0 → bit-eq false a0 ≡ true → bit-eq false b ≡ true → bit-eq a0 b ≡ true of
+         false → λ _ hb → hb
+         true  → λ ha _ → Empty-rec (taut-bool-false-neq-true ha))
+    true →
+      (case a return λ a0 → bit-eq true a0 ≡ true → bit-eq true b ≡ true → bit-eq a0 b ≡ true of
+         false → λ ha _ → Empty-rec (taut-bool-false-neq-true ha)
+         true  → λ _ hb → hb)

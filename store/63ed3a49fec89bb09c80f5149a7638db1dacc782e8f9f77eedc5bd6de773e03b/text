@@ -1,0 +1,31 @@
+emg-skew2 : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (x1 y2 x2 y1 : A) →
+  add (add (mul x1 y2) (neg (mul x2 y1))) (add (mul y1 x2) (neg (mul y2 x1))) ≡ z
+emg-skew2 A z add mul neg r x1 y2 x2 y1 =
+  lor-tr A
+    (add (add (mul x1 y2) (neg (mul x2 y1))) (add (mul y1 x2) (neg (mul y2 x1))))
+    (add (add (mul x1 y2) (neg (mul x1 y2))) (add (neg (mul x2 y1)) (mul x2 y1)))
+    z
+    (lor-tr A
+      (add (add (mul x1 y2) (neg (mul x2 y1))) (add (mul y1 x2) (neg (mul y2 x1))))
+      (add (add (mul x1 y2) (neg (mul x2 y1))) (add (mul x2 y1) (neg (mul x1 y2))))
+      (add (add (mul x1 y2) (neg (mul x1 y2))) (add (neg (mul x2 y1)) (mul x2 y1)))
+      (cong (λ t → add (add (mul x1 y2) (neg (mul x2 y1))) t)
+            (λ i → add (emg-mcomm A z add mul neg r y1 x2 i)
+                       (cong neg (emg-mcomm A z add mul neg r y2 x1) i)))
+      (lor-tr A
+        (add (add (mul x1 y2) (neg (mul x2 y1))) (add (mul x2 y1) (neg (mul x1 y2))))
+        (add (add (mul x1 y2) (neg (mul x2 y1))) (add (neg (mul x1 y2)) (mul x2 y1)))
+        (add (add (mul x1 y2) (neg (mul x1 y2))) (add (neg (mul x2 y1)) (mul x2 y1)))
+        (cong (λ t → add (add (mul x1 y2) (neg (mul x2 y1))) t)
+              (emg-comm A z add mul neg r (mul x2 y1) (neg (mul x1 y2))))
+        (sc-swap4 A z add mul neg r (mul x1 y2) (neg (mul x2 y1)) (neg (mul x1 y2)) (mul x2 y1))))
+    (lor-tr A
+      (add (add (mul x1 y2) (neg (mul x1 y2))) (add (neg (mul x2 y1)) (mul x2 y1)))
+      (add z z)
+      z
+      (λ i → add (emg-inv A z add mul neg r (mul x1 y2) i)
+                 (lor-tr A (add (neg (mul x2 y1)) (mul x2 y1)) (add (mul x2 y1) (neg (mul x2 y1))) z
+                   (emg-comm A z add mul neg r (neg (mul x2 y1)) (mul x2 y1))
+                   (emg-inv A z add mul neg r (mul x2 y1)) i))
+      (emg-zl A z add mul neg r z))

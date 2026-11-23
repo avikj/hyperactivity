@@ -1,0 +1,10 @@
+-- Helper checking DPO forward/backward round-trip AND exact valence conservation:
+taut-dpo-rule-ok : RxnGraph → RxnGraph → List Nat → Bool
+taut-dpo-rule-ok gL gR expVal =
+  (λ idm →
+    both
+      (both (rxn-is-dpo-match gL gL idm)
+            (rxn-graph-eq (rxn-apply-dpo gR gL idm (rxn-apply-dpo gL gR idm gL)) gL))
+      (both (rxn-nvec-eq (rxn-valences (snd gL)) expVal)
+            (rxn-nvec-eq (rxn-valences (snd gR)) expVal)))
+  (rxn-range 0 (rxn-len Nat (fst gL)))

@@ -1,0 +1,21 @@
+emg-diff-cancel : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (a aj b : A) → add (add a (neg b)) (neg (add aj (neg b))) ≡ add a (neg aj)
+emg-diff-cancel A z add mul neg r a aj b =
+  lor-tr A
+    (add (add a (neg b)) (neg (add aj (neg b))))
+    (add (add a (neg aj)) (add (neg b) b))
+    (add a (neg aj))
+    (lor-tr A
+      (add (add a (neg b)) (neg (add aj (neg b))))
+      (add (add a (neg b)) (add (neg aj) b))
+      (add (add a (neg aj)) (add (neg b) b))
+      (cong (λ t → add (add a (neg b)) t)
+            (lor-tr A (neg (add aj (neg b))) (add (neg aj) (neg (neg b))) (add (neg aj) b)
+              (emg-neghom A z add mul neg r aj (neg b))
+              (cong (λ u → add (neg aj) u) (emg-dneg A z add mul neg r b))))
+      (sc-swap4 A z add mul neg r a (neg b) (neg aj) b))
+    (lor-tr A (add (add a (neg aj)) (add (neg b) b)) (add (add a (neg aj)) z) (add a (neg aj))
+      (cong (λ t → add (add a (neg aj)) t)
+            (lor-tr A (add (neg b) b) (add b (neg b)) z
+              (emg-comm A z add mul neg r (neg b) b) (emg-inv A z add mul neg r b)))
+      (emg-zr A z add mul neg r (add a (neg aj))))

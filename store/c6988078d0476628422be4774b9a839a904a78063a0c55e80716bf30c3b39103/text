@@ -1,0 +1,28 @@
+grv-bhat-m3 : (C : Type) → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat →
+  GrvBuckets → (GrvBuckets → C) → C
+grv-bhat-m3 C dj1 dj2 dj3 dj4 di dk halfS m1 m2 fuel3 b cont = case fuel3 of
+  zero → cont b
+  suc m3 →
+    if not (leb (plus m1 (plus m2 m3)) halfS)
+    then grv-bhat-m3 C dj1 dj2 dj3 dj4 di dk halfS m1 m2 m3 b cont
+    else
+      ((λ m4 →
+         if not (leb m4 dj4)
+         then grv-bhat-m3 C dj1 dj2 dj3 dj4 di dk halfS m1 m2 m3 b cont
+         else
+           (grv-force-z C (grv-intertwiner-c dj1 dj2 dj3 dj4 di m1 m2 m3 m4) (λ ci →
+            if grv-z-is-zero ci then grv-bhat-m3 C dj1 dj2 dj3 dj4 di dk halfS m1 m2 m3 b cont
+            else
+              (grv-force-z C (grv-intertwiner-c dj1 dj2 dj3 dj4 dk m1 m2 m3 m4) (λ ck →
+               if grv-z-is-zero ck then grv-bhat-m3 C dj1 dj2 dj3 dj4 di dk halfS m1 m2 m3 b cont
+               else
+                 ((λ mFac nExt →
+                    grv-add-bucket C nExt (grv-z-mul (grv-z-of-nat mFac) (grv-z-mul ci ck)) b (λ b2 →
+                      grv-bhat-m3 C dj1 dj2 dj3 dj4 di dk halfS m1 m2 m3 b2 cont))
+                  (times (times (grv-fact-small (monus dj1 m1)) (grv-fact-small m1))
+                    (times (times (grv-fact-small (monus dj2 m2)) (grv-fact-small m2))
+                      (times (times (grv-fact-small (monus dj3 m3)) (grv-fact-small m3))
+                             (times (grv-fact-small (monus dj4 m4)) (grv-fact-small m4)))))
+                  (plus (plus (grv-is-ext3 dj1 m1) (grv-is-ext3 dj2 m2))
+                        (plus (grv-is-ext3 dj3 m3) (grv-is-ext3 dj4 m4)))))))))
+       (monus halfS (plus m1 (plus m2 m3))))

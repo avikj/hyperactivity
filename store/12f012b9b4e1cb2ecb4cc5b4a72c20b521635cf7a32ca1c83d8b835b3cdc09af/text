@@ -1,0 +1,14 @@
+taut-3window-impossibility : (X I : Type) →
+  (SemCrys SemNMR SemAssay : X → X → Type) →
+  (canon : X → I) →
+  (a1 b1 a2 b2 : X) →
+  (SemCrys a1 b1 → Empty) → SemNMR a1 b1 → SemAssay a1 b1 →
+  (SemNMR a2 b2 → Empty) → SemAssay a2 b2 →
+  ((((x y : X) → canon x ≡ canon y → SemCrys x y) × ((x y : X) → SemNMR x y → canon x ≡ canon y)) → Empty) ×
+  (((((x y : X) → canon x ≡ canon y → SemNMR x y) × ((x y : X) → SemAssay x y → canon x ≡ canon y)) → Empty) ×
+   ((((x y : X) → canon x ≡ canon y → SemCrys x y) × ((x y : X) → SemAssay x y → canon x ≡ canon y)) → Empty))
+taut-3window-impossibility X I SemCrys SemNMR SemAssay canon a1 b1 a2 b2
+  notC1 eqN1 eqA1 notN2 eqA2 =
+  ((λ p → rxn-no-static-canonicalizer X I SemCrys SemNMR canon (fst p) (snd p) a1 b1 notC1 eqN1) ,
+   ((λ p → rxn-no-static-canonicalizer X I SemNMR SemAssay canon (fst p) (snd p) a2 b2 notN2 eqA2) ,
+    (λ p → rxn-no-static-canonicalizer X I SemCrys SemAssay canon (fst p) (snd p) a1 b1 notC1 eqA1)))

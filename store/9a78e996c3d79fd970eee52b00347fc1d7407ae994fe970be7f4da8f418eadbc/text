@@ -1,0 +1,17 @@
+-- THEOREM 2A (Universal Arbitrary-Dimension Schur-Tail Vector Identity & Positive-Semi-Definite Bound):
+emg-schur-vec-id : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (c : A) → (bs qs : List A) → emg-len A bs ≡ emg-len A qs →
+  add (mul c (emg-tail-form A z add mul c bs qs)) (emg-norm2 A z add mul bs) ≡
+  emg-sos-vec A z add mul c bs qs
+emg-schur-vec-id A z add mul neg r c bs =
+  case bs return λ blist → (qs : List A) → emg-len A blist ≡ emg-len A qs →
+    add (mul c (emg-tail-form A z add mul c blist qs)) (emg-norm2 A z add mul blist) ≡
+    emg-sos-vec A z add mul c blist qs of
+    nil → λ qs hlen →
+      (case qs return λ qlist → zero ≡ emg-len A qlist →
+         add (mul c z) z ≡ z of
+         nil → λ _ → lor-tr A (add (mul c z) z) (mul c z) z
+                       (emg-zr A z add mul neg r (mul c z))
+                       (emg-mul-zr A z add mul neg r c)
+         cons qk qr → λ p → Empty-rec (emg-zero-neq-suc (emg-len A qr) p)) hlen
+    cons bk br → emg-schur-vec-cons A z add mul neg r c bk br (rec br)

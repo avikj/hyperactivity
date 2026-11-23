@@ -1,0 +1,16 @@
+emg-mul-zr : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (c : A) → mul c z ≡ z
+emg-mul-zr A z add mul neg r c =
+  lor-tr A (mul c z) (add (mul c z) (add (mul c z) (neg (mul c z)))) z
+    (sym (lor-tr A (add (mul c z) (add (mul c z) (neg (mul c z)))) (add (mul c z) z) (mul c z)
+      (cong (λ t → add (mul c z) t) (emg-inv A z add mul neg r (mul c z)))
+      (emg-zr A z add mul neg r (mul c z))))
+    (lor-tr A (add (mul c z) (add (mul c z) (neg (mul c z))))
+              (add (add (mul c z) (mul c z)) (neg (mul c z))) z
+      (sym (emg-assoc A z add mul neg r (mul c z) (mul c z) (neg (mul c z))))
+      (lor-tr A (add (add (mul c z) (mul c z)) (neg (mul c z))) (add (mul c z) (neg (mul c z))) z
+        (cong (λ t → add t (neg (mul c z)))
+              (lor-tr A (add (mul c z) (mul c z)) (mul c (add z z)) (mul c z)
+                (sym (emg-ldist A z add mul neg r c z z))
+                (cong (λ u → mul c u) (emg-zl A z add mul neg r z))))
+        (emg-inv A z add mul neg r (mul c z))))

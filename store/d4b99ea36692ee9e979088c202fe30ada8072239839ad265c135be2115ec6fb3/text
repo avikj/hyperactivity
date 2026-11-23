@@ -1,0 +1,25 @@
+taut-tail-zero-cons : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (c bk : A) → (br : List A) →
+  ((n : Nat) → taut-tail-form A z add mul c br (taut-zeros A z n) ≡ z) →
+  (n : Nat) → taut-tail-form A z add mul c (cons bk br) (taut-zeros A z n) ≡ z
+taut-tail-zero-cons A z add mul neg r c bk br ih n =
+  case n return λ k → taut-tail-form A z add mul c (cons bk br) (taut-zeros A z k) ≡ z of
+    zero → refl
+    suc m →
+      lor-tr A
+        (add (add (mul c (mul z z)) (add (mul bk z) (mul z bk)))
+             (taut-tail-form A z add mul c br (taut-zeros A z m)))
+        (add (add z (add z z)) z)
+        z
+        (λ i → add
+          (add (lor-tr A (mul c (mul z z)) (mul c z) z
+                 (cong (λ t → mul c t) (taut-mul-zr A z add mul neg r z))
+                 (taut-mul-zr A z add mul neg r c) i)
+               (add (taut-mul-zr A z add mul neg r bk i)
+                    (taut-mul-zl A z add mul neg r bk i)))
+          (ih m i))
+        (lor-tr A (add (add z (add z z)) z) (add z (add z z)) z
+          (taut-zr A z add mul neg r (add z (add z z)))
+          (lor-tr A (add z (add z z)) (add z z) z
+            (taut-zl A z add mul neg r (add z z))
+            (taut-zl A z add mul neg r z)))
