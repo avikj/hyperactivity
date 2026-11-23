@@ -278,7 +278,13 @@ enum {
 };
 enum { B_MEET, B_JOIN, B_FAND, B_FOR };
 
-typedef uint64_t Port;            /* cell pointer << 16 | port index; 0 = none */
+typedef uint64_t Port;            /* cell offset in the region << 16 | port index; 0 = none */
+/* Every cell and variable lives in one region reserved at startup (src/net.c region_take), and a
+ * port names a cell by its offset from the region's base, not by its address: an offset means the
+ * same cell to every processor the region is mapped into (the CPU's threads, and a GPU given the
+ * region as one buffer with no copy), where an address is one processor's view of it. Offset 0 is
+ * the region's first slab, never carved, so 0 still names nothing. */
+extern char *net_base;
 /* Sharing is physical: a value is shared exactly where a duplicator (or a box a reference holds)
  * connects its readers. Nothing names a computation program-wide, and no table finds one by its
  * term (2026-11-18: the memo and the keys every built cell carried are gone; Avik: two processes
@@ -295,8 +301,8 @@ typedef uint64_t Port;            /* cell pointer << 16 | port index; 0 = none *
 typedef struct Var { Port p; struct Var *next; } Var;
 #define VARI 0xffff
 static inline bool is_var(Port p) { return (p & 0xffff) == VARI; }
-static inline Var *PV(Port p) { return (Var *)(uintptr_t)(p >> 16); }
-static inline Port VARP(Var *v) { return ((uint64_t)(uintptr_t)v << 16) | VARI; }
+static inline Var *PV(Port p) { return (Var *)(net_base + (p >> 16)); }
+static inline Port VARP(Var *v) { return ((uint64_t)((char *)v - net_base) << 16) | VARI; }
 Port net_peek(Port p);            /* what a port leads to: a principal port, or 0 while nothing is there yet */
 
 typedef struct Cell {
@@ -311,8 +317,8 @@ typedef struct Cell {
 
 enum { TY_KNOWN = 1, TY_COFIX = 2, TY_TICK = 4 };   /* TY_TICK: a stuck call of a definition that unfolds at ⋄;
                                                     * its a counts the arguments still before the tick */
-static inline Port P(Cell *c, int k) { return ((uint64_t)(uintptr_t)c << 16) | (uint64_t)k; }
-static inline Cell *PC(Port p) { return (Cell *)(uintptr_t)(p >> 16); }
+static inline Port P(Cell *c, int k) { return ((uint64_t)((char *)c - net_base) << 16) | (uint64_t)k; }
+static inline Cell *PC(Port p) { return (Cell *)(net_base + (p >> 16)); }
 static inline int PI(Port p) { return (int)(p & 0xffff); }
 static inline bool is_value(int k) { return k > 0 && k < V_END; }
 

@@ -28,6 +28,7 @@ typedef struct Slab { uint32_t n; uint32_t used; long live; struct Slab *next; }
 _Static_assert(sizeof(Slab) <= SLAB_HDR && sizeof(Cell) + (size_t)MAXFREE * sizeof(Port) + SLAB_HDR <= SLAB, "a cell of any pooled size fits a slab");
 static inline Slab *slab_of(const void *c) { return (Slab *)((uintptr_t)c & ~(SLAB - 1)); }
 static inline size_t cell_bytes(int n) { return (sizeof(Cell) + (size_t)n * sizeof(Port) + 15) & ~(size_t)15; }
+static inline size_t big_slabs(int n) { return (cell_bytes(n) + SLAB - 1) / SLAB; }   /* the run of slabs a large cell takes */
 typedef struct { Cell *op, *v; } Redex;
 typedef struct Local {
     Cell *free[MAXFREE + 1]; Slab *cur[MAXFREE + 1];   /* free list and the slab being carved, per size */
@@ -42,9 +43,50 @@ static __thread Local *L;
 static Local *ALL; static pthread_mutex_t allmu = PTHREAD_MUTEX_INITIALIZER;
 static Local *local_make(void) { L = calloc(1, sizeof(Local)); pthread_mutex_lock(&allmu); L->next = ALL; ALL = L; pthread_mutex_unlock(&allmu); return L; }
 static inline Local *local(void) { return L ? L : local_make(); }
+/* ---------------- the region ----------------
+ * One range of address space reserved once (core.h net_base): every slab and every cell too large
+ * for a slab is carved from it, so a port is an offset into it. Carving bumps the top; a slab
+ * returned between observations goes on a free list and its pages to the system (they read as
+ * zero or as before until reused, and a slab is rewritten whole when taken); a large cell's run of
+ * slabs is returned to a list of runs and taken again only by a cell of the same run length. The
+ * first slab is never carved, so offset 0 names nothing. The region is reserved, not committed: a
+ * page costs memory only once written. */
+char *net_base;
+static size_t reg_size, reg_top;
+static Slab *reg_free;
+typedef struct Run { size_t k; struct Run *next; } Run;   /* a returned run of k slabs, k ≥ 2 */
+static Run *reg_runs;
+static pthread_mutex_t regmu = PTHREAD_MUTEX_INITIALIZER;
+static void region_init(void) {
+    size_t gb = 1024; const char *e = getenv("CUBICAL_REGION_GB"); if (e && atol(e) > 0) gb = (size_t)atol(e);
+    char *m = MAP_FAILED;   /* a host that refuses the reservation (strict overcommit) is asked for half, down to 1 GB */
+    for (; gb && m == MAP_FAILED; gb /= 2) { reg_size = gb << 30; m = mmap(NULL, reg_size + SLAB, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0); }
+    if (m == MAP_FAILED) { fputs("out of memory: no region\n", stderr); exit(2); }
+    net_base = (char *)(((uintptr_t)m + SLAB - 1) & ~(uintptr_t)(SLAB - 1));   /* slab_of masks addresses */
+    reg_top = SLAB;
+}
+static void *region_take(size_t k) {
+    pthread_mutex_lock(&regmu);
+    if (!net_base) region_init();
+    void *r = NULL;
+    if (k == 1 && reg_free) { r = reg_free; reg_free = reg_free->next; }
+    else if (k > 1) for (Run **rp = &reg_runs; *rp; rp = &(*rp)->next) if ((*rp)->k == k) { r = *rp; *rp = (*rp)->next; break; }
+    if (!r) {
+        if (reg_top + k * SLAB > reg_size) { pthread_mutex_unlock(&regmu); fputs("out of memory: region full (CUBICAL_REGION_GB)\n", stderr); exit(2); }
+        r = net_base + reg_top; reg_top += k * SLAB;
+    }
+    pthread_mutex_unlock(&regmu);
+    return r;
+}
+static void region_give(void *p, size_t k) {
+    madvise(p, k * SLAB, MADV_DONTNEED);
+    pthread_mutex_lock(&regmu);
+    if (k == 1) { Slab *s = p; s->next = reg_free; reg_free = s; }
+    else { Run *r = p; r->k = k; r->next = reg_runs; reg_runs = r; }
+    pthread_mutex_unlock(&regmu);
+}
 static Slab *slab_new(Local *l, uint32_t n) {
-    Slab *s = aligned_alloc(SLAB, SLAB);
-    if (!s) { fputs("out of memory\n", stderr); exit(2); }
+    Slab *s = region_take(1);
     s->n = n; s->used = SLAB_HDR; s->live = 0; s->next = l->slabs; l->slabs = s;
     return s;
 }
@@ -75,8 +117,7 @@ Cell *cell(int kind, int n) {
     Local *l = local();
     Cell *c;
     if (n > MAXFREE) {
-        c = malloc(cell_bytes(n));
-        if (!c) { fputs("out of memory\n", stderr); exit(2); }
+        c = region_take(big_slabs(n));
         big_note(c);
     } else if (l->free[n]) { c = l->free[n]; l->free[n] = (Cell *)(uintptr_t)c->a; slab_take(slab_of(c)); }
     else {
@@ -141,11 +182,11 @@ static void arenas_release(void) {
         if (l->vcur && l->vcur->live == 0) l->vcur = NULL;
         Var **vp = &l->vfree;
         while (*vp) { Var *v = *vp; if (slab_of(v)->live == 0) *vp = v->next; else vp = &v->next; }
-        while (l->big) { Cell *c = l->big; l->big = (Cell *)(uintptr_t)c->a; big_forget(c); free(c); }
+        while (l->big) { Cell *c = l->big; l->big = (Cell *)(uintptr_t)c->a; big_forget(c); region_give(c, big_slabs(c->n)); }
     }
     for (Local *l = ALL; l; l = l->next) {
         Slab **sp = &l->slabs;
-        while (*sp) { Slab *sl = *sp; if (sl->live == 0) { *sp = sl->next; free(sl); } else sp = &sl->next; }
+        while (*sp) { Slab *sl = *sp; if (sl->live == 0) { *sp = sl->next; region_give(sl, 1); } else sp = &sl->next; }
     }
     pthread_mutex_unlock(&allmu);
 }
