@@ -948,9 +948,12 @@ static Node *pat_norm(Node *p) {
     if (p->list) { Node *r = nlist(p->n); for (int i = 0; i < p->n; i++) r->it[i] = i ? pat_norm(p->it[i]) : p->it[i]; return r; }
     return p;
 }
+/* a node copied whole, its caches with it (hk, fv, lv: what scoping found when it was parsed); a copy
+ * without them is not the same node to the elaborator (2026-11-23: dropping them refused rotIsEquiv,
+ * and with it Brunerie's number, as "an implicit argument is not determined") */
 static Node *x_copy(Node *t) {
-    if (!t->list) { Node *s = nsym(t->s); s->cmt = t->cmt; return s; }
-    Node *r = nlist(t->n); r->cmt = t->cmt; for (int i = 0; i < t->n; i++) r->it[i] = x_copy(t->it[i]); return r;
+    if (!t->list) { Node *s = nsym(t->s); *s = *t; return s; }
+    Node *r = nlist(t->n); Node **it = r->it; *r = *t; r->it = it; for (int i = 0; i < t->n; i++) r->it[i] = x_copy(t->it[i]); return r;
 }
 static Node *cc_match(Node **vars, int nv, Row *rows, int nr, const char *fname);
 static Node *cc_match(Node **vars, int nv, Row *rows, int nr, const char *fname) {
