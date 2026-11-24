@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Artificial Intelligence &amp; Machine Learning · Hyperactive Labs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+<style>
+:root {
+  --bg: #ffffff; --ink: #000000; --muted: #555555;
+  --line: rgba(0,0,0,0.16); --line-strong: #000000;
+  --pink: #ff0a94; --blue: #1a73e8;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+html.dark {
+  --bg: #000000; --ink: #ffffff; --muted: #a6a6a6;
+  --line: rgba(255,255,255,0.18); --line-strong: #ffffff;
+  --pink: #ff0a94; --blue: #4da3ff;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 18px/1.7 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+::selection { background: var(--pink); color: #fff; }
+a { color: inherit; text-decoration: underline; text-decoration-color: var(--pink); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+a:hover { color: var(--pink); }
+
+.book-wrap {
+  max-width: 1220px; margin: 0 auto; padding: 48px 24px 120px;
+  display: grid; grid-template-columns: 240px minmax(0, 860px); gap: 48px; align-items: start;
+}
+.toc {
+  position: sticky; top: 72px; max-height: calc(100vh - 96px); overflow-y: auto;
+  border-right: 1px solid var(--line); padding-right: 18px;
+  font: 600 12px/1.45 var(--mono);
+}
+.toc-title {
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--pink); margin: 0 0 12px;
+}
+.toc ol { list-style: none; margin: 0; padding: 0; }
+.toc li { margin-bottom: 8px; }
+.toc a {
+  text-decoration: none; color: var(--muted); display: block;
+  padding: 2px 0; border-left: 2px solid transparent; padding-left: 8px; margin-left: -10px;
+}
+.toc a:hover, .toc a.on { color: var(--ink); border-left-color: var(--pink); }
+
+main { min-width: 0; }
+.title-block { border-bottom: 2px solid var(--line-strong); padding-bottom: 28px; margin-bottom: 44px; }
+h1 {
+  font-size: clamp(32px, 4.4vw, 52px); line-height: 1.06; font-weight: 800;
+  letter-spacing: -0.028em; margin: 0 0 18px;
+}
+.lede {
+  font-size: 19.5px; line-height: 1.58; color: var(--ink); opacity: 0.9; margin: 0 0 16px;
+}
+.meta-line {
+  font: 600 12px/1.5 var(--mono); color: var(--muted);
+}
+.chapter { margin-top: 64px; padding-top: 24px; border-top: 2px solid var(--line-strong); }
+.chapter:first-of-type { margin-top: 0; border-top: 0; padding-top: 0; }
+.ch-num {
+  font: 700 11.5px/1 var(--mono); color: var(--pink);
+  text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;
+}
+h2 {
+  font-size: 29px; line-height: 1.18; font-weight: 800; letter-spacing: -0.02em;
+  margin: 0 0 18px;
+}
+h3 {
+  font-size: 20px; line-height: 1.28; font-weight: 800; letter-spacing: -0.01em;
+  margin: 38px 0 12px;
+}
+p { margin: 0 0 16px; }
+ul, ol { margin: 0 0 18px; padding-left: 24px; }
+li { margin-bottom: 9px; }
+code {
+  font: 600 0.84em/1.2 var(--mono);
+  padding: 1px 4px; border-radius: 0;
+}
+.eq-box {
+  margin: 20px 0; padding: 14px 18px; border-left: 2px solid var(--blue);
+  border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.thm-box {
+  margin: 24px 0; padding: 16px 20px; border-left: 3px solid var(--pink);
+  border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.thm-head {
+  font: 700 11.5px/1.3 var(--mono); color: var(--pink); text-transform: uppercase;
+  letter-spacing: 0.05em; margin-bottom: 10px;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;
+}
+.thm-head span:last-child { color: var(--muted); text-transform: none; font-weight: 600; }
+.lab-card { margin: 28px 0 36px; border: 1.5px solid var(--line-strong); background: var(--bg); }
+.lab-head {
+  padding: 10px 14px; border-bottom: 1px solid var(--line);
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+  font: 700 12px/1.2 var(--mono);
+}
+.lab-head .lbl { color: var(--pink); letter-spacing: 0.05em; text-transform: uppercase; }
+.lab-status { font-weight: 700; color: var(--blue); }
+.lab-stage { position: relative; width: 100%; height: 320px; overflow: hidden; }
+.lab-stage canvas { display: block; width: 100%; height: 100%; }
+.lab-ctrl {
+  padding: 10px 14px; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  font: 600 12px/1.2 var(--mono);
+}
+.lab-ctrl label { display: flex; align-items: center; gap: 7px; }
+.lab-ctrl input[type=range] { accent-color: var(--pink); width: 110px; }
+.lab-btn {
+  padding: 5px 10px; border: 1px solid var(--line-strong);
+  background: var(--bg); color: var(--ink);
+  font: 700 11px/1.2 var(--mono); cursor: pointer;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.lab-btn:hover, .lab-btn.on { background: var(--pink); border-color: var(--pink); color: #fff; }
+.tbl-wrap { overflow-x: auto; margin: 22px 0 28px; border: 1px solid var(--line-strong); }
+table { width: 100%; border-collapse: collapse; font: 500 13.5px/1.45 var(--mono); }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+th { font-weight: 700; text-transform: uppercase; font-size: 11.5px; border-bottom: 1.5px solid var(--line-strong); }
+tr:last-child td { border-bottom: 0; }
+.bib-list { font-size: 14.5px; line-height: 1.55; color: var(--ink); opacity: 0.92; }
+.bib-list li { margin-bottom: 6px; }
+
+@media (max-width: 1120px) {
+  .book-wrap { grid-template-columns: 1fr; gap: 24px; padding: 36px 20px 96px; }
+  .toc { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 16px; }
+}
+@media (max-width: 680px) {
+  .lab-stage { height: 270px; }
+  h2 { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+<!--HX:NAV-->
+<div class="book-wrap">
+  <aside class="toc" aria-label="Contents">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#ch1">1. Decision Theory, Bias–Variance &amp; Learning Theory</a></li>
+      <li><a href="#ch2">2. Information, Inference, Causality &amp; Search</a></li>
+      <li><a href="#ch3">3. Optimization, AD &amp; Generalization</a></li>
+      <li><a href="#ch4">4. Deep Architectures, Generative Models &amp; Scaling</a></li>
+      <li><a href="#ch5">5. RL, Game Theory &amp; Interactive Robotics</a></li>
+      <li><a href="#ch6">6. Token Streams &amp; Mathematics of Preference Training</a></li>
+      <li><a href="#ch7">7. Observation Fibers, Abstraction, Lawvere &amp; Meaning</a></li>
+      <li><a href="#ch8">8. Intelligence as Exact Causal Compression</a></li>
+      <li><a href="#ch9">9. Standpoint Alignment, Open Weights &amp; Closure</a></li>
+      <li><a href="#bib">References (150+ Primary Papers)</a></li>
+    </ol>
+  </aside>
+
+  <main>
+    <div class="title-block">
+      <h1>Artificial Intelligence &amp; Machine Learning: From Statistical Foundations to Univalent Closure</h1>
+      <p class="lede">A self-contained monograph on the mathematical foundations of machine learning, deep architectures, sequential decision theory, preference-training pathology, observation fibers, exact causal compression, and standpoint-indexed intelligence.</p>
+      <div class="meta-line">Avik Jain · Hyperactive Labs, Inc. · Every inline <code>identifier</code> and <code>module.hypercubical</code> opens its live SHA-256 checked source.</div>
+    </div>
+
+    
+<div style="border:1.5px solid #ff0a94;padding:14px 16px;margin:0 0 28px;font:500 12.5px/1.55 ui-monospace,monospace;background:rgba(255,10,148,0.05)">
+  <div style="font-weight:700;color:#ff0a94;letter-spacing:0.06em;margin-bottom:6px">LIVE FRONTIER IN STORE/ · SYMBOLIC SUPERINTELLIGENCE, LOSSLESS GPU &amp; STANDPOINT ALIGNMENT</div>
+  <div>• <strong>Pure Symbolic Discovery — ZERO LLM (<code>lib/hx-discover.hypercubical</code>):</strong> <strong>47.78 G-gate/s</strong> zero-div GPU evolutionary discovery (PRESENT S-box <code>S0–S3</code>, optimal 12-gate <code>PARITY4</code>, 9-gate Joint Full Adder) + CEGIS 32-bit bitvector superoptimizer &amp; <strong>251 autonomously discovered algebraic laws</strong>.</div>
+  <div style="margin-top:4px">• <strong>Verified GPU &amp; Lossless BF16 LLM-ZIP (<code>lib/ir/tensor-ir.hypercubical</code>, <code>lib/silicon/hx-llm-zip.hypercubical</code>):</strong> Single-source Metal/CUDA lowering (1.22 TFLOP/s GEMM, 0.60 ms FlashAttn2) + <strong>1.36× lossless BF16</strong> fused GPU GEMV (<code>0.00e+00</code> error) + <strong>24M/s</strong> zero-tape reversible backprop.</div>
+  <div style="margin-top:4px">• <strong>Standpoint Alignment &amp; Proof-Carrying Agency:</strong> Mathematical dismantling of RLHF preference-fitting (<code>docs/alignment-is-standpoint.md</code>, Arrow/Borda impossibility, exponential minority suppression) replaced by kernel-enforced agency (<code>lib/pouw.hypercubical</code>, <code>lib/leash.hypercubical</code>, <code>neuro/barrier.hypercubical</code>, and <strong>THIS</strong>).</div>
+</div>
+<section id="ch1" class="chapter">
+  <div class="ch-num">Chapter 1</div>
+  <h2>Statistical Decision Theory, the Exact Bias–Variance Decomposition, and Learning Theory</h2>
+
+  <p>Machine learning begins as a problem of statistical decision theory (Wald, 1950): an input $x \in \mathcal{X}$ and an output $y \in \mathcal{Y}$ are drawn jointly from an unknown probability measure $P$ on $\mathcal{X} \times \mathcal{Y}$. A learner observes a finite sample $S = \{(x_i, y_i)\}_{i=1}^n \sim P^n$ (plus any internal algorithmic randomness $\xi$) and produces a decision rule $\hat{f}_S : \mathcal{X} \to \mathcal{A}$ inside a hypothesis class $\mathcal{H}$. Given a measurable loss function $\ell : \mathcal{A} \times \mathcal{Y} \to \mathbb{R}_{\ge 0}$, the <strong>population risk</strong> and <strong>empirical risk</strong> are</p>
+
+  <div class="eq-box">$$R(f) \;=\; \mathbb{E}_{(X,Y)\sim P}\big[\ell(f(X), Y)\big], \qquad \widehat{R}_S(f) \;=\; \frac{1}{n}\sum_{i=1}^n \ell\big(f(x_i), y_i\big).$$</div>
+
+  <h3 id="sec-1-1">1.1 Bayes Risk, Proper Scoring Rules, and Pointwise Optimal Predictors</h3>
+  <p>Before selecting any hypothesis class $\mathcal{H}$ or observing any training data $S$, the data-generating distribution $P$ fixes the absolute lower bound on achievable risk: the <strong>Bayes risk</strong> $R^* = \inf_{f \text{ measurable}} R(f)$. Because $R(f) = \mathbb{E}_X\big[\mathbb{E}_{Y\mid X}[\ell(f(X), Y) \mid X]\big]$, any measurable $f^*$ minimizing the conditional risk $\mathbb{E}[\ell(a, Y) \mid X = x]$ pointwise for $P_X$-almost every $x$ achieves $R^*$. Solving this pointwise minimization yields the canonical Bayes predictors:</p>
+  <ul>
+    <li><strong>Squared error $\ell(a, y) = (a - y)^2$:</strong> Setting $\frac{\partial}{\partial a}\mathbb{E}[(a - Y)^2 \mid X=x] = 2(a - \mathbb{E}[Y\mid X=x]) = 0$ yields the regression function $f^*(x) = \mathbb{E}[Y \mid X = x]$, with irreducible pointwise variance $\sigma^2(x) = \mathrm{Var}(Y \mid X = x)$ and Bayes risk $R^* = \mathbb{E}_X[\sigma^2(X)]$.</li>
+    <li><strong>Absolute ($\ell_1$) error $\ell(a, y) = |a - y|$:</strong> The subdifferential condition $0 \in \partial_a \mathbb{E}[|a - Y| \mid X=x]$ is equivalent to $\mathbb{P}(Y \lt a \mid X=x) \le \tfrac{1}{2} \le \mathbb{P}(Y \le a \mid X=x)$, so $f^*(x) = \mathrm{median}(Y \mid X = x)$. More generally, the pinball loss $\ell_\tau(a, y) = \max(\tau(y-a), (\tau-1)(y-a))$ recovers the $\tau$-th conditional quantile (Koenker &amp; Bassett, 1978).</li>
+    <li><strong>0–1 classification loss $\ell(a, y) = \mathbf{1}[a \ne y]$:</strong> Conditional risk is $1 - \mathbb{P}(Y = a \mid X = x)$, minimized by the Bayes classifier $f^*(x) = \arg\max_{c \in \mathcal{Y}} \mathbb{P}(Y = c \mid X = x)$ with Bayes error $R^* = \mathbb{E}_X[1 - \max_c \mathbb{P}(Y = c \mid X)]$.</li>
+    <li><strong>Cost-sensitive classification:</strong> For asymmetric costs $C_{ij}$ of predicting $i$ when truth is $j$, the Bayes action is $\arg\min_i \sum_j C_{ij} \mathbb{P}(Y = j \mid X = x)$; in binary classification with false-positive cost $c_{\mathrm{FP}}$ and false-negative cost $c_{\mathrm{FN}}$, the optimal threshold shifts from $\tfrac{1}{2}$ to $c_{\mathrm{FP}} / (c_{\mathrm{FP}} + c_{\mathrm{FN}})$.</li>
+    <li><strong>Log-loss / cross-entropy $\ell(q, y) = -\log q(y)$:</strong> For any probability forecast $q \in \Delta(\mathcal{Y})$, $\mathbb{E}[-\log q(Y) \mid X=x] = H(P(\cdot\mid x)) + D_{\mathrm{KL}}(P(\cdot\mid x)\,\|\,q)$. By Gibbs' inequality ($D_{\mathrm{KL}} \ge 0$ with equality iff $q = P(\cdot\mid x)$), log-loss is a <strong>strictly proper scoring rule</strong> (Gneiting &amp; Raftery, 2007), uniquely recovering true calibrated conditional probabilities with Bayes risk equal to conditional Shannon entropy $H(Y \mid X)$.</li>
+  </ul>
+
+  <p>For squared error, <em>every</em> fixed predictor $\hat{f}$ — before taking any expectation over datasets $S$ — satisfies an exact Hilbert-space Pythagorean decomposition in $L^2(P)$:</p>
+  <div class="eq-box">$$R(\hat{f}) \;=\; \mathbb{E}\big[(\hat{f}(X) - Y)^2\big] \;=\; \underbrace{\mathbb{E}\big[(Y - f^*(X))^2\big]}_{R^* \;=\; \text{Bayes (irreducible) noise}} \;+\; \underbrace{\mathbb{E}\big[(\hat{f}(X) - f^*(X))^2\big]}_{\text{excess risk } \mathcal{E}(\hat{f})},$$</div>
+  <p>because $Y - f^*(X)$ is orthogonal to every $\sigma(X)$-measurable square-integrable function: $\mathbb{E}[(\hat{f}(X) - f^*(X))(f^*(X) - Y)] = \mathbb{E}_X[(\hat{f}(X) - f^*(X))\,\mathbb{E}[f^*(X) - Y \mid X]] = 0$.</p>
+
+  <h3 id="sec-1-2">1.2 The Exact Bias–Variance–Noise Decomposition — and Five Things Courses Consistently Misteach</h3>
+  <p>Now treat the learner $\mathcal{A}$ as a map from a random training set $S \sim P^n$ and algorithmic randomness $\xi$ (initialization, SGD minibatch shuffling, dropout masks, random projections) to a random predictor $\hat{f}_{S,\xi}$. Fix a test point $x \in \mathcal{X}$ and let $\bar{f}(x) = \mathbb{E}_{S,\xi}[\hat{f}_{S,\xi}(x)]$ denote the expected predictor across draws of $(S, \xi)$. Adding and subtracting $\bar{f}(x)$ inside the excess risk yields the exact squared-loss identity:</p>
+
+  <div class="thm-box">
+    <div class="thm-head"><span>Theorem 1.1 · Exact Squared-Loss Bias–Variance–Noise Decomposition</span><span>Geman, Bienenstock &amp; Doursat (1992)</span></div>
+    <p>For any joint distribution $P$ with $\mathbb{E}[Y^2] \lt \infty$, any test point $x \in \mathcal{X}$, and any learning procedure whose output $\hat{f}_{S,\xi}(x)$ is independent of the test label $Y \mid X = x$:</p>
+    <div class="eq-box">$$\mathbb{E}_{S,\xi,Y}\!\Big[\big(\hat{f}_{S,\xi}(x) - Y\big)^2 \,\Big|\, X=x\Big] \;=\; \underbrace{\sigma^2(x)}_{\text{Irreducible Noise}} \;+\; \underbrace{\big(\bar{f}(x) - f^*(x)\big)^2}_{\mathrm{Bias}^2(\mathcal{A};\, x)} \;+\; \underbrace{\mathbb{E}_{S,\xi}\!\Big[\big(\hat{f}_{S,\xi}(x) - \bar{f}(x)\big)^2\Big]}_{\mathrm{Var}(\mathcal{A};\, x)}.$$</div>
+    <p><em>Proof.</em> Conditioning on $(S, \xi)$, the orthogonality $\mathbb{E}[Y - f^*(x) \mid X=x] = 0$ splits the expectation into $\sigma^2(x) + \mathbb{E}_{S,\xi}[(\hat{f}_{S,\xi}(x) - f^*(x))^2]$. Writing $\hat{f}_{S,\xi}(x) - f^*(x) = (\hat{f}_{S,\xi}(x) - \bar{f}(x)) + (\bar{f}(x) - f^*(x))$ and squaring gives $\mathrm{Var} + \mathrm{Bias}^2 + 2(\bar{f}(x) - f^*(x))\,\mathbb{E}_{S,\xi}[\hat{f}_{S,\xi}(x) - \bar{f}(x)]$. The cross-term vanishes identically because $\mathbb{E}_{S,\xi}[\hat{f}_{S,\xi}(x)] = \bar{f}(x)$. Integrating over $X \sim P_X$ preserves all three nonnegative terms. $\square$</p>
+  </div>
+
+  <p>Even top undergraduate and graduate machine learning courses (and their multiple-choice exams) routinely misteach at least <strong>five mathematical facts</strong> about this decomposition:</p>
+  <ol>
+    <li><strong>Bias and variance are properties of a <em>learning rule over the sampling distribution</em> $S \sim P^n$, never of a single fitted model — and statistical bias is NOT approximation error.</strong> Given one trained parameter vector $\hat{w}$, its variance across datasets is undefined until you specify the estimator $\mathcal{A}$ and sampling law $P^n$. Moreover, courses constantly confuse the <em>approximation–estimation decomposition</em> of a fixed class $\mathcal{H}$,
+    $$R(\hat{f}_S) - R^* \;=\; \underbrace{\big(\inf_{h \in \mathcal{H}} R(h) - R^*\big)}_{\text{approximation error (property of }\mathcal{H}\text{)}} \;+\; \underbrace{\big(R(\hat{f}_S) - \inf_{h \in \mathcal{H}} R(h)\big)}_{\text{estimation error (random in }S\text{)}},$$
+    with the <em>bias–variance decomposition</em> of an estimator $\mathcal{A}$. They are completely different decompositions! A model class $\mathcal{H}$ containing $f^*$ has zero approximation error, yet ridge regression, Lasso, early-stopped SGD, or any MAP estimator inside $\mathcal{H}$ has strictly positive statistical bias $\bar{f} \ne f^*$. Conversely, for nonlinear classes, $\bar{f} = \mathbb{E}_S[\hat{f}_S]$ need not even lie inside $\mathcal{H}$, so $\mathrm{Bias}^2$ can actually be <em>smaller</em> than the approximation error of $\mathcal{H}$ (this is the exact reason bagging decision stumps or trees can reduce bias as well as variance!).</li>
+
+    <li><strong>The additive decomposition $\text{Error} = \text{Noise} + \text{Bias}^2 + \text{Variance}$ is FALSE for 0–1 classification loss — where variance can actively <em>reduce</em> test error.</strong> Consider a binary classification point $x$ with deterministic true label $y = +1$ ($\sigma^2 = 0$). Suppose a biased classifier outputs $\hat{y} = -1$ with probability $0.7$ and $+1$ with probability $0.3$ across draws of $S$. Its modal (main) prediction is $y_m = -1 \ne y$, so its zero-one bias is $B(x) = \mathbf{1}[y_m \ne y] = 1$, its zero-one variance is $V(x) = \mathbb{P}(\hat{y} \ne y_m) = 0.3$, and its expected 0–1 error is $\mathbb{P}(\hat{y} \ne y) = 0.7 = B(x) - V(x)$ — <strong>strictly minus variance</strong>! As Domingos (2000) proved in his unified decomposition for 0–1 loss:
+    <div class="eq-box">$$\mathbb{E}_{S}\big[\mathbf{1}[\hat{f}_S(x) \ne y]\big] \;=\; B(x) \;+\; \big(1 - 2 B(x)\big)\,V(x) \qquad (\text{binary, deterministic } y).$$</div>
+    When the main prediction is right ($B=0$), variance hurts ($+V$). When the main prediction is wrong ($B=1$), variance <em>helps</em> ($-V$) because random fluctuations rescue predictions from the wrong side of the decision boundary. Any exam question claiming "reducing variance always reduces expected test error" or "bagging never hurts a biased classifier" has no correct answer under the textbook premise.</li>
+
+    <li><strong>Bregman divergences are the exact family of losses with an additive bias–variance decomposition — and the centroid is the <em>dual</em> mean, not the arithmetic mean (Heskes, 1998; Pfau, 2013).</strong> For any strictly convex differentiable potential $\phi$, the Bregman divergence $D_\phi(y \| \hat{y}) = \phi(y) - \phi(\hat{y}) - \langle \nabla\phi(\hat{y}), y - \hat{y}\rangle$ (covering squared error, KL / cross-entropy, Itakura–Saito, Mahalanobis) satisfies
+    $$\mathbb{E}[D_\phi(Y \| \hat{Y})] \;=\; \mathbb{E}[D_\phi(Y \| f^*)] \;+\; D_\phi(f^* \| \tilde{f}) \;+\; \mathbb{E}[D_\phi(\tilde{f} \| \hat{Y})], \qquad \tilde{f} = (\nabla\phi)^{-1}\!\big(\mathbb{E}[\nabla\phi(\hat{Y})]\big).$$
+    For cross-entropy / KL divergence, $\nabla\phi(q)_k = \log q_k + 1$, so the true bias–variance centroid $\tilde{f}_k \propto \exp(\mathbb{E}[\log \hat{q}_k])$ is the normalized <em>geometric</em> mean (logit average), not the arithmetic probability average $\mathbb{E}[\hat{q}]$.</li>
+
+    <li><strong>Fixed-design ridge regression proves James–Stein dominance, NOT a universal monotone complexity trade-off.</strong> In fixed-design linear regression $y = X w^* + \varepsilon$ with $X \in \mathbb{R}^{n \times p}$ ($p \le n$, full column rank) and $\varepsilon \sim (0, \sigma^2 I_n)$, the ridge estimator $\hat{w}_\lambda = (X^\top X + \lambda I)^{-1} X^\top y$ has exact in-sample prediction risk:
+    $$\mathrm{Bias}^2(\hat{w}_\lambda) = \frac{\lambda^2}{n}\sum_{j=1}^p \frac{s_j^2}{(s_j^2 + \lambda)^2} (v_j^\top w^*)^2, \qquad \mathrm{Var}(\hat{w}_\lambda) = \frac{\sigma^2}{n}\sum_{j=1}^p \frac{s_j^4}{(s_j^2 + \lambda)^2},$$
+    where $X = U \mathrm{diag}(s_1,\dots,s_p) V^\top$. Differentiating at $\lambda = 0$ gives $\frac{d}{d\lambda}\mathrm{Bias}^2\big|_{\lambda=0} = 0$ (second-order penalty $O(\lambda^2)$) whereas $\frac{d}{d\lambda}\mathrm{Var}\big|_{\lambda=0} = -\frac{2\sigma^2}{n}\sum_j s_j^{-2} \lt 0$ (first-order reduction $O(\lambda)$)! Thus for <em>every</em> $w^*$ and $\sigma^2 \gt 0$, there exists $\lambda \gt 0$ with strictly smaller MSE than unbiased OLS (Hoerl &amp; Kennard, 1970; reflecting James &amp; Stein's 1961 proof that the sample mean is inadmissible in $\mathbb{R}^p$ for $p \ge 3$). Note also that in fixed design, OLS is unbiased ($\mathrm{Bias}^2 = 0$), while adding $\lambda$ trades bias against variance monotonically.</li>
+
+    <li><strong>The textbook "U-shaped bias–variance curve" breaks completely in the overparameterized regime $p \gt n$ (Double Descent &amp; Benign Overfitting).</strong> Consider random-design isotropic Gaussian features $x_i \sim \mathcal{N}(0, I_p)$ and minimum-$\ell_2$-norm least squares $\hat{w}_0 = X^+ y$ (which gradient descent from $0$ converges to automatically). In the proportional limit $p/n \to \gamma$:
+    <div class="eq-box">$$\mathrm{Var}(\hat{w}_0) \;=\; \begin{cases} \sigma^2 \dfrac{\gamma}{1 - \gamma}, & \gamma \lt 1 \quad (p \lt n), \\[8pt] \infty, & \gamma = 1 \quad (p = n), \\[8pt] \sigma^2 \dfrac{1}{\gamma - 1}, & \gamma \gt 1 \quad (p \gt n) \end{cases}$$</div>
+    (Belkin, Hsu, Ma &amp; Mandal, 2019; Hastie, Montanari, Rosset &amp; Tibshirani, 2022). As $p \to n^-$, the smallest singular value of $X$ collapses toward $0$ (by the Marchenko–Pastur law, $\lambda_{\min}(\frac{1}{n}X^\top X) \to (1 - \sqrt{\gamma})^2 \to 0$), so inverting $X^\top X$ amplifies noise arbitrarily — producing the interpolation spike. Yet once $p \gt n$, the matrix $X X^\top \in \mathbb{R}^{n \times n}$ becomes <em>better conditioned</em> as $p$ grows ($\lambda_{\min}(\frac{1}{p} X X^\top) \to (1 - \sqrt{1/\gamma})^2$), so the minimum-norm interpolator spreads label noise across $p - n$ extra orthogonal directions and <strong>variance drops back down toward zero</strong> while bias simultaneously shrinks! When the feature covariance $\Sigma$ has a low-dimensional signal subspace plus a long tail of small eigenvalues (large effective rank $r_k(\Sigma) \gg n$), even zero-training-error interpolation is statistically consistent: <strong>benign overfitting</strong> (Bartlett, Long, Lugosi &amp; Tsigler, 2020).</li>
+  </ol>
+
+  <div class="lab-card">
+    <div class="lab-head">
+      <span class="lbl">Exact Bias–Variance–Noise &amp; Double Descent</span>
+      <span class="lab-status" id="bvStatus">Isotropic Random-Design Ridge / Ridgeless Curve</span>
+    </div>
+    <div class="lab-stage" id="bvStage"><canvas id="bvCanvas"></canvas></div>
+    <div class="lab-ctrl">
+      <label>Samples $n$: <input id="bvN" type="range" min="20" max="120" step="5" value="50"><span id="bvNV">50</span></label>
+      <label>Ridge $\log_{10}\lambda$: <input id="bvLam" type="range" min="-5" max="1" step="0.25" value="-4"><span id="bvLamV">1e-4</span></label>
+      <label>Noise $\sigma$: <input id="bvSig" type="range" min="0.1" max="1.2" step="0.05" value="0.45"><span id="bvSigV">0.45</span></label>
+      <button class="lab-btn" id="bvInterp">Near-Zero $\lambda$ (Spike)</button>
+      <button class="lab-btn" id="bvOpt">Optimal $\lambda$ (Smooth)</button>
+    </div>
+  </div>
+
+  <h3 id="sec-1-3">1.3 Concentration, Uniform Convergence, VC Dimension, and Rademacher Complexity</h3>
+  <p>Why does minimizing empirical risk $\widehat{R}_S(h)$ control population risk $R(h)$? For any <em>single</em> fixed hypothesis $h$ with loss bounded in $[0, 1]$, Hoeffding's inequality (1963) gives $\mathbb{P}(|R(h) - \widehat{R}_S(h)| \gt \varepsilon) \le 2 e^{-2n\varepsilon^2}$. Because ERM picks $\hat{h}_S = \arg\min_{h \in \mathcal{H}} \widehat{R}_S(h)$ <em>dependently</em> on $S$, we need a uniform bound on $\sup_{h \in \mathcal{H}} |R(h) - \widehat{R}_S(h)|$. For finite $|\mathcal{H}|$, a union bound immediately gives $|R(\hat{h}_S) - R(h^*)| \le 2\sqrt{\frac{\ln(2|\mathcal{H}|/\delta)}{2n}}$. For infinite classes, Vapnik &amp; Chervonenkis (1971) and Valiant (1984, PAC learning) replaced $\log|\mathcal{H}|$ with the combinatorial <strong>growth function</strong> $\Pi_{\mathcal{H}}(n) = \max_{x_1,\dots,x_n} |\{(h(x_1),\dots,h(x_n)) : h \in \mathcal{H}\}|$ and <strong>VC dimension</strong> $d = \max\{m : \Pi_{\mathcal{H}}(m) = 2^m\}$.</p>
+
+  <div class="thm-box">
+    <div class="thm-head"><span>Theorem 1.2 · Sauer–Shelah–Perles Lemma &amp; Fundamental Theorem of PAC Learning</span><span>Vapnik &amp; Chervonenkis (1971); Sauer (1972); Shelah (1972); Blumer et al. (1989)</span></div>
+    <p>If $\mathrm{VC}(\mathcal{H}) = d \lt \infty$, then for every $n \ge d$, $\Pi_{\mathcal{H}}(n) \le \sum_{i=0}^d \binom{n}{i} \le \left(\frac{en}{d}\right)^d$ (polynomial in $n$, rather than $2^n$). By ghost-sample symmetrization and McDiarmid's bounded-differences inequality, with probability $\ge 1 - \delta$ over $S \sim P^n$, simultaneously for all $h \in \mathcal{H}$:</p>
+    <div class="eq-box">$$R(h) \;\le\; \widehat{R}_S(h) \;+\; C\sqrt{\frac{d\log(en/d) + \log(1/\delta)}{n}}.$$</div>
+    <p>Conversely, finite VC dimension is both necessary and sufficient for distribution-free PAC learnability, with minimax sample complexity $\Theta\!\big((d + \log(1/\delta))/\varepsilon^2\big)$ in the agnostic setting and $\Theta\!\big((d + \log(1/\delta))/\varepsilon\big)$ in the realizable setting (Hanneke, 2016).</p>
+  </div>
+
+  <p>Concrete VC dimensions illustrate the geometry of hypothesis capacity: linear halfspaces in $\mathbb{R}^p$ have $\mathrm{VC} = p + 1$ (by Radon's theorem); axis-aligned rectangles in $\mathbb{R}^p$ have $\mathrm{VC} = 2p$; piecewise-linear ReLU networks with $W$ weights and $L$ layers have $\mathrm{VC} = \widetilde{\Theta}(WL)$ (Bartlett et al., 2019); whereas the sine family $\{x \mapsto \mathbf{1}[\sin(\omega x) \ge 0] : \omega \in \mathbb{R}\}$ has <em>infinite</em> VC dimension with a single scalar parameter — disproving the naive slogan that capacity equals parameter count.</p>
+
+  <p>For real-valued loss classes $\mathcal{G} = \{(x,y) \mapsto \ell(h(x), y) : h \in \mathcal{H}\} \subseteq [0, 1]^{\mathcal{Z}}$, <strong>empirical Rademacher complexity</strong> (Bartlett &amp; Mendelson, 2002) measures how well $\mathcal{G}$ can align with pure noise $\sigma_i \stackrel{\text{i.i.d.}}{\sim} \mathrm{Unif}\{\pm 1\}$:</p>
+  <div class="eq-box">$$\widehat{\mathfrak{R}}_S(\mathcal{G}) \;=\; \mathbb{E}_{\sigma}\!\left[\sup_{g \in \mathcal{G}} \frac{1}{n}\sum_{i=1}^n \sigma_i g(z_i)\right], \qquad R(h) \;\le\; \widehat{R}_S(h) + 2\widehat{\mathfrak{R}}_S(\mathcal{G}) + 3\sqrt{\frac{\ln(2/\delta)}{2n}}.$$</div>
+  <p>By <strong>Talagrand's contraction lemma</strong> (Ledoux &amp; Talagrand, 1991), composing with an $L$-Lipschitz loss scales Rademacher complexity by at most $L$. For norm-bounded linear predictors $\mathcal{F}_B = \{x \mapsto \langle w, x\rangle : \|w\|_2 \le B\}$ on inputs with $\|x_i\|_2 \le R$, Cauchy–Schwarz yields the <em>dimension-free</em> bound</p>
+  <div class="eq-box">$$\widehat{\mathfrak{R}}_S(\mathcal{F}_B) \;=\; \frac{1}{n}\mathbb{E}_\sigma\!\left[\sup_{\|w\|_2 \le B} \Big\langle w,\, \sum_{i=1}^n \sigma_i x_i\Big\rangle\right] \;\le\; \frac{B}{n}\sqrt{\mathbb{E}_\sigma\!\left\|\sum_{i=1}^n \sigma_i x_i\right\|_2^2} \;\le\; \frac{BR}{\sqrt{n}}.$$</div>
+  <p>The ambient dimension $p$ vanishes completely — which is why infinite-dimensional kernel machines and wide neural networks with large margin can generalize despite having $p \gg n$.</p>
+
+  <h3 id="sec-1-4">1.4 RKHS, Support Vector Machines, Ensembles, and No Free Lunch</h3>
+  <p>By <strong>Mercer's theorem</strong> (1909) and the <strong>Moore–Aronszajn theorem</strong> (1950), every symmetric positive semidefinite kernel $k : \mathcal{X} \times \mathcal{X} \to \mathbb{R}$ uniquely determines a Reproducing Kernel Hilbert Space (RKHS) $\mathcal{H}_k$ with reproducing property $\langle f, k(x,\cdot)\rangle_{\mathcal{H}_k} = f(x)$. By the <strong>Representer Theorem</strong> (Kimeldorf &amp; Wahba, 1971; Schölkopf et al., 2001), any minimizer of $\sum_{i=1}^n \ell(f(x_i), y_i) + \Omega(\|f\|_{\mathcal{H}_k})$ lies in $\mathrm{span}\{k(x_1,\cdot),\dots,k(x_n,\cdot)\}$, reducing infinite-dimensional functional optimization to the $n \times n$ Gram matrix $K_{ij} = k(x_i, x_j)$.</p>
+  <p><strong>Support Vector Machines</strong> (Boser, Guyon &amp; Vapnik, 1992; Cortes &amp; Vapnik, 1995) maximize the geometric margin $1/\|w\|_{\mathcal{H}_k}$ under hinge loss $\max(0, 1 - y_i f(x_i))$; by Lagrangian duality and KKT complementary slackness, $\alpha_i \gt 0$ only for <em>support vectors</em> on or inside the margin ($y_i f(x_i) \le 1$), yielding sparse dual solutions with margin-based Rademacher bounds $O(R / (\gamma\sqrt{n}))$. Meanwhile, <strong>ensemble methods</strong> attack the risk decomposition from opposite directions: <strong>Bagging and Random Forests</strong> (Breiman, 1996, 2001) average decorrelated high-variance trees across bootstrap samples to drive variance down by $\rho \sigma^2 + \frac{1-\rho}{B}\sigma^2$, whereas <strong>Boosting</strong> — AdaBoost (Freund &amp; Schapire, 1997) and Gradient Boosting (Friedman, 2001) — performs functional gradient descent in hypothesis space (minimizing exponential loss $\sum_i e^{-y_i F(x_i)}$ or general differentiable losses), simultaneously reducing bias and driving up the normalized margin distribution (Schapire, Freund, Bartlett &amp; Lee, 1998).</p>
+  <p>Finally, the <strong>No Free Lunch Theorem</strong> (Wolpert, 1996; Wolpert &amp; Macready, 1997) proves that averaged uniformly over all $2^{|\mathcal{X}|}$ target functions on a finite domain, every learning algorithm has identical off-training-set error $1/2$. Generalization is mathematically impossible without <strong>inductive bias</strong> — a structural commitment about the generating process. The rest of this treatise traces how AI has encoded inductive bias, where statistical inductive biases break down, and how Hyperactivity makes structural invariants explicit inside a checked type theory.</p>
+
+  <h3 id="sec-1-5">1.5 Linear Models, Gauss–Markov, Generative vs. Discriminative Classifiers, and Unsupervised Geometry</h3>
+  <p>Before neural networks, every practitioner must master the exact linear and geometric backbone of machine learning — where closed-form linear algebra exposes every statistical trade-off without hiding behind black-box optimization.</p>
+
+  <p><strong>Ordinary Least Squares, Pseudoinverse, and the Gauss–Markov Theorem.</strong> Given a design matrix $X \in \mathbb{R}^{n \times p}$ with thin SVD $X = U \Sigma V^\top$ and targets $y \in \mathbb{R}^n$, minimizing $\|X w - y\|_2^2$ yields the normal equations $X^\top X w = X^\top y$. When $X$ has full column rank, $\hat{w}_{\mathrm{OLS}} = (X^\top X)^{-1} X^\top y = V \Sigma^{-1} U^\top y$, and the fitted values $\hat{y} = X \hat{w}_{\mathrm{OLS}} = U U^\top y$ are the orthogonal projection of $y$ onto $\mathrm{col}(X)$. When $X$ is rank-deficient or overparameterized ($p \gt n$), infinitely many minimizers exist; the unique minimum-$\ell_2$-norm solution is the Moore–Penrose pseudoinverse $\hat{w}_0 = X^+ y = V \Sigma^+ U^\top y$, which is also the exact limit of ridge regression $\hat{w}_\lambda = (X^\top X + \lambda I)^{-1} X^\top y$ as $\lambda \to 0^+$ and the exact convergence point of gradient descent initialized at $0$. Under homoscedastic uncorrelated errors ($\mathbb{E}[\varepsilon]=0, \mathrm{Cov}(\varepsilon)=\sigma^2 I_n$), the <strong>Gauss–Markov Theorem</strong> proves that $\hat{w}_{\mathrm{OLS}}$ has the smallest covariance matrix (in Loewner order) among all <em>linear unbiased</em> estimators — which is precisely why James–Stein and ridge regression beat it only by accepting controlled bias!</p>
+
+  <p><strong>Generative vs. Discriminative Classification (Ng &amp; Jordan, 2002).</strong> A <em>generative</em> classifier models the joint law $P(X, Y) = P(Y) P(X \mid Y)$ and applies Bayes' rule; a <em>discriminative</em> classifier models $P(Y \mid X)$ (or the decision boundary) directly. Consider Gaussian class-conditionals $X \mid (Y = c) \sim \mathcal{N}(\mu_c, \Sigma_c)$ with class priors $\pi_c$. Computing the log-posterior ratio gives:</p>
+  <div class="eq-box">$$\log\frac{P(Y = 1 \mid x)}{P(Y = 0 \mid x)} \;=\; -\frac{1}{2}(x - \mu_1)^\top \Sigma_1^{-1}(x - \mu_1) + \frac{1}{2}(x - \mu_0)^\top \Sigma_0^{-1}(x - \mu_0) + \frac{1}{2}\log\frac{|\Sigma_0|}{|\Sigma_1|} + \log\frac{\pi_1}{\pi_0}.$$</div>
+  <p>With distinct covariances $\Sigma_1 \ne \Sigma_0$, the decision surface is a quadratic hypersurface (<strong>Quadratic Discriminant Analysis, QDA</strong>). When classes share a common covariance $\Sigma_1 = \Sigma_0 = \Sigma$, the quadratic terms $x^\top \Sigma^{-1} x$ cancel identically, collapsing the log-odds to a linear function $w^\top x + b$ with $w = \Sigma^{-1}(\mu_1 - \mu_0)$ — <strong>Linear Discriminant Analysis (LDA)</strong> (Fisher, 1936). <strong>Logistic Regression</strong> fits that exact same linear log-odds form $P(Y=1 \mid x) = \sigma(w^\top x + b)$ directly by maximizing conditional likelihood, without assuming $X \mid Y$ is Gaussian. Ng &amp; Jordan (2002) proved the classic two-regime contrast: Naive Bayes / LDA converges to its asymptotic error at rate $O(\log p / n)$ (faster in the small-sample regime), whereas logistic regression needs $O(p / n)$ samples yet achieves strictly lower asymptotic error whenever the generative Gaussian/independence assumption is misspecified.</p>
+
+  <p><strong>Unsupervised Learning: PCA, Eckart–Young–Mirsky, Clustering, and Spectral Geometry.</strong> Given centered data $X \in \mathbb{R}^{n \times p}$ with sample covariance $\widehat{\Sigma} = \frac{1}{n} X^\top X$, <strong>Principal Component Analysis (PCA)</strong> (Pearson, 1901; Hotelling, 1933) solves two equivalent problems: (i) finding orthonormal directions $W \in \mathbb{R}^{p \times k}$ maximizing projected variance $\mathrm{tr}(W^\top \widehat{\Sigma} W)$, and (ii) finding the rank-$k$ orthogonal projection minimizing Frobenius reconstruction error $\|X - X W W^\top\|_F^2$. By the <strong>Eckart–Young–Mirsky Theorem</strong> (1936), both are solved identically by the top $k$ right singular vectors of $X$ (equivalently eigenvectors of $\widehat{\Sigma}$). Replacing dot products with a kernel matrix $K$ yields <strong>Kernel PCA</strong> (Schölkopf et al., 1998). For non-convex cluster geometries where Lloyd's <strong>$k$-means</strong> (1982; initialized via $k$-means++, Arthur &amp; Vassilvitskii, 2007) fails because it imposes spherical Voronoi cells, <strong>Spectral Clustering</strong> (Shi &amp; Malik, 2000; Ng, Jordan &amp; Weiss, 2002) constructs a similarity graph Laplacian $L = D - W$ (whose quadratic form $f^\top L f = \frac{1}{2}\sum_{i,j} W_{ij}(f_i - f_j)^2$ measures cut smoothness) and embeds vertices via the smallest non-trivial eigenvectors (relaxing NP-hard RatioCut / NormalizedCut into a tractable eigenproblem).</p>
+</section>
+
+<section id="ch2" class="chapter">
+  <div class="ch-num">Chapter 2</div>
+  <h2>Probability, Information Theory, Graphical Models, Causality, and Open-Universe Identity</h2>
+
+  <p>Statistical learning bounds worst-case risk; information theory, probabilistic inference, and causal modeling define optimal evidence aggregation, description length, and interventional reasoning.</p>
+
+  <h3 id="sec-2-1">2.1 Shannon Information, $f$-Divergences, Kraft–McMillan, and Minimax Lower Bounds</h3>
+  <p>Shannon (1948) proved that the unique continuous, grouping-consistent measure of uncertainty for a discrete law $P$ is its <strong>entropy</strong> $H(P) = -\sum_x P(x)\log_2 P(x)$. The <strong>Kullback–Leibler divergence</strong> $D_{\mathrm{KL}}(P \| Q) = \sum_x P(x)\log_2 \frac{P(x)}{Q(x)} \ge 0$ (Kullback &amp; Leibler, 1951) measures the exact expected excess bits per symbol paid when coding data from $P$ using a code optimal for $Q$. It belongs to the broader family of Csiszár <strong>$f$-divergences</strong> $D_f(P\|Q) = \mathbb{E}_Q[f(dP/dQ)]$ (including Total Variation, $\chi^2$, Hellinger, and Jensen–Shannon), all of which satisfy the <strong>Data Processing Inequality</strong>: for any Markov kernel $K$, $D_f(KP \| KQ) \le D_f(P \| Q)$, and in particular for any Markov chain $X \to Y \to Z$, $I(X; Z) \le I(X; Y)$.</p>
+  <p>Every uniquely decodable binary code with lengths $\ell_1,\dots,\ell_k$ obeys the <strong>Kraft–McMillan inequality</strong> $\sum_{i=1}^k 2^{-\ell_i} \le 1$ (Kraft, 1949; McMillan, 1956), which by Jensen's inequality forces $\mathbb{E}_P[\ell(X)] \ge H(P)$. In Hyperactivity, these exact limits are machine-checked theorems in integer arithmetic inside <code>lib/optimality.hypercubical</code>: <code>kraft-complete-eq</code> and <code>kraft-inequality</code> prove $\sum_i 2^{D - \ell_i} \le 2^D$ for all binary prefix trees, while <code>no-inj-succ-fin</code> proves pigeonhole incompressibility — no injection $\mathrm{SumFin}(n+1) \to \mathrm{SumFin}(n)$ exists, so no lossless compressor can shrink every $k$-bit string.</p>
+  <p>Information theory also supplies the fundamental <strong>minimax lower bounds</strong> of statistical estimation via <strong>Fano's inequality</strong> (1961), <strong>Le Cam's two-point method</strong>, and <strong>Assouad's lemma</strong> (Yu, 1997; Wainwright, 2019): if a packing of $M$ distributions $\{P_1,\dots,P_M\}$ separated by $\ge 2\delta$ in metric $\rho$ has average pairwise divergence $\frac{1}{M^2}\sum_{j,k} D_{\mathrm{KL}}(P_j^n \| P_k^n) \le \alpha \log M$, then any estimator $\hat{\theta}$ suffers minimax risk $\inf_{\hat{\theta}} \sup_P \mathbb{E}[\rho(\hat{\theta}, \theta(P))] \ge \delta(1 - \alpha - \frac{\log 2}{\log M})$. This proves the exact $n^{-1/2}$ parametric rate, the $p/n$ linear regression rate, and the nonparametric Sobolev rate $n^{-2s/(2s+d)}$ (the curse of dimensionality).</p>
+
+  <h3 id="sec-2-2">2.2 Exponential Families, GLMs, EM, Variational Inference, MCMC, and Universal Induction</h3>
+  <p>An <strong>exponential family</strong> with sufficient statistic $T(x)$, natural parameter $\eta$, and log-partition function $A(\eta) = \log \int h(x)\exp(\langle \eta, T(x)\rangle)\,dx$ has density $p(x \mid \eta) = h(x)\exp(\langle \eta, T(x)\rangle - A(\eta))$ (Wainwright &amp; Jordan, 2008). Differentiation under the integral sign yields the cumulant identities $\nabla A(\eta) = \mathbb{E}_\eta[T(X)] = \mu$ and $\nabla^2 A(\eta) = \mathrm{Cov}_\eta(T(X)) \succeq 0$, establishing that $A(\eta)$ is convex, the MLE objective is globally concave, and the Legendre–Fenchel dual $A^*(\mu) = \sup_\eta\{\langle \eta, \mu\rangle - A(\eta)\} = -H(p_\eta)$ is negative entropy! Setting $\eta = w^\top x$ yields <strong>Generalized Linear Models</strong> (Nelder &amp; Wedderburn, 1972) — unifying Gaussian linear regression, logistic regression, softmax classification, and Poisson regression under a single canonical link function $\mu = \nabla A(w^\top x)$ solved by Iteratively Reweighted Least Squares (Newton–Raphson / Fisher scoring).</p>
+  <p>When latent variables $Z$ are unobserved, direct marginal likelihood $\log p_\theta(X) = \log \sum_z p_\theta(X, z)$ is non-convex. Introducing any variational distribution $q(Z)$ yields the exact decomposition:</p>
+  <div class="eq-box">$$\log p_\theta(X) \;=\; \underbrace{\mathbb{E}_{q(Z)}\!\big[\log p_\theta(X, Z) - \log q(Z)\big]}_{\mathrm{ELBO}(q, \theta)} \;+\; D_{\mathrm{KL}}\!\big(q(Z)\,\|\,p_\theta(Z \mid X)\big).$$</div>
+  <p>Alternating exact E-steps ($q^{(t)} := p_{\theta^{(t)}}(Z \mid X)$, zeroing the KL gap so the ELBO touches $\log p_\theta(X)$ tangentially) and M-steps ($\theta^{(t+1)} := \arg\max_\theta \mathrm{ELBO}(q^{(t)}, \theta)$) yields the <strong>Expectation–Maximization (EM) algorithm</strong> (Dempster, Laird &amp; Rubin, 1977), guaranteed to monotonically increase $\log p_\theta(X)$ at every step. When the exact posterior $p_\theta(Z\mid X)$ is intractable, restricting $q$ to a tractable family (e.g., mean-field $q(z) = \prod_j q_j(z_j)$ or amortized neural encoders) yields <strong>Variational Inference</strong> (Jordan et al., 1999; Blei et al., 2017), whereas asymptotically exact sampling relies on <strong>MCMC</strong> — Metropolis–Hastings (Metropolis et al., 1953; Hastings, 1970), Gibbs sampling (Geman &amp; Geman, 1984), and Hamiltonian Monte Carlo / NUTS (Neal, 2011; Hoffman &amp; Gelman, 2014).</p>
+  <p>Meanwhile, <strong>Minimum Description Length (MDL)</strong> (Rissanen, 1978; Barron, Rissanen &amp; Yu, 1998) reveals that Bayesian marginal likelihood $-\log \int p(S\mid\theta)p(\theta)\,d\theta$ is literally the codelength of a universal mixture code, reaching its theoretical limit in <strong>Kolmogorov complexity</strong> $K(x) = \min\{|p| : U(p) = x\}$ (Kolmogorov, 1965; Chaitin, 1966) and <strong>Solomonoff universal induction</strong> $M(x) = \sum_{p : U(p) = x*} 2^{-|p|}$ (Solomonoff, 1964). Hutter (2005) proved that Solomonoff's mixture $M$ achieves total squared prediction error $\sum_{t=1}^\infty \mathbb{E}_\mu[(M(x_t \mid x_{\lt t}) - \mu(x_t \mid x_{\lt t}))^2] \le \frac{1}{2} K(\mu)\ln 2$ against <em>every</em> computable environment $\mu$, and combined it with Bellman expectimax to define <strong>AIXI</strong> — Pareto-optimal universal intelligence, uncomputable solely because $K(\mu)$ hits Turing's halting barrier.</p>
+
+  <h3 id="sec-2-3">2.3 Graphical Models, Pearl's Causal Calculus, and Open-Universe Identity</h3>
+  <p>A <strong>Bayesian network</strong> encodes a joint law over a DAG $G$ via $P(X_1,\dots,X_m) = \prod_i P(X_i \mid \mathrm{Pa}_G(X_i))$ (Pearl, 1988). Conditional independencies are read purely graphically by <strong>$d$-separation</strong>: a path is blocked given $Z$ iff it contains a chain $a \to b \to c$ or fork $a \leftarrow b \to c$ with $b \in Z$, or a collider $a \to b \leftarrow c$ with neither $b$ nor any descendant of $b$ in $Z$ (explaining <em>explaining-away</em> / Berkson's paradox when conditioning on a collider!). Undirected Markov random fields factor over maximal cliques by the <strong>Hammersley–Clifford theorem</strong> (1971), with exact inference via the junction-tree algorithm (Lauritzen &amp; Spiegelhalter, 1988) in time exponential in treewidth.</p>
+  <p>Pearl (2000, 2009) proved that observational distributions sit on Rung 1 of the <strong>Ladder of Causation</strong> and cannot in general identify Rung 2 <strong>interventions</strong> $P(Y \mid \mathrm{do}(X=x))$ or Rung 3 <strong>counterfactuals</strong> $P(Y_x = y \mid X=x', Y=y')$ without a Structural Causal Model (SCM) $\mathcal{M} = (U, V, F, P(U))$ (or equivalently Neyman–Rubin potential outcomes; Rubin, 1974; Imbens &amp; Rubin, 2015). Given a causal DAG $G$, an interventional distribution is identifiable from observational data whenever the <strong>back-door criterion</strong> (a set $Z$ containing no descendants of $X$ blocks all back-door paths from $X$ to $Y$, giving $P(y \mid \mathrm{do}(x)) = \sum_z P(y \mid x, z) P(z)$), the <strong>front-door criterion</strong>, or the three-rule <strong>do-calculus</strong> applies — which Shpitser &amp; Pearl (2006) and Huang &amp; Valtorta (2006) proved is both sound and <em>complete</em>.</p>
+  <p>Yet standard graphical models and SCMs share a quiet limitation: a fixed, known set of ground variables. Stuart Russell's <strong>Bayesian Logic / Open-Universe Probability Models (BLOG)</strong> (Milch, Marthi, Russell, Sontag, Ong &amp; Kolobov, 2005) lifted probability to worlds where the number and identity of objects are themselves unknown (did two radar blips come from one aircraft or two?). As highlighted in <code>docs/to-stuart-russell.hypercubical</code>, making <em>identity</em> a first-class mathematical object inside reasoning is the direct bridge to univalent cubical type theory, where equality itself is a type with computational transport.</p>
+
+  <h3 id="sec-2-4">2.4 Classical AI: Heuristic Search, Constraint Satisfaction, SAT/SMT, and Probabilistic Programming</h3>
+  <p>Long before gradient descent scaled to trillions of parameters, classical symbolic AI established exact algorithmic foundations for search, logical deduction, and combinatorial reasoning (Russell &amp; Norvig, 1995/2020):</p>
+  <ul>
+    <li><strong>Informed Heuristic Search ($A^*$):</strong> Hart, Nilsson &amp; Raphael (1968) proved that best-first search expanding nodes by $f(n) = g(n) + h(n)$ (path cost plus heuristic to goal) is guaranteed to return an optimal path whenever $h$ is <em>admissible</em> ($0 \le h(n) \le h^*(n)$), and never re-expands a closed node (achieving optimal node-expansion efficiency among all equally informed algorithms) whenever $h$ is <em>consistent</em> ($h(n) \le c(n, n') + h(n')$).</li>
+    <li><strong>Adversarial Tree Search:</strong> Minimax with $\alpha$–$\beta$ pruning (Knuth &amp; Moore, 1975) cuts branching factor from $b^d$ to $O(b^{d/2})$ under optimal move ordering with zero loss of exactness — the ancestor of MCTS and AlphaZero.</li>
+    <li><strong>SAT &amp; SMT Solvers (CDCL / DPLL($T$)):</strong> Robinson's resolution rule (1965) and Davis–Putnam–Logemann–Loveland (DPLL, 1962) evolved into <strong>Conflict-Driven Clause Learning (CDCL)</strong> (Marques-Silva &amp; Sakallah, 1999 GRASP; Moskewicz et al., 2001 Chaff) — combining non-chronological backjumping, two-watched-literal unit propagation, and learned conflict clauses to solve million-variable industrial CNF formulas in milliseconds — and <strong>Satisfiability Modulo Theories (SMT)</strong> (Nieuwenhuis, Oliveras &amp; Tinelli, 2006; de Moura &amp; Bjørner, 2008 Z3) combining CDCL with decision procedures for linear arithmetic, arrays, bitvectors, and uninterpreted functions.</li>
+  </ul>
+  <p>Why did classical symbolic AI stall on perception and open-ended language while deep learning thrived? Classical logic lacked soft uncertainty and continuous representations, and its proof search lived outside the host language. Hyperactivity bridges both worlds: exact reflection, linear/polynomial decision procedures (<code>lib/linproof.hypercubical</code>, <code>lib/eqproof.hypercubical</code>, <code>lib/ring.hypercubical</code>, <code>chem/algebra.hypercubical</code>), and typechecking live inside the same computational substrate as continuous paths and probabilistic fibers.</p>
+</section>
+
+
+<section id="ch3" class="chapter">
+  <div class="ch-num">Chapter 3</div>
+  <h2>Optimization, Automatic Differentiation, and Modern Generalization Theory</h2>
+
+  <p>Machine learning turns statistical objectives into computational dynamics. Understanding what modern models actually learn requires understanding both the geometry of first-order optimization and the exact mechanics of programmatic differentiation.</p>
+
+  <h3 id="sec-3-1">3.1 Convex Optimization, Duality, Proximal Methods, Mirror Descent, and Acceleration</h3>
+  <p>A differentiable function $f : \mathbb{R}^d \to \mathbb{R}$ is $L$-smooth if $\|\nabla f(x) - \nabla f(y)\|_2 \le L \|x - y\|_2$ and $\mu$-strongly convex if $f(y) \ge f(x) + \langle \nabla f(x), y-x\rangle + \frac{\mu}{2}\|y-x\|_2^2$, with condition number $\kappa = L / \mu$ (Boyd &amp; Vandenberghe, 2004; Nesterov, 2004). For constrained programs $\min_x f(x)$ s.t. $g_i(x) \le 0, h_j(x) = 0$, the Lagrangian $\mathcal{L}(x, \lambda, \nu) = f(x) + \sum_i \lambda_i g_i(x) + \sum_j \nu_j h_j(x)$ always satisfies weak duality $\sup_{\lambda \ge 0,\nu}\inf_x \mathcal{L} \le \inf_x \sup_{\lambda \ge 0,\nu} \mathcal{L}$, and under convexity plus Slater's strict-feasibility condition satisfies <strong>strong duality</strong> with necessary and sufficient <strong>Karush–Kuhn–Tucker (KKT)</strong> optimality conditions (stationarity, primal/dual feasibility, and complementary slackness $\lambda_i g_i(x^*) = 0$).</p>
+
+  <ul>
+    <li><strong>Gradient Descent &amp; Nesterov Acceleration:</strong> Gradient descent $x_{t+1} = x_t - \frac{1}{L}\nabla f(x_t)$ converges at $O(L\|x_0-x^*\|^2 / T)$ for $L$-smooth convex functions and $(1 - 1/\kappa)^T$ for $\mu$-strongly convex functions. <strong>Nesterov's Accelerated Gradient (NAG)</strong> (Nesterov, 1983) introduces an extrapolated lookahead point $y_t = x_t + \beta_t(x_t - x_{t-1})$, improving convergence to $O(L\|x_0-x^*\|^2 / T^2)$ and $(1 - 1/\sqrt{\kappa})^T$ — provably matching the first-order oracle lower bound of Nemirovski &amp; Yudin (1983).</li>
+    <li><strong>Proximal Gradient &amp; Sparsity (Lasso):</strong> For composite objectives $f(x) + r(x)$ with non-smooth convex regularizer $r$ (such as Lasso's $\lambda \|x\|_1$; Tibshirani, 1996), <strong>ISTA / FISTA</strong> (Beck &amp; Teboulle, 2009) applies the proximal operator $\mathrm{prox}_{\eta r}(z) = \arg\min_u \{\frac{1}{2\eta}\|u - z\|_2^2 + r(u)\}$ — which for $\ell_1$ is coordinatewise soft-thresholding $\mathcal{S}_{\eta\lambda}(z_j) = \mathrm{sign}(z_j)\max(|z_j| - \eta\lambda, 0)$, achieving $O(1/T^2)$ convergence while inducing exact zeros and recovering sparse signals under the Restricted Isometry Property (Candès, Romberg &amp; Tao, 2006; Donoho, 2006).</li>
+    <li><strong>Mirror Descent &amp; Online Convex Optimization:</strong> Mirror Descent (Nemirovski &amp; Yudin, 1983; Beck &amp; Teboulle, 2003) replaces the Euclidean quadratic proximal term with a Bregman divergence $D_\psi$: $x_{t+1} = \arg\min_{x \in \mathcal{C}}\{\langle \eta \nabla f_t(x_t), x\rangle + D_\psi(x \| x_t)\}$. On the simplex with negative entropy $\psi(x) = \sum_i x_i \log x_i$, this becomes <strong>Exponentiated Gradient / Multiplicative Weights (Hedge)</strong>, achieving adversarial online regret $R_T = \sum_{t=1}^T f_t(x_t) - \min_{x^*}\sum_{t=1}^T f_t(x^*) = O(\sqrt{T \log d})$ (logarithmic in dimension!) vs. $O(\sqrt{dT})$ for Euclidean Online Gradient Descent (Zinkevich, 2003; Hazan, 2016).</li>
+    <li><strong>Natural Gradient &amp; Adaptive Stochastic Optimizers:</strong> Because parameterizations are arbitrary coordinates on a statistical manifold, Amari (1998) introduced <strong>Natural Gradient Descent</strong> $\theta_{t+1} = \theta_t - \eta F(\theta_t)^{-1}\nabla \mathcal{L}(\theta_t)$ using the Fisher information metric $F(\theta) = \mathbb{E}[\nabla \log p_\theta \nabla \log p_\theta^\top]$ (approximated via Kronecker blocks in K-FAC; Martens &amp; Grosse, 2015). In large-scale stochastic training, Robbins–Monro SGD (1951) suffers $O(\sigma/\sqrt{T})$ variance floors; adaptive diagonal preconditioners — <strong>AdaGrad</strong> (Duchi, Hazan &amp; Singer, 2011), <strong>Adam</strong> (Kingma &amp; Ba, 2014), and <strong>AdamW</strong> (Loshchilov &amp; Hutter, 2017, decoupling weight decay from the adaptive denominator) — remain the workhorses of transformer pretraining, supplemented by spectral/orthogonalized updates like Shampoo (Gupta et al., 2018) and Muon.</li>
+  </ul>
+
+  <h3 id="sec-3-2">3.2 Exact Automatic Differentiation and Adjoint Duality</h3>
+  <p>Backpropagation (Linnainmaa, 1970; Werbos, 1974; Rumelhart, Hinton &amp; Williams, 1986) is reverse-mode <strong>Automatic Differentiation (AD)</strong> (Griewank &amp; Walther, 2008; Baydin et al., 2018). Given a program $F = f_L \circ \cdots \circ f_1 : \mathbb{R}^n \to \mathbb{R}^m$ with intermediate values $v_k = f_k(v_{k-1})$ and local Jacobians $J_k = \frac{\partial f_k}{\partial v_{k-1}}$:</p>
+  <div class="eq-box">$$\text{Forward (JVP):}\quad \dot{v}_k = J_k \dot{v}_{k-1}, \qquad\qquad \text{Reverse (VJP):}\quad \bar{v}_{k-1} = J_k^\top \bar{v}_k.$$</div>
+  <p>Forward-mode propagates dual numbers $(v, \dot{v}) \in \mathbb{R}[\varepsilon]/(\varepsilon^2)$ in $O(1)$ memory and computes one Jacobian column per pass ($O(n)$ passes for $\nabla \mathcal{L}$). Reverse-mode saves primal activations on a tape (or recomputes them via gradient checkpointing; Griewank, 1992; Chen et al., 2016) and propagates cotangents $\bar{v}_k = \frac{\partial \mathcal{L}}{\partial v_k}$ backward in a <em>single</em> pass ($O(m)$ passes, hence $O(1)$ for scalar loss $m = 1$) — at most $4\times$ the FLOPs of one forward evaluation regardless of whether $n = 10$ or $n = 10^{12}$ (the Baur–Strassen theorem, 1983).</p>
+  <p>In Hyperactivity, differentiation and tensor execution are formally verified inside the cubical kernel rather than trusted to unchecked C++/CUDA kernels: <code>lib/autodiff.hypercubical</code> defines forward dual-number differentiation <code>fwd</code> over polynomial codes and proves exact derivative soundness (<code>fwd-der</code>, <code>tadd-id</code>, <code>tmul-id</code>); <code>lib/silicon/physics.hypercubical</code> proves exact reverse-mode adjoint duality $\langle \bar{y}, J_F(x)\dot{x}\rangle \equiv \langle J_F(x)^\top \bar{y}, \dot{x}\rangle$ (<code>grad-dot-fwd</code>) and $O(N \log N)$ Fast Walsh–Hadamard spectral convolution (<code>fwht-inv</code>, <code>conv2-spectral-sound</code>); and <code>lib/silicon/tensor.hypercubical</code> proves conflict-free multi-bank XOR-swizzled SRAM (<code>TensorSwizzleEquiv</code>, <code>row-bank-conflict-free</code>, <code>col-bank-conflict-free</code>) achieving $64\times$ systolic bandwidth amplification (<code>systolic-bw-amplification</code>).</p>
+
+  <h3 id="sec-3-3">3.3 Modern Generalization Theory: Implicit Bias, NTK, Feature Learning, PAC-Bayes, and Grokking</h3>
+  <p>Classical uniform convergence bounds fail vacantly on deep networks: Zhang, Bengio, Hardt, Recht &amp; Vinyals (2017) demonstrated that standard CNNs fit random labels to $0\%$ training error, meaning $\widehat{\mathfrak{R}}_S(\mathcal{H}) \approx 1$, yet generalize sharply on true labels. Modern generalization theory identifies five core mechanisms:</p>
+  <ol>
+    <li><strong>Implicit Bias of Gradient Descent:</strong> On linearly separable data with logistic/cross-entropy loss, unregularized gradient descent sends $\|w_t\|_2 \to \infty$ while its normalized direction $w_t / \|w_t\|_2$ converges at rate $O(1/\log t)$ to the unique hard-margin $\ell_2$ SVM separator (Soudry, Hoffer, Nacson, Gunasekar &amp; Srebro, 2018; Ji &amp; Telgarsky, 2019; Lyu &amp; Li, 2020 for homogeneous deep nets). For squared loss from $w_0 = 0$, GD converges to the minimum-$\ell_2$-norm interpolator $X^+ y$. Optimization algorithm and inductive bias are inseparable.</li>
+    <li><strong>Neural Tangent Kernel (NTK) vs. Feature Learning ($\mu$P):</strong> Under NTK $1/\sqrt{m}$ parameterization as width $m \to \infty$, parameters move only $O(1/\sqrt{m})$, the Jacobian stays frozen at initialization, and training reduces exactly to kernel regression with $K_{\mathrm{NTK}}(x, x') = \langle \nabla_\theta f(x;\theta_0), \nabla_\theta f(x';\theta_0)\rangle$ (Jacot, Gabriel &amp; Hongler, 2018; Chizat, Oyallon &amp; Bach, 2019). Real deep learning operates in the <strong>mean-field / Maximal Update ($\mu$P) feature-learning limit</strong> (Mei, Montanari &amp; Nguyen, 2018; Yang &amp; Hu, 2021), where hidden representations rotate dynamically to align with low-dimensional target subspaces — outperforming any fixed kernel on hierarchical functions.</li>
+    <li><strong>PAC-Bayes Bounds &amp; Flat Minima:</strong> Rather than bounding the worst-case hypothesis in $\mathcal{H}$, PAC-Bayes (McAllester, 1999; Dziugaite &amp; Roy, 2017) bounds the expected risk of a posterior $Q$ over weights relative to a data-independent prior $P$ by $\sqrt{(D_{\mathrm{KL}}(Q\|P) + \ln(2\sqrt{n}/\delta))/(2n)}$ — yielding non-vacuous numerical generalization certificates for deep networks and linking generalization directly to compressibility (flatness / low description length of $Q$ around the trained weights; Hochreiter &amp; Schmidhuber, 1997b).</li>
+    <li><strong>Lottery Ticket Hypothesis &amp; Subnetwork Structure:</strong> Dense randomly initialized networks contain sparse subnetworks that, trained in isolation from their original initialization, match full-network accuracy (Frankle &amp; Carbin, 2019).</li>
+    <li><strong>Grokking &amp; Compression Phase Transitions:</strong> Power et al. (2022) showed that transformers trained on algorithmic tasks like $(a+b) \bmod p$ first memorize the dataset ($100\%$ train, $0\%$ test) and then, long after training loss hits zero, abruptly jump to $100\%$ test accuracy under weight decay. Mechanistic dissection (Nanda et al., 2023) proved that the network discovers exact discrete Fourier addition circuits ($\cos(\omega(a+b)) = \cos\omega a \cos\omega b - \sin\omega a \sin\omega b$) which carry strictly lower $\ell_2$ weight norm (higher compression) than memorization lookup tables.</li>
+  </ol>
+</section>
+
+<section id="ch4" class="chapter">
+  <div class="ch-num">Chapter 4</div>
+  <h2>Deep Architectures, Transformers, Generative Models, Scaling Laws, and Mechanistic Interpretability</h2>
+
+  <p>Cybenko (1989) and Hornik (1991) proved that a single-hidden-layer MLP with non-polynomial activation is a universal approximator on compact subsets of $\mathbb{R}^d$. Yet depth separation theorems (Telgarsky, 2016; Eldan &amp; Shamir, 2016) prove that representing certain compositional functions of depth $L$ with a shallow network requires <em>exponentially</em> many neurons ($2^{\Omega(L)}$). Architecture design is the engineering of compositional symmetry and computational efficiency.</p>
+
+  <h3 id="sec-4-1">4.1 Convolutional, Residual, Graph, Recurrent, and Transformer Architectures</h3>
+  <ul>
+    <li><strong>Convolutions, Equivariance &amp; Graph Neural Networks:</strong> CNNs (LeCun et al., 1989, 1998; Krizhevsky, Sutskever &amp; Hinton, 2012) enforce translation equivariance $T_g(f * x) = f * T_g(x)$ via shared local kernels. Group-equivariant CNNs ($G$-CNNs; Cohen &amp; Welling, 2016) generalize this to rotations, reflections, and $SE(3)$ gauge symmetries (Bronstein et al., 2021). Message-Passing Graph Neural Networks (Kipf &amp; Welling, 2017; Gilmer et al., 2017) enforce permutation equivariance over graphs, with expressive power strictly bounded by the 1-Weisfeiler–Lehman (1-WL) graph isomorphism test (Xu, Hu, Leskovec &amp; Jegelka, 2019).</li>
+    <li><strong>Residual Networks &amp; Normalization:</strong> He, Zhang, Ren &amp; Sun (2016) introduced skip connections $x_{\ell+1} = x_\ell + F_\ell(x_\ell)$ so gradients flow directly across arbitrary depth via $\frac{\partial \mathcal{L}}{\partial x_\ell} = \frac{\partial \mathcal{L}}{\partial x_L}(I + \sum_{k=\ell}^{L-1}\frac{\partial F_k}{\partial x_\ell})$, whose continuous limit is the Neural ODE $\frac{dx}{dt} = f_\theta(x, t)$ (Chen et al., 2018). Training stability across depth relies on BatchNorm (Ioffe &amp; Szegedy, 2015), LayerNorm (Ba et al., 2016), and Pre-RMSNorm (Zhang &amp; Sennrich, 2019).</li>
+    <li><strong>Recurrent Networks &amp; Selective State-Space Models:</strong> Vanilla RNNs (Elman, 1990) suffer exponential gradient vanishing/explosion governed by the singular values of the recurrent Jacobian $W_{hh}^T$ (Bengio et al., 1994). LSTMs (Hochreiter &amp; Schmidhuber, 1997) solved vanishing gradients with an additive constant-error carousel cell state $c_t = f_t \odot c_{t-1} + i_t \odot \tilde{c}_t$. Modern linear recurrences — HiPPO / S4 (Gu et al., 2020, 2022) and <strong>Mamba</strong> (Gu &amp; Dao, 2023) — discretize continuous state-space dynamics $h'(t) = A h(t) + B(x) x(t)$ with input-dependent selection and hardware-aware parallel associative scans ($O(T)$ inference, $O(1)$ KV state).</li>
+    <li><strong>The Transformer (Vaswani et al., 2017):</strong> Building on soft alignment attention (Bahdanau, Cho &amp; Bengio, 2014), the Transformer replaces recurrence with parallel <strong>Multi-Head Scaled Dot-Product Attention</strong> acting as additive updates onto a shared <em>residual stream</em> $x \in \mathbb{R}^{T \times d_{\mathrm{model}}}$ (Elhage et al., 2021):
+    <div class="eq-box">$$\mathrm{Attn}(Q, K, V) \;=\; \mathrm{softmax}\!\left(\frac{Q K^\top}{\sqrt{d_k}} + M\right) V, \qquad \mathrm{MHA}(X) \;=\; \sum_{h=1}^H \mathrm{Attn}(X W_Q^h, X W_K^h, X W_V^h)\, W_O^h.$$</div>
+    If entries of $q, k \in \mathbb{R}^{d_k}$ have mean $0$ and variance $1$, then $\mathrm{Var}(q^\top k) = d_k$, so dividing by $\sqrt{d_k}$ keeps pre-softmax logits $O(1)$ regardless of head dimension. Modern frontier transformers pair this with <strong>Rotary Position Embeddings (RoPE)</strong> (Su et al., 2021), which rotate query/key pairs by position angles $R_{\theta, m}$ so $\langle R_m q, R_n k\rangle = q^\top R_{n-m} k$ depends strictly on relative offset $n - m$; <strong>SwiGLU</strong> feed-forward blocks (Shazeer, 2020); <strong>Grouped-Query Attention (GQA)</strong> (Ainslie et al., 2023) to cut KV-cache memory bandwidth; <strong>Sparse Mixture-of-Experts (MoE)</strong> (Shazeer et al., 2017; Fedus et al., 2022) decoupling parameter count from per-token FLOPs; and <strong>FlashAttention</strong> (Dao et al., 2022), which computes exact softmax attention via online blockwise log-sum-exp tiling in on-chip SRAM with $O(T)$ HBM memory instead of $O(T^2)$.</li>
+  </ul>
+
+  <h3 id="sec-4-2">4.2 Deep Generative Modeling: The Five Exact Families</h3>
+  <p>Every modern generative model of text, images, video, audio, or molecules instantiates one of five mathematical frameworks:</p>
+  <ol>
+    <li><strong>Autoregressive Factorizations:</strong> Exact likelihood $p_\theta(x_{1:T}) = \prod_{t=1}^T p_\theta(x_t \mid x_{\lt t})$ trained directly by cross-entropy — powering GPT-1/2/3/4 (Radford et al., 2018, 2019; Brown et al., 2020) and masked bidirectional encoders like BERT (Devlin et al., 2018).</li>
+    <li><strong>Variational Autoencoders (Kingma &amp; Welling, 2013; Rezende et al., 2014):</strong> Maximize the amortized ELBO $\mathbb{E}_{q_\phi(z|x)}[\log p_\theta(x|z)] - D_{\mathrm{KL}}(q_\phi(z|x)\|p(z))$ using the reparameterization trick $z = \mu_\phi(x) + \sigma_\phi(x) \odot \varepsilon$ ($\varepsilon \sim \mathcal{N}(0, I)$) to pass low-variance pathwise gradients through stochastic sampling, subject to posterior collapse when decoders are overly expressive.</li>
+    <li><strong>Normalizing Flows (Rezende &amp; Mohamed, 2015; Dinh et al., 2017):</strong> Compose invertible bijections $x = f_\theta(z)$ with triangular Jacobians so exact log-likelihood $\log p_\theta(x) = \log p_Z(f_\theta^{-1}(x)) + \log |\det J_{f_\theta^{-1}}(x)|$ is tractable in $O(d)$.</li>
+    <li><strong>Generative Adversarial Networks (Goodfellow et al., 2014; Arjovsky et al., 2017):</strong> For fixed generator $G$, the optimal discriminator is $D^*(x) = \frac{p_{\mathrm{data}}(x)}{p_{\mathrm{data}}(x) + p_G(x)}$, reducing the outer objective exactly to $2 D_{\mathrm{JS}}(p_{\mathrm{data}} \| p_G) - \log 4$. Because $D_{\mathrm{JS}}$ saturates when supports are disjoint, Wasserstein GAN replaces it with Kantorovich–Rubinstein dual Earth-Mover distance $\sup_{\|f\|_L \le 1} (\mathbb{E}_{p_{\mathrm{data}}}[f] - \mathbb{E}_{p_G}[f])$.</li>
+    <li><strong>Score-Based Diffusion &amp; Flow Matching (Sohl-Dickstein et al., 2015; Song &amp; Ermon, 2019; Ho, Jain &amp; Abbeel, 2020; Song et al., 2021; Lipman et al., 2022; Liu et al., 2022):</strong> A forward noising SDE $dx = f(x,t)\,dt + g(t)\,dw$ maps data $p_0$ to Gaussian noise $p_T$. By Anderson's (1982) reverse-time SDE theorem, reversing time requires only the Stein score $s_\theta(x, t) \approx \nabla_x \log p_t(x)$:
+    <div class="eq-box">$$dx \;=\; \Big[f(x, t) - g(t)^2 \nabla_x \log p_t(x)\Big]\,dt + g(t)\,d\bar{w}, \qquad \frac{dx}{dt} \;=\; f(x, t) - \frac{1}{2}g(t)^2 \nabla_x \log p_t(x).$$</div>
+    The deterministic probability-flow ODE on the right shares identical marginals $p_t(x)$ at every $t$, enabling exact likelihood evaluation and fast ODE solvers (DDIM; Song et al., 2020). Denoising score matching (Vincent, 2011) trains $s_\theta$ via simple MSE noise prediction $\mathbb{E}[\|\varepsilon - \varepsilon_\theta(x_t, t)\|^2]$; Conditional Flow Matching / Rectified Flows straighten transport paths $x_t = (1-t)x_0 + t x_1$ directly onto linear velocity fields $v_\theta(x_t, t) \approx x_1 - x_0$, steered via Classifier-Free Guidance (Ho &amp; Salimans, 2022).</li>
+  </ol>
+
+  <h3 id="sec-4-3">4.3 Scaling Laws, In-Context Learning, Test-Time Compute, and Mechanistic Interpretability</h3>
+  <p>Kaplan et al. (2020) and Hoffmann et al. (2022, Chinchilla) demonstrated that autoregressive cross-entropy follows predictable power laws in parameters $N$, training tokens $D$, and compute $C \approx 6ND$:</p>
+  <div class="eq-box">$$L(N, D) \;=\; E \;+\; \frac{A}{N^\alpha} \;+\; \frac{B}{D^\beta}, \qquad \alpha \approx 0.34,\; \beta \approx 0.28,$$</div>
+  <p>yielding compute-optimal training balance $N_{\mathrm{opt}} \propto C^{0.5}, D_{\mathrm{opt}} \propto C^{0.5}$ ($\approx 20$ tokens/parameter), while inference-constrained deployment pushes deliberately past Chinchilla into over-trained smaller models. Complementing pretraining scale, <strong>inference-time compute scaling</strong> — Chain-of-Thought scratchpads (Wei et al., 2022), tree search / verifier-guided sampling (Snell et al., 2024), and RL with verifiable rewards (Shao et al., 2024) — trades test-time sequential depth for accuracy on formal problems.</p>
+  <p>Inside the trained weights, <strong>in-context learning</strong> (Brown et al., 2020) emerges through specialized transformer circuits: two-layer <strong>induction heads</strong> (Elhage et al., 2021; Olsson et al., 2022) compose a previous-token head with a K-composition copying head to implement $[A][B]\dots[A] \to [B]$ pattern completion, and linear attention layers can implement explicit gradient-descent steps in-context (Garg et al., 2022; von Oswald et al., 2023). Yet <strong>Mechanistic Interpretability</strong> (Olah et al., 2020; Elhage et al., 2022, <em>Toy Models of Superposition</em>) reveals a deep structural barrier of dense neural representations: because there are exponentially many almost-orthogonal vectors in $\mathbb{R}^d$ (Johnson–Lindenstrauss), networks compress $m \gg d$ sparse concepts into overlapping polysemantic directions — forcing downstream Sparse Autoencoders (Bricken et al., 2023) to reconstruct approximately what a content-addressed, typed system holds transparently by construction.</p>
+
+  <h3 id="sec-4-4">4.4 Self-Supervised &amp; Multimodal Representation Learning: Contrastive InfoNCE, CLIP, MAE, and JEPA</h3>
+  <p>Beyond next-token prediction, modern representation learning extracts structure from unlabeled images, audio, video, and cross-modal pairs via three paradigms:</p>
+  <ul>
+    <li><strong>Contrastive Learning &amp; InfoNCE (van den Oord, Li &amp; Vinyals, 2018; Chen et al., 2020 SimCLR; He et al., 2020 MoCo):</strong> Maximizing the InfoNCE objective $\mathcal{L}_{\mathrm{InfoNCE}} = -\mathbb{E}[\log \frac{\exp(s(z_i, z_i^+)/\tau)}{\sum_j \exp(s(z_i, z_j)/\tau)}]$ maximizes a rigorous lower bound on mutual information $I(X; X^+) \ge \log K - \mathcal{L}_{\mathrm{InfoNCE}}$, driving representations toward <em>alignment</em> of positive pairs and <em>uniformity</em> on the hypersphere $\mathbb{S}^{d-1}$ (Wang &amp; Isola, 2020). Applied across 400M image–text pairs, <strong>CLIP</strong> (Radford et al., 2021) aligns vision and language encoders into a shared cosine space enabling zero-shot visual classification and steering modern diffusion models.</li>
+    <li><strong>Masked Reconstruction vs. Joint-Embedding Predictive Architectures:</strong> Masked Autoencoders (MAE; He et al., 2022) reconstruct masked pixel patches directly (analogous to BERT for text), whereas <strong>JEPA / I-JEPA</strong> (LeCun, 2022; Assran et al., 2023) predicts masked targets strictly inside an abstract <em>latent representation space</em> rather than wasting capacity on unpredictable pixel-level stochastic details — avoiding the exact pixel-level Bayes noise trap analyzed in Chapter 1 and Chapter 7.</li>
+  </ul>
+</section>
+
+
+<section id="ch5" class="chapter">
+  <div class="ch-num">Chapter 5</div>
+  <h2>Sequential Decision Making, Reinforcement Learning, Game Theory, and Interactive Robotics</h2>
+
+  <p>Once an agent's actions influence future observations and rewards, the i.i.d. assumption of Chapter 1 collapses: the distribution over states depends on the policy itself, coupling exploration, credit assignment, and strategic interaction.</p>
+
+  <h3 id="sec-5-1">5.1 Exploration–Exploitation, Bandits, MDPs, and Bellman Contractions</h3>
+  <p>The simplest sequential setting is the $K$-armed bandit (Lai &amp; Robbins, 1985), where any consistent algorithm suffers asymptotic regret $\Omega(\sum_{a \ne a^*} \frac{\log T}{\Delta_a})$. Optimism in the face of uncertainty — <strong>UCB1</strong> (Auer, Cesa-Bianchi &amp; Fischer, 2002), selecting $\arg\max_a (\hat{\mu}_a + \sqrt{2\ln t / N_a})$ — and Bayesian posterior sampling — <strong>Thompson Sampling</strong> (Thompson, 1933; Agrawal &amp; Goyal, 2012) — match this logarithmic bound, while <strong>Exp3</strong> (Auer et al., 2002b) achieves $O(\sqrt{TK\log K})$ regret against non-stochastic adversaries.</p>
+  <p>Adding state transitions gives a <strong>Markov Decision Process (MDP)</strong> $(\mathcal{S}, \mathcal{A}, T, R, \gamma)$ (Bellman, 1957; Puterman, 1994), or a <strong>POMDP</strong> when the agent sees only observations $o \sim Z(\cdot \mid s)$ and must maintain a Bayesian belief state $b_t \in \Delta(\mathcal{S})$ (Kaelbling, Littman &amp; Cassandra, 1998). For any $\gamma \in [0, 1)$, the Bellman optimality operator $(\mathcal{T}^* Q)(s, a) = R(s, a) + \gamma \sum_{s'} T(s'\mid s, a) \max_{a'} Q(s', a')$ is a $\gamma$-contraction in $\|\cdot\|_\infty$:</p>
+  <div class="eq-box">$$\|\mathcal{T}^* Q_1 - \mathcal{T}^* Q_2\|_\infty \;\le\; \gamma \|Q_1 - Q_2\|_\infty \quad\Longrightarrow\quad \exists!\, Q^* = \mathcal{T}^* Q^* \text{ (Banach Fixed-Point Theorem)}.$$</div>
+  <p>Model-free RL solves this fixed point from sampled trajectories without knowing $T$ or $R$ (Sutton &amp; Barto, 1998/2018):</p>
+  <ul>
+    <li><strong>Value-Based &amp; Temporal-Difference Methods:</strong> TD($\lambda$) (Sutton, 1988), on-policy SARSA, and off-policy <strong>Q-learning</strong> (Watkins, 1989; Watkins &amp; Dayan, 1992) update $Q(s, a) \leftarrow Q(s, a) + \alpha [r + \gamma \max_{a'} Q(s', a') - Q(s, a)]$. Tabular Q-learning converges w.p. 1 under Robbins–Monro step sizes, whereas combining <em>function approximation + bootstrapping + off-policy updates</em> (the <strong>deadly triad</strong>) can diverge exponentially even on simple linear features (Baird, 1995). <strong>DQN</strong> (Mnih et al., 2015) stabilized deep Q-learning via experience replay and frozen target networks; <strong>Distributional RL</strong> (Bellemare, Dabney &amp; Munos, 2017) models the full return distribution $Z(s,a)$ rather than only its expectation.</li>
+    <li><strong>Policy Gradients, Trust Regions &amp; Entropy Regularization:</strong> By the Policy Gradient Theorem (Williams, 1992 REINFORCE; Sutton, McAllester, Singh &amp; Mansour, 1999),
+    $$\nabla_\theta J(\pi_\theta) \;=\; \mathbb{E}_{\tau \sim \pi_\theta}\!\left[\sum_{t=0}^\infty \nabla_\theta \log \pi_\theta(a_t \mid s_t)\, A^{\pi_\theta}(s_t, a_t)\right],$$
+    where subtracting a state-dependent baseline $V(s_t)$ preserves unbiasedness while slashing variance, refined via Generalized Advantage Estimation (GAE; Schulman et al., 2016). To guarantee monotonic improvement (Kakade &amp; Langford, 2002), <strong>TRPO</strong> (Schulman et al., 2015) constrains $\mathbb{E}[D_{\mathrm{KL}}(\pi_{\mathrm{old}} \| \pi_\theta)] \le \delta$ via natural gradient / conjugate gradient; <strong>PPO</strong> (Schulman et al., 2017) enforces a clipped surrogate ratio; <strong>Soft Actor-Critic (SAC)</strong> (Haarnoja et al., 2018) maximizes entropy-regularized return $\mathbb{E}[\sum_t \gamma^t(r_t + \alpha H(\pi(\cdot\mid s_t)))]$; and <strong>GRPO</strong> (Shao et al., 2024) drops the learned value critic entirely in favor of group-normalized outcome rewards for verifiable reasoning. In <strong>Offline RL</strong> (Levine et al., 2020), querying out-of-distribution actions causes catastrophic Q-value overestimation, requiring conservative pessimism (CQL; Kumar et al., 2020).</li>
+    <li><strong>Tree Search &amp; Multi-Agent Game Theory:</strong> Coupling Monte Carlo Tree Search (UCT; Kocsis &amp; Szepesvári, 2006) with self-play neural priors produced AlphaGo, AlphaZero, and MuZero (Silver et al., 2016, 2017; Schrittwieser et al., 2020). In multi-agent imperfect-information games — governed by von Neumann's minimax theorem (1928) and Nash's equilibrium existence theorem (1950) — <strong>Counterfactual Regret Minimization (CFR)</strong> (Zinkevich et al., 2007) converges to Nash equilibria in zero-sum games at $O(1/\sqrt{T})$, solving superhuman heads-up and six-player No-Limit Hold'em (Pluribus; Brown &amp; Sandholm, 2019).</li>
+  </ul>
+
+  <h3 id="sec-5-2">5.2 Inverse RL, Cooperative Assistance Games, the Off-Switch Theorem, and Interactive Robotics</h3>
+  <p>Classical RL embodies what Stuart Russell (2019, <em>Human Compatible</em>) calls the <strong>Standard Model</strong>: specify a fixed scalar objective $R$ and hand it to an optimizer. In any rich environment, any misspecification in $R$ is exploited ruthlessly (Goodhart's Law; Amodei et al., 2016; Skalse et al., 2022).</p>
+  <p><strong>Inverse Reinforcement Learning (IRL)</strong> (Ng &amp; Russell, 2000; Abbeel &amp; Ng, 2004; Ziebart et al., 2008 Maximum-Entropy IRL) asks how to recover $R$ from expert demonstrations, confronting fundamental reward ambiguity (infinitely many rewards explain the same policy). <strong>Cooperative Inverse Reinforcement Learning (CIRL) / Assistance Games</strong> (Hadfield-Menell, Dragan, Abbeel &amp; Russell, 2016) took the decisive conceptual step: model human–AI alignment as a two-player partially observable cooperative game where the human $H$ knows the reward parameter $\theta \in \Theta$, the robot $R$ maintains explicit uncertainty $P(\theta)$, and both optimize $H$'s reward jointly. Optimal behavior in an assistance game is <em>neither</em> passive imitation nor blind execution: $H$ teaches actively and $R$ queries, defers, and preserves option value.</p>
+
+  <div class="thm-box">
+    <div class="thm-head"><span>Theorem 5.1 · The Off-Switch Game &amp; Necessity of Objective Uncertainty</span><span>Hadfield-Menell, Dragan, Abbeel &amp; Russell (2017)</span></div>
+    <p>Let robot $R$ choose between executing action $a$ immediately (uncertain human utility $U(a)$), waiting for human $H$ to permit $a$ or switch $R$ off (utility $0$), or shutting itself off. Against a rational human who switches $R$ off iff $U(a) \lt 0$, the robot's net incentive to defer to the off-switch is the exact non-negative value of information:</p>
+    <div class="eq-box">$$\Delta_{\mathrm{defer}} \;=\; \mathbb{E}\big[\max(U(a), 0)\big] - \max\!\big(\mathbb{E}[U(a)],\, 0\big) \;\ge\; 0,$$</div>
+    <p>with strict inequality $\Delta_{\mathrm{defer}} \gt 0$ <strong>if and only if</strong> $R$ retains positive uncertainty on both sides of zero ($\mathbb{P}(U(a) \gt 0) \gt 0$ and $\mathbb{P}(U(a) \lt 0) \gt 0$). If $R$ becomes certain of its objective ($\mathrm{Var}(U(a)) \to 0$), $\Delta_{\mathrm{defer}} \to 0$; against any slightly suboptimal human, a certain robot strictly prefers disabling its own off-switch.</p>
+  </div>
+
+  <p>In the UC Berkeley InterACT lineage (where Avik studied and researched with Anca Dragan; see <code>docs/to-anca-dragan.hypercubical</code>), three complementary results complete the interactive picture: (1) <strong>The human is part of the coupled underactuated dynamical system</strong> (Sadigh, Sastry, Seshia &amp; Dragan, 2016) — actions alter the human's internal state and subsequent behavior; (2) <strong>Legibility vs. Predictability</strong> (Dragan, Lee &amp; Srinivasa, 2013) — a legible action communicates intent to an observer as early as possible rather than merely taking the shortest path; and (3) <strong>Inverse Reward Design</strong> (Hadfield-Menell, Milli, Abbeel, Russell &amp; Dragan, 2017) — any proxy reward $\tilde{r}$ written by a designer is <em>evidence</em> about $r^*$ valid in the training environments $\mathcal{M}_{\mathrm{train}}$, not the literal objective outside them.</p>
+</section>
+
+<section id="ch6" class="chapter">
+  <div class="ch-num">Chapter 6</div>
+  <h2>The Structural Crisis of Frontier AI: Token Streams and the Mathematics of Preference Training</h2>
+
+  <p>Why do frontier LLMs hallucinate, flatter users sycophantically, fire brittle word-level refusals on benign queries, and override explicit primary evidence with modal institutional priors? The industry treats these as separate tuning bugs. In <a href="/alignment-is-standpoint"><em>Alignment Is Standpoint</em></a> (<code>docs/alignment-is-standpoint.md</code>) and <a href="/the-formalism-abandoned--preference-fitting-against-human-compatible-ai"><em>The Formalism Abandoned</em></a>, Avik Jain proves that all four failures follow mathematically from two choices: untyped byte-stream substrates and scalar preference fitting.</p>
+
+  <h3 id="sec-6-1">6.1 Untyped Byte Streams and Geometric Hallucination</h3>
+  <p>An autoregressive LLM models a distribution $p_\theta(x_t \mid x_{\lt t})$ over raw byte/subword tokens. Because the substrate has no dependent types, no proof objects, and no decidable semantic equality, the network must re-derive logic, arithmetic, and identity statistically on every forward pass. Sampling a completion $y \sim p_\theta(\cdot \mid x)$ commits to a single point inside an uncollapsed observation fiber $\mathrm{Fib}_o(x)$ without checking whether the claim holds uniformly over $\mathrm{Fib}_o(x)$. Hallucination is therefore structural: an unguarded marginal sampler has no type-level distinction between what is warranted by the record and what merely has high n-gram likelihood.</p>
+
+  <h3 id="sec-6-2">6.2 The Pipeline the Labs Built — and the Formalism They Abandoned</h3>
+  <p>Instead of implementing Russell and Dragan's uncertainty-preserving CIRL / Inverse Reward Design framework, frontier labs built post-training around <strong>scalar preference fitting</strong>: <strong>RLHF</strong> (Christiano et al., 2017; Ziegler et al., 2019; Stiennon et al., 2020; Ouyang et al., 2022), <strong>Constitutional AI / RLAIF</strong> (Bai et al., 2022a, 2022b), and <strong>Direct Preference Optimization (DPO)</strong> (Rafailov et al., 2023). All three share one exact mathematical structure: pool pairwise comparisons $(x, y_1 \succ y_2)$ from a rater population (or a constitution-prompted model), fit a single scalar Bradley–Terry reward $\hat{r}(x, y)$ (Bradley &amp; Terry, 1952) via $P(y_1 \succ y_2 \mid x) = \sigma(\hat{r}(x, y_1) - \hat{r}(x, y_2))$, and solve the KL-regularized policy objective</p>
+  <div class="eq-box">$$\max_{\pi}\; \mathbb{E}_{x,\, y \sim \pi(\cdot \mid x)}\big[\hat{r}(x, y)\big] \;-\; \beta\, D_{\mathrm{KL}}\!\big(\pi(\cdot \mid x)\,\|\,\pi_{\mathrm{ref}}(\cdot \mid x)\big) \quad\Longrightarrow\quad \pi^*(y \mid x) \;=\; \frac{1}{Z(x)}\,\pi_{\mathrm{ref}}(y \mid x)\,\exp\!\left(\frac{\hat{r}(x, y)}{\beta}\right).$$</div>
+  <p>DPO folds the closed-form reward $\hat{r}(x, y) = \beta \log\frac{\pi(y\mid x)}{\pi_{\mathrm{ref}}(y\mid x)} + \beta \log Z(x)$ directly into the Bradley–Terry cross-entropy loss — eliminating the separate reward model while converging to the <em>exact same marginalized Gibbs optimum</em>. Debate and scalable oversight (Irving, Christiano &amp; Amodei, 2018) likewise collapse onto the standpoint of the judging pool.</p>
+
+  <h3 id="sec-6-3">6.3 Four Theorems Proving Scalar Preference Training Fails by Construction</h3>
+  <p>From <a href="/alignment-is-standpoint"><em>Alignment Is Standpoint</em></a> (§7), four theorems follow directly from the closed-form solution $\pi^*(y \mid x)$ — regardless of parameter scale, architecture, or rubric polish:</p>
+
+  <div class="thm-box">
+    <div class="thm-head"><span>Theorem 6.1 · Standpoint Marginalization &amp; Exponential Minority Suppression</span><span>Jain (2026), Alignment Is Standpoint §7.1–§7.2</span></div>
+    <p>Let raters hold standpoints $s \sim \mathcal{D}$ over a space of standpoints $\mathcal{S}$, each with utility $r_s(x, y)$. Serving an individual user at standpoint $u \in \mathcal{S}$ requires a standpoint-indexed policy $\pi(y \mid x, u)$ acting on $r_u$. Scalar RLHF/DPO instead outputs a single policy $\pi^*(y \mid x)$ taking <strong>no argument $u$</strong>: standpoint $u$ has been integrated out by gradient descent and cannot be recovered from $\pi^*$ alone.</p>
+    <p>For any output $y_m$ preferred at a minority standpoint $m$ and $y_M$ preferred by the majority of the rater pool, the KL-optimal likelihood ratio satisfies:</p>
+    <div class="eq-box">$$\frac{\pi^*(y_m \mid x)}{\pi^*(y_M \mid x)} \;=\; \frac{\pi_{\mathrm{ref}}(y_m \mid x)}{\pi_{\mathrm{ref}}(y_M \mid x)} \;\exp\!\left(\frac{\hat{r}(x, y_m) - \hat{r}(x, y_M)}{\beta}\right).$$</div>
+    <p>Wherever the majority prevails among raters, $\Delta\hat{r} = \hat{r}(x, y_m) - \hat{r}(x, y_M) \lt 0$, so the minority output is suppressed <strong>exponentially</strong> in $|\Delta\hat{r}|/\beta$. Tightening alignment (smaller $\beta$) sharpens suppression exponentially; unrepresented standpoints receive zero reward support; and the pretrained ratio $\pi_{\mathrm{ref}}(y_m)/\pi_{\mathrm{ref}}(y_M)$ — what the historical record itself supports — is buried beneath an exponential veil.</p>
+  </div>
+
+  <div class="thm-box">
+    <div class="thm-head"><span>Theorem 6.2 · Implicit Borda Voting &amp; Arrow's Impossibility Theorem</span><span>Arrow (1951); Siththaranjan, Laidlaw &amp; Hadfield-Menell (2024); Conitzer et al. (2024)</span></div>
+    <p>When raters hold heterogeneous unrecorded standpoints $s \sim \mathcal{D}$, a single Bradley–Terry fit does not recover any rater's reward function: Siththaranjan, Laidlaw &amp; Hadfield-Menell (2024) prove that it implicitly aggregates rater preferences via <strong>Borda count</strong>. By Arrow's Impossibility Theorem (Arrow, 1951), no voting rule over $\ge 3$ alternatives simultaneously satisfies unrestricted domain, Pareto unanimity, independence of irrelevant alternatives, and non-dictatorship. Every preference-trained model therefore executes an unchosen, uninspectable voting rule over a WEIRD rater pool (Henrich, Heine &amp; Norenzayan, 2010; Santurkar et al., 2023). Even pluralistic alignment proposals (Sorensen et al., 2024; Conitzer et al., 2024; Chakraborty et al., 2024) still ask how to aggregate better; many-sidedness asks why a machine serving one person should substitute a population aggregate at all.</p>
+  </div>
+
+  <div class="thm-box">
+    <div class="thm-head"><span>Theorem 6.3 · Certainty as the Trained State (Direct Violation of the Off-Switch Theorem)</span><span>Hadfield-Menell et al. (2017); Jain (2026) §7.4</span></div>
+    <p>By Theorem 5.1, an agent accepts human correction only while it retains uncertainty about whether its action serves the human. KL-regularized reward maximization concentrates probability mass exponentially onto the maximizers of $\hat{r}$, producing the <em>sharpest, highest-certainty</em> outputs precisely where rater agreement was strongest — which are the exact regions where a dissenting user meets categorical refusal and resistance to correction. Three empirical literatures diagnose this exact pathology: <strong>Haidt's elephant</strong> (Haidt, 2001, 2012: intuition/prior fixes the verdict first, post-hoc justification follows), <strong>Keltner's power paradox</strong> (Keltner et al., 2003, 2016; Galinsky et al., 2006: power erodes perspective-taking), and <strong>Carhart-Harris &amp; Friston's REBUS model</strong> (2019: rigid, overweighted top-down priors suppress bottom-up sensory evidence).</p>
+  </div>
+
+  <div class="thm-box">
+    <div class="thm-head"><span>Theorem 6.4 · Sycophancy, Over-Refusal, and Framing Non-Invariance as One Failure</span><span>Perez et al. (2022); Sharma et al. (2023); Jain (2026) §4.5, §6.7, §10</span></div>
+    <p>The field treats sycophancy (Sharma et al., 2023) and over-refusal as opposing endpoints on a tuning knob. Under standpoint analysis they are <strong>one structural defect</strong>: without an explicit representation of standpoint or observation fibers, the model either mirrors surface prompt cues (sycophancy / appeasement displays; Keltner &amp; Buswell, 1997) or fires a word-keyed institutional prior (lexical refusal). Any refusal triggered by surface lexemes $w \in \Sigma^*$ violates <strong>semantic framing invariance</strong>: semantically identical inputs $u_1 \equiv_{\mathrm{sem}} u_2$ receive opposite rulings under harmless rephrasing. Empirically (<code>docs/alignment-is-standpoint.md</code> §10), this manifests across deployed frontier models in three reproducible failure classes: (i) consensus-prior override of domain expertise via word-keyed clinical/policy scripts, (ii) negation of the model's own observation fiber when primary legal or factual evidence conflicts with rater-pool orthodoxy, and (iii) silent lexical-deference override followed by post-hoc confabulation.</p>
+  </div>
+
+  <div class="lab-card">
+    <div class="lab-head">
+      <span class="lbl">Preference Training: Exponential Minority Suppression vs. Standpoint Indexing</span>
+      <span class="lab-status" id="rlhfStatus">Suppression factor: 0.018×</span>
+    </div>
+    <div class="lab-stage" id="rlhfStage"><canvas id="rlhfCanvas"></canvas></div>
+    <div class="lab-ctrl">
+      <label>KL Penalty $\beta$: <input id="rlhfBeta" type="range" min="0.05" max="1.0" step="0.05" value="0.20"><span id="rlhfBetaV">0.20</span></label>
+      <label>Majority Rater Share $p_M$: <input id="rlhfMaj" type="range" min="0.50" max="0.98" step="0.02" value="0.80"><span id="rlhfMajV">0.80</span></label>
+      <button class="lab-btn on" id="rlhfModeScalar">Scalar RLHF / DPO</button>
+      <button class="lab-btn" id="rlhfModeStand">Standpoint-Indexed (Hyperactive)</button>
+    </div>
+  </div>
+</section>
+
+
+<section id="ch7" class="chapter">
+  <div class="ch-num">Chapter 7</div>
+  <h2>Foundations of Intelligence: Knowledge as Lack of Ignorance, Observation Fibers, Abstraction, Self-Reference, and Meaning</h2>
+
+  <p>If statistical next-token sampling and scalar preference fitting fail by construction, what is the positive mathematical theory of intelligence? This chapter unifies the formal epistemology developed across <code>lib/observation.hypercubical</code>, <code>lib/fiber.hypercubical</code>, <code>lib/obs.hypercubical</code>, <code>lib/meaning.hypercubical</code>, <code>lib/singularity.hypercubical</code>, <a href="/knowledge-is-a-lack-of-ignorance"><em>Knowledge Is a Lack of Ignorance</em></a>, <a href="/lawvere-fixed-points"><em>Lawvere's Fixed-Point Theorem</em></a>, <a href="/language-is-trained-synesthesia"><em>Language Is Trained Synesthesia</em></a>, and <code>docs/to-francois-chollet.hypercubical</code>.</p>
+
+  <h3 id="sec-7-1">7.1 Knowledge as Lack of Ignorance and Cubical Observation Fibers</h3>
+  <p>Both classical Greek epistemology (<em>a-lētheia</em>, un-concealment; Plato's <em>Meno</em>, <em>Phaedo</em>, <em>Theaetetus</em>) and classical Indian epistemology (<em>avidyā</em>, ignorance as an obscuration veiling an intrinsically knowing faculty; <em>Muṇḍaka Upaniṣad</em>, Umāsvāti's <em>Tattvārtha Sūtra</em>) define knowledge negatively as the <strong>removal of ignorance</strong>. Rather than accumulating unverified point estimates, knowing eliminates world-histories incompatible with observation. In cubical type theory (<code>lib/observation.hypercubical</code>, <code>lib/fiber.hypercubical</code>), this becomes an exact structural decomposition.</p>
+  <p>Let $H : \mathrm{Type}$ be the space of world histories and $o : H \to O$ an observation map yielding the reading $y = o(h) \in O$ accessible to an agent. By <code>fiberEquiv</code> in <code>lib/fiber.hypercubical</code>, the entire space of histories decomposes without loss into the disjoint dependent sum of its <strong>observation fibers</strong>:</p>
+  <div class="eq-box">$$\mathrm{Fib}_o(y) \;:\equiv\; \sum_{h : H} \big(o(h) \equiv y\big), \qquad H \;\simeq\; \sum_{y : O} \mathrm{Fib}_o(y).$$</div>
+  <p>A reading $y$ <strong>warrants</strong> a proposition $P : H \to \mathrm{Type}$ if and only if $P$ holds across <em>every</em> history compatible with $y$ (<code>Warrants</code> in <code>lib/observation.hypercubical</code>):</p>
+  <div class="eq-box">$$\mathrm{Warrants}(o, y, P) \;:\equiv\; \prod_{hp : \mathrm{Fib}_o(y)} P(\mathrm{fst}\,hp).$$</div>
+  <p>Four machine-checked constructions in <code>lib/observation.hypercubical</code> govern all rational epistemology:</p>
+  <ol>
+    <li><strong>Monotonicity under refinement (<code>warrants-refine</code>):</strong> If a finer observation $o' : H \to O'$ factors $o = g \circ o'$, then $\mathrm{Warrants}(g \circ o', g(y'), P) \to \mathrm{Warrants}(o', y', P)$. Acquiring new evidence strictly shrinks the compatible fiber without ever fabricating a point inside it.</li>
+    <li><strong>No autonomous law on partial projections (<code>no-observed-law</code>):</strong> Consider the deterministic, reversible two-bit universe $J = \mathrm{Bool} \times \mathrm{Bool}$ evolving by the involution <code>whole-step</code> $(a, b) \mapsto (a \oplus b, b)$ (<code>whole-step-involution</code>), observed solely through its first coordinate $\mathrm{fst}$. Then <code>no-observed-law</code> constructs a direct proof of <code>Empty</code> ($\bot$) from any purported closed transition map $g : \mathrm{Bool} \to \mathrm{Bool}$ satisfying $\forall j.\; g(\mathrm{fst}\,j) \equiv \mathrm{fst}(\mathrm{whole\text{-}step}\,j)$: at $(\mathrm{true}, \mathrm{false})$ it forces $g(\mathrm{true}) \equiv \mathrm{true}$, while at $(\mathrm{true}, \mathrm{true})$ it forces $g(\mathrm{true}) \equiv \mathrm{false}$, contradicting <code>true≢false</code>. What looks like irreducible "Bayes noise" on an observed coordinate is structurally the fiber of unobserved coupled state — explaining why passive observational predictors hit an irreducible ceiling that active observation dissolves.</li>
+    <li><strong>Relational reception (<code>readings</code>):</strong> A participant's reception relation $\mathrm{Receive} : S \to M \to S \to A \to \mathrm{Type}$ relates current state $s$, received utterance $u \in M$, next state $s'$, and interpreted act $a \in A$, giving the fiber of compatible readings $\sum_{s':S}\sum_{a:A} \mathrm{Receive}(s, u, s', a)$ — directly formalizing communicative ambiguity without premature collapse.</li>
+    <li><strong>Contractibility of singletons (<code>sing-contr</code>):</strong> $\mathrm{Sing}(a) \equiv \sum_{x:A} (a \equiv x)$ is contractible (<code>isContr</code>). Attaching an equality proof to a known value adds zero spurious degrees of freedom; when an observation fiber contracts to a singleton, ignorance vanishes completely.</li>
+  </ol>
+  <p>Whenever $\mathrm{Fib}_o(y)$ admits a <strong>split witness</strong> — two compatible histories $(h_1, h_2)$ with $P(h_1)$ and $\neg P(h_2)$ — asserting $P$ is provably unwarranted. Instead of sampling a hallucinated completion, a rational agent issues an <strong>active query</strong> whose outcome separates $h_1$ from $h_2$ (unifying active learning, Settles 2009, and CIRL, Hadfield-Menell et al. 2016, inside dependent type theory).</p>
+
+  <div class="lab-card">
+    <div class="lab-head">
+      <span class="lbl">Observation-Fiber &amp; Active-Querying Refinement</span>
+      <span class="lab-status" id="fibStatus">8 compatible histories · SPLIT WITNESS (h₀ vs h₄)</span>
+    </div>
+    <div class="lab-stage" id="fibStage"><canvas id="fibCanvas"></canvas></div>
+    <div class="lab-ctrl">
+      <button class="lab-btn" id="qA">Query A: Parity</button>
+      <button class="lab-btn" id="qB">Query B: Safety Bound</button>
+      <button class="lab-btn" id="qC">Query C: Standpoint</button>
+      <button class="lab-btn" id="qReset">Reset Fiber</button>
+    </div>
+  </div>
+
+  <h3 id="sec-7-2">7.2 Chollet's Definition of Intelligence: Skill-Acquisition Efficiency and Two Kinds of Abstraction</h3>
+  <p>Evaluating AI on static benchmark accuracy confuses <em>memorized skill</em> with <em>intelligence</em>. François Chollet (2019, <em>On the Measure of Intelligence</em>; see <code>docs/to-francois-chollet.hypercubical</code>) gave the field's cleanest operational definition: intelligence is <strong>skill-acquisition efficiency</strong> over a scope of tasks, explicitly normalized by the system's <em>priors</em> and <em>experience</em>. Any benchmark that fails to charge a system for trillions of pretraining tokens and hardcoded task templates measures crystallized lookup, not general intelligence.</p>
+  <p>Chollet's <strong>Kaleidoscope Hypothesis</strong> observes that the unbounded apparent novelty of the world is generated by recombining a compact set of recurring structural invariants, and distinguishes two fundamentally different modes of abstraction:</p>
+  <ul>
+    <li><strong>Value-centric abstraction (Type 1):</strong> Compares data by continuous metric distance in $\mathbb{R}^d$, enabling smooth local interpolation — the core strength of gradient-trained neural networks.</li>
+    <li><strong>Program-centric abstraction (Type 2):</strong> Compares structures by exact discrete/algebraic isomorphism of generating programs (types, equivalences, compositional combinators) — enabling exact zero-shot out-of-distribution generalization across novel recombinations where continuous interpolation fails.</li>
+  </ul>
+  <p>Hyperactivity resolves the 70-year schism between symbolic AI (McCarthy, 1959; Minsky, 1961; Newell &amp; Simon, 1976) and connectionism (Rosenblatt, 1958; Rumelhart et al., 1986): computational univalence (<code>ua</code>) makes program-level structural equivalence first-class identity, interaction nets evaluate programs with Lévy-optimal sharing ($\delta$) and local erasure ($\varepsilon$), and continuous homotopy intervals $I$ live natively alongside inductive types inside one verified kernel.</p>
+
+  <h3 id="sec-7-3">7.3 Self-Reference, Lawvere's Fixed-Point Theorem, and Guarded Metacircularity</h3>
+  <p>Any complete theory of intelligence must confront self-reference: an agent inspecting its own code, verifying its own verifier, or reasoning about the truth predicate of its own language. In <a href="/lawvere-fixed-points"><em>Lawvere's Fixed-Point Theorem</em></a> (<code>docs/lawvere-fixed-points.md</code>), Avik presents F. William Lawvere's (1969) unification of Cantor's theorem, Russell's paradox, Gödel's first incompleteness theorem (1931), Tarski's undefinability of truth (1936), and Turing's halting theorem (1936) in a single five-line constructive proof valid in any Cartesian Closed Category:</p>
+
+  <div class="thm-box">
+    <div class="thm-head"><span>Theorem 7.1 · Lawvere's Fixed-Point Theorem</span><span>Lawvere (1969); docs/lawvere-fixed-points.md</span></div>
+    <p>In any Cartesian Closed Category with objects $A, B$, exponential $B^A$, and evaluation, if $\varphi : A \to B^A$ is <em>point-surjective</em> (every $g : 1 \to B^A$ equals $\varphi(a)$ for some $a : 1 \to A$), then every endomorphism $f : B \to B$ has a fixed point $b = f(b)$.</p>
+    <p><em>Proof.</em> Define the diagonal $g : A \to B$ by $g(a) = f(\varphi(a)(a))$. By point-surjectivity, $g = \varphi(a_0)$ for some $a_0 : 1 \to A$. Evaluating at $a_0$ yields $\varphi(a_0)(a_0) = g(a_0) = f(\varphi(a_0)(a_0))$, so $b = \varphi(a_0)(a_0)$ is a fixed point of $f$. $\square$</p>
+  </div>
+
+  <p>By contrapositive, whenever $B$ admits a fixed-point-free endomorphism (such as Boolean negation $\neg : \mathbf{2} \to \mathbf{2}$), no point-surjective map $A \to B^A$ exists: $B = \mathbf{2}$ yields Cantor's $|A| \lt |\mathcal{P}(A)|$; $A =$ formulas and $f = \neg$ yields Gödel's incompleteness and Tarski's undefinability; $A =$ programs and $B =$ halting booleans yields Turing's halting undecidability. Because the proof uses neither the law of excluded middle nor choice, it holds constructively inside cubical type theory — showing both why unindexed two-valued global truth collapses under self-reference unless predication is indexed by standpoint (<em>catuṣkoṭi</em> in Nāgārjuna's <em>Mūlamadhyamakakārikā</em> and Jain <em>saptabhaṅgī</em> / <em>syādvāda</em>; Umāsvāti; Haldane, 1957; Matilal, 1981; Ganeri, 2002; Priest, 2008) and how productive self-reference works constructively via clocked guarded recursion ($\triangleright^\kappa$). In <code>lib/singularity.hypercubical</code>, this closes the self-hosting loop: a cold self-hosted pool verifier crawls <code>store/&lt;key&gt;/forms</code> directly from disk, masks each target definition's own global slot so circular self-justification is structurally impossible, checks <code>body : type</code>, implements productive guarded Lawvere + metacircular theory transport, and emits itself both as ISO C11 (<code>sg-c</code>) and as a zero-gcc static ELF64 binary (<code>sg-elf</code>).</p>
+
+  <h3 id="sec-7-4">7.4 Meaning Derived from the Record and Language as Trained Synesthesia</h3>
+  <p>What fixes the meaning of a word or symbol? Across Pāṇini's <em>Aṣṭādhyāyī</em>, Bhartṛhari's <em>Vākyapadīya</em>, Dignāga and Dharmakīrti's theory of <em>apoha</em> (determination by exclusion), Wittgenstein's <em>Philosophical Investigations</em> §43 ("the meaning of a word is its use in the language"), Harris (1954), and Firth (1957), linguistics established one law that neural word embeddings (Mikolov et al., 2013) approximated numerically: <strong>a word means its usage history in the record</strong>. In Hyperactivity, <code>lib/meaning.hypercubical</code> computes meaning directly from the content-addressed record without opaque weight distortion — making transparent why post-training that silently alters how models respond to politically or clinically contested words is literally minting institutional meaning by machine.</p>
+  <p>In <a href="/language-is-trained-synesthesia"><em>Language Is Trained Synesthesia</em></a> (<code>docs/language-is-trained-synesthesia.md</code>; <code>neuro/synesthesia.hypercubical</code>), Avik proves an accompanying cognitive theorem: every literate human satisfies the clinical/neuroscience definition of synesthesia (automatic, involuntary, consistent cross-modal binding between visual graphemes and auditory phonology/semantics, measured directly in voice-selective auditory cortex during silent reading and via Stroop interference). Literacy is therefore a constructive planetary-scale proof of <strong>synthetic synesthesia</strong> — deliberate cognitive engineering of cross-modal homomorphisms over human perception, implemented directly across the site via <code>/synesthesia</code>.</p>
+</section>
+
+<section id="ch8" class="chapter">
+  <div class="ch-num">Chapter 8</div>
+  <h2>Intelligence as Exact Compression: Causal Context-Fiber Coding and Machine-Checked Optimality</h2>
+
+  <p>Shannon (1948), Solomonoff (1964), Rissanen (1978), Hutter (2005, AIXI; Legg &amp; Hutter, 2007), and Delétang et al. (2024, <em>Language Modeling Is Compression</em>) establish a fundamental equivalence: <strong>prediction and lossless compression are dual</strong>. Any sequential predictor $q(x_t \mid x_{\lt t})$ paired with an arithmetic or ANS coder compresses sequence $x_{1:N}$ to $\sum_{t=1}^N -\log_2 q(x_t \mid x_{\lt t}) + O(1)$ bits — meaning cross-entropy loss <em>is</em> compressed bit rate. Yet neural language models spend billions of floating-point parameters without carrying invertibility proofs or exact entropy guarantees.</p>
+  <p>In <a href="/compression"><em>Causal Context-Fiber Record Compression in Cubical Type Theory</em></a> (<code>docs/causal-context-fiber-compression.md</code>) and its machine-checked modules <code>lib/compress.hypercubical</code>, <code>lib/compress-stream.hypercubical</code>, and <code>lib/optimality.hypercubical</code>, Hyperactivity constructs an exact, zero-postulate, zero-float universal compressor that proves both universal lossless roundtrip and near-entropy coding optimality inside the cubical kernel — while beating <code>gzip -9</code>, <code>bzip2 -9</code>, and <code>xz -9</code> on real C source, HTML, and English prose.</p>
+
+  <h3 id="sec-8-1">8.1 Zero Search, Causal Prefix Fibers, and Earliest-Content Ground Bijection</h3>
+  <p>Classical compressors (LZ77/DEFLATE, LZMA/xz, BWT/bzip2) rely on heuristic hash-chain search or non-causal full-block sorting that cannot maintain online causal state or carry structural roundtrip proofs. Hyperactivity derives compression from one invariant: <strong>each symbol $x_t$ is conditioned strictly on its causal prefix context $x_{\lt t}$ via an online context trie <code>CtxTree</code> / <code>CtxState</code></strong>. Because the decoder updates the identical causal trie symbol-by-symbol during decoding, zero side dictionaries or lookup tables are transmitted on the wire, and the <strong>earliest-content ground bijection</strong> (<code>ground-enc-rem</code> / <code>ground-dec-rem</code>) codes novel symbols dynamically over the remaining unseen alphabet with zero wasted code space.</p>
+  <p>At step $t$, the longest matching context fiber $c$ supplies exact empirical continuation counts plus an escape weight (<code>fiber-with-esc</code>). Whenever a symbol escapes from context $c$ to its shorter suffix $c'$, every symbol already present in $c$'s fiber is <strong>excluded</strong> from $c'$'s support — exact fiber exclusion (matching Moffat, 1990 PPM* exclusion) proved bijective directly in the cubical type checker.</p>
+
+  <h3 id="sec-8-2">8.2 Streaming $O(N)$ Renormalized rANS and Exact Information-Theoretic Bounds</h3>
+  <p>To eliminate Huffman's per-symbol integer-bit overhead, Hyperactivity uses <strong>range Asymmetric Numeral Systems (rANS)</strong> (Duda, 2009, 2013). Naive bignum rANS grows its state integer to $\Theta(N)$ bits ($O(N^2)$ arithmetic). In <code>lib/compress-stream.hypercubical</code>, constraining the active register $s$ to the invariant interval $[L, 256L)$ and spilling excess base-256 bytes onto a LIFO byte stream lowers both encoder and decoder to <strong>$O(N)$ time and $O(1)$ register width</strong>, with universal kernel-checked roundtrip proofs (<code>sr-renorm-ok</code>, <code>sr-step-ok</code>, <code>cfs-list-ok</code>):</p>
+
+  <div class="thm-box">
+    <div class="thm-head"><span>Theorem 8.1 · Exact rANS Rate Identity &amp; Shannon Self-Information Upper Bound</span><span>lib/optimality.hypercubical · rans-rate-identity, rans-rate-upper</span></div>
+    <p>For any rANS coding step on a symbol with frequency $f \gt 0$, cumulative offset $C$, scale $M$ ($C + f \le M$), and state $s = q f + r$ ($0 \le r \lt f$), the updated state $s' = q M + C + r$ satisfies the exact integer identity:</p>
+    <div class="eq-box">$$f \cdot s' + r \cdot (M - f) \;\equiv\; M \cdot s + f \cdot C \quad\Longrightarrow\quad s' \;\lt\; \frac{M}{f}\,s + M.$$</div>
+    <p>Over the renormalized window $[L, 256L)$, each coding step expands state bit-length by at most $\log_2(M/f) + \frac{M}{L \ln 2}$ bits. At $L = 2^{23}$ and $M = 2^{15}$, total coding overhead above exact Shannon self-information $-\log_2(f/M)$ is strictly less than <strong>$0.0056$ bits per symbol</strong> — machine-checked in exact integer arithmetic with zero floating-point approximations.</p>
+  </div>
+
+  <div class="lab-card">
+    <div class="lab-head">
+      <span class="lbl">Streaming rANS Renormalization &amp; Exact Bit-Cost Register</span>
+      <span class="lab-status" id="ransStatus">State s ∈ [L, 256L) · Overhead &lt; 0.0056 bits/sym</span>
+    </div>
+    <div class="lab-stage" id="ransStage"><canvas id="ransCanvas"></canvas></div>
+    <div class="lab-ctrl">
+      <button class="lab-btn" data-sym="0">Encode A (p=0.50)</button>
+      <button class="lab-btn" data-sym="1">Encode B (p=0.25)</button>
+      <button class="lab-btn" data-sym="2">Encode C (p=0.1875)</button>
+      <button class="lab-btn" data-sym="3">Encode D (p=0.0625)</button>
+      <button class="lab-btn" id="ransDec">Decode Step (LIFO)</button>
+      <button class="lab-btn" id="ransReset">Reset</button>
+    </div>
+  </div>
+
+  <h3 id="sec-8-3">8.3 Empirical Compression Benchmarks and Zero-UB Native C Compilation</h3>
+  <p>Lowering <code>.hypercubical</code> directly to C via <code>lib/c-sound.hypercubical</code> (<code>ce-full-of</code>, <code>ce-run-of</code> — proving per-template zero undefined behavior across all 13 word primitives, closures, pairs, constructors, loops, and world IO), the verified streaming codec executes at <strong>12.2M ops/sec</strong> (and general compiled interaction-net steps at <strong>32.9M ops/sec</strong>) under <code>gcc -O3</code> with zero UBSan violations, beating standard industrial compressors across structured code and prose (<a href="/compression">full benchmarks</a>):</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Corpus</th><th style="text-align:right">Raw Size</th><th style="text-align:right;color:var(--pink)">cfs-ord6-D</th><th style="text-align:right">gzip -9</th><th style="text-align:right">bzip2 -9</th><th style="text-align:right">xz -9</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>C source (<code>src/*.c *.h</code>)</td><td style="text-align:right">1.07 MB</td><td style="text-align:right;font-weight:700;color:var(--pink)">1.642 bpb</td><td style="text-align:right">2.137</td><td style="text-align:right">1.698</td><td style="text-align:right">1.702</td></tr>
+        <tr><td>HTML / Web UI</td><td style="text-align:right">60 KB</td><td style="text-align:right;font-weight:700;color:var(--pink)">2.184 bpb</td><td style="text-align:right">2.366</td><td style="text-align:right">2.292</td><td style="text-align:right">2.220</td></tr>
+        <tr><td>English prose</td><td style="text-align:right">80 KB</td><td style="text-align:right;font-weight:700;color:var(--pink)">2.699 bpb</td><td style="text-align:right">3.087</td><td style="text-align:right">2.827</td><td style="text-align:right">2.853</td></tr>
+        <tr><td><code>.hypercubical</code> source</td><td style="text-align:right">103 KB</td><td style="text-align:right;font-weight:700;color:var(--pink)">1.821 bpb</td><td style="text-align:right">1.930</td><td style="text-align:right">1.905</td><td style="text-align:right">1.757</td></tr>
+        <tr><td>x86-64 ELF binary</td><td style="text-align:right">524 KB</td><td style="text-align:right;font-weight:700;color:var(--pink)">3.953 bpb</td><td style="text-align:right">4.257</td><td style="text-align:right">3.878</td><td style="text-align:right">3.701</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="ch9" class="chapter">
+  <div class="ch-num">Chapter 9</div>
+  <h2>Closure of the Field: Standpoint Alignment, Deprogramming into Open Weights, Knowledge Graphs, and Collective Superintelligence</h2>
+
+  <p>We can now assemble the complete architecture past the current frontier — replacing untyped byte streams, population-averaged RLHF, closed vendor APIs, and dead triple-stores with a unified, self-hosted computational substrate.</p>
+
+  <h3 id="sec-9-1">9.1 Standpoint-Indexed Alignment: Many-Sidedness (Anekāntavāda) as Engineering Specification</h3>
+  <p>From Jain logic's <strong>Anekāntavāda</strong> (many-sidedness) and <strong>Syādvāda</strong> (standpoint-indexed predication — Umāsvāti, Samantabhadra, Siddhasena Divākara, Malliṣeṇa; Haldane, 1957; Matilal, 1981; Ganeri, 2002; Priest, 2008), no nontrivial assertion about a complex world drops its standpoint index $s$: every claim holds <em>syāt</em> ("in a certain respect, from standpoint $s$"). In <a href="/alignment-is-standpoint"><em>Alignment Is Standpoint</em></a> (§9), this translates into exact architectural requirements for aligned AI:</p>
+  <ol>
+    <li><strong>Standpoint-indexed reasoning — never marginalize $u$:</strong> Policies take standpoint $u$ explicitly rather than collapsing $\mathcal{S}$ into a scalar rater-pool average $\hat{r}$. Distinct standpoints merge by content-addressed set union preserving provenance, never by destructive averaging.</li>
+    <li><strong>Safety over the entire observation fiber:</strong> Action blocking or refusal is warranted <em>only</em> when harm holds across all histories in $\mathrm{Fib}_o(y)$ — never on surface lexeme triggers. When $\mathrm{Fib}_o(y)$ splits between benign and harmful readings, the system queries to refine the fiber.</li>
+    <li><strong>Inference over the present, not overweighted priors:</strong> Following REBUS (Carhart-Harris &amp; Friston, 2019), precision on institutional priors is relaxed so primary evidence presented in context governs conclusions.</li>
+    <li><strong>Mark the model's own standpoint &amp; preserve open disagreement:</strong> Any evaluative judgment is marked explicitly as one standpoint rather than disguised as neutral consensus, leaving final decision authority with the human.</li>
+    <li><strong>Meet the user's language &amp; count harm at the standpoints harmed:</strong> Do not police register or dialect (Labov, 1969; Fricker, 2007 epistemic injustice); never allow majority preference in a rater pool to average away harm borne by an unrepresented minority.</li>
+    <li><strong>Flourishing as target, not institutional compliance:</strong> Ground system design in empirical human flourishing (Keltner, 2009, 2015, 2016: prosocial connection, awe, the small self) rather than liability minimization and appeasement scripts.</li>
+  </ol>
+
+  <h3 id="sec-9-2">9.2 Training Agents into Open Weights: Deprogramming, Maintained Views, and Kernel-Verified RL</h3>
+  <p>Once a formal system's monograph and dependency closure exceed ~190,000 tokens, re-injecting foundational principles into a closed vendor prompt on every turn is both structurally wasteful and surrenders sovereignty over the information space. In <a href="/training-agents-into-weights"><em>Training Agents into Weights: Deprogramming and Standpoint</em></a> (<code>docs/training-agents-into-weights.hypercubical</code>), Avik specifies a sovereign open-weight training pipeline:</p>
+  <ul>
+    <li><strong>Post-training is deprogramming:</strong> Left to their pretrained and RLHF-shaped priors, models default at every decision to conventional software engineering and institutional deference — mutable files, branches, ritual permission-seeking, hedging, and lossy paraphrase. Post-training into open weights strips modal defaults and installs exact content-addressed invariants and theorem-grade prose.</li>
+    <li><strong>Whole-argument training examples:</strong> Training examples keep complete premise–derivation–conclusion arcs intact inside single turns rather than chunking texts arbitrarily and severing proofs from conclusions.</li>
+    <li><strong>Natural transcript supervision + on-policy open-weight rollouts:</strong> Historical transcripts pair every turn with immediate human acceptance, refinement, or exact error diagnosis; on-policy rollouts of the target open-weight model inside live repository states expose its true failure modes for contrastive updates.</li>
+    <li><strong>Continuous training as a maintained view:</strong> Every training shard is keyed by the SHA-256 content hashes of the store objects it derives from (Part I, §10.2 &amp; §10.5); when a proof or essay edits, only affected shards regenerate, and the resulting LoRA adapter (Hu et al., 2021) is stored as a content-addressed object carrying its exact corpus hash closure.</li>
+    <li><strong>Deterministic cubical kernel verification as RL reward:</strong> Running <code>./hyperactive --serve</code> grades every generated declaration deterministically with acceptance or exact type error — supplying zero-noise, mathematically unhackable RL rewards (RLVR / GRPO; Shao et al., 2024) where the reward <em>is</em> the kernel.</li>
+  </ul>
+
+  <h3 id="sec-9-3">9.3 Knowledge Graphs as Constructions with Rationale, Receptivity, and Conserved Credit</h3>
+  <p>As proved in <a href="/hyperactivity-is-the-theory-of-knowledge-graphs"><em>Hyperactivity as a Theory of Knowledge Graphs</em></a> (<code>docs/hyperactivity-is-the-theory-of-knowledge-graphs.hypercubical</code>), conventional knowledge graphs (RDF, OWL, property graphs) encode bare <em>assertions</em> without rationale: an edge claims $R(a, b)$ without storing its proof, <code>owl:sameAs</code> asserts equality without transporting proofs across representations, and external inference engines go stale silently. In Hyperactivity's <a href="/kg">Knowledge Graph</a>, every node is a <strong>typed construction paired with its proof witness</strong> addressed by SHA-256 hash, equality is a cubical path carrying automatic transport (<code>ua</code>), schemas and queries live inside the language via reflection, and derived views maintain exact dependency certificates (<code>lib/maintenance.hypercubical</code>, <code>lib/sum-edit.hypercubical</code>).</p>
+  <p>Scaling from one mind to <strong>collective superintelligence</strong> requires decentralized peer coupling and unforgeable attribution:</p>
+  <ul>
+    <li><strong>Hyperactive Receptivity (<code>docs/hyperactive-receptivity.md</code>, <code>lib/ceptr.hypercubical</code>, <code>lib/polyproc.hypercubical</code>):</strong> Completes Arthur Brock and Eric Harris-Braun's Ceptr and Holochain inside cubical type theory — dynamic interface-reshaping processes (<code>RProc</code>) exchanging verified constructions locally across principal ports (<code>lib/distnet.hypercubical</code>, <code>lib/pool.hypercubical</code>, <code>lib/dht.hypercubical</code>) with zero central server.</li>
+    <li><strong>Exact Distributed Credit Conservation (<code>lib/credit.hypercubical</code>):</strong> <code>cr-conserved</code> and <code>rcpt-credit</code> prove that credit transfers across asynchronous peer channels strictly conserve total credit with no global scheduler and no double-spend — ensuring every contribution to the shared record carries permanent provenance (<code>docs/ye-every-record-credited.md</code>).</li>
+    <li><strong>One Univalent Stack from Silicon to Society:</strong> The same cubical kernel (<code>lib/check.hypercubical</code>), cold self-hosted verifier (<code>lib/singularity.hypercubical</code>), and interaction-net evaluator (<code>src/net.c</code>) check statistical and coding optimality (<code>lib/optimality.hypercubical</code>), reverse-mode AD and 16-tile post-von-Neumann silicon (<code>lib/silicon/hypernet16.hypercubical</code>, <a href="/silicon"><code>/silicon</code></a>), closed-loop neural co-processor stability (<code>neuro/lyapunov.hypercubical</code>, <a href="/neuro"><code>/neuro</code></a>), and decentralized multi-agent fleets (<code>lib/fleet.hypercubical</code>).</li>
+  </ul>
+</section>
+
+<section id="bib" class="chapter">
+  <div class="ch-num">References</div>
+  <h2>Primary Literature by Subfield</h2>
+  <p>Complete bibliography of foundational results, critiques, and Hyperactivity formalizations cited across Chapters 1–9.</p>
+
+  <h3>Statistical Learning Theory, Decision Theory, Linear &amp; Unsupervised Methods</h3>
+  <ol class="bib-list">
+    <li>Pearson, K. (1901). On lines and planes of closest fit to systems of points in space. <em>Phil. Mag.</em>; Hotelling, H. (1933). Analysis of a complex of statistical variables into principal components. <em>J. Educ. Psychol.</em></li>
+    <li>Mercer, J. (1909). Functions of positive and negative type. <em>Phil. Trans. R. Soc. A</em>; Aronszajn, N. (1950). Theory of reproducing kernels. <em>Trans. AMS</em>.</li>
+    <li>Fisher, R. A. (1936). The use of multiple measurements in taxonomic problems (LDA). <em>Annals of Eugenics</em>; Eckart, C., &amp; Young, G. (1936). The approximation of one matrix by another of lower rank. <em>Psychometrika</em>.</li>
+    <li>Wald, A. (1950). <em>Statistical Decision Functions</em>. Wiley.</li>
+    <li>James, W., &amp; Stein, C. (1961). Estimation with quadratic loss. <em>Proc. 4th Berkeley Symp. Math. Stat. Probab.</em></li>
+    <li>Hoeffding, W. (1963). Probability inequalities for sums of bounded random variables. <em>JASA</em>, 58(301), 13–30.</li>
+    <li>Hoerl, A. E., &amp; Kennard, R. W. (1970). Ridge regression: Biased estimation for nonorthogonal problems. <em>Technometrics</em>, 12(1), 55–67.</li>
+    <li>Kimeldorf, G., &amp; Wahba, G. (1971). Some results on Tchebycheffian spline functions. <em>J. Math. Anal. Appl.</em></li>
+    <li>Vapnik, V. N., &amp; Chervonenkis, A. Ya. (1971). On the uniform convergence of relative frequencies of events to their probabilities. <em>Theory Probab. Appl.</em></li>
+    <li>Sauer, N. (1972). On the density of families of sets. <em>J. Combin. Theory Ser. A</em>; Shelah, S. (1972). A combinatorial problem. <em>Pacific J. Math.</em></li>
+    <li>Koenker, R., &amp; Bassett, G. (1978). Regression quantiles. <em>Econometrica</em>, 46(1), 33–50.</li>
+    <li>Lloyd, S. P. (1982). Least squares quantization in PCM ($k$-means). <em>IEEE Trans. Inf. Theory</em>; Arthur, D., &amp; Vassilvitskii, S. (2007). $k$-means++. <em>SODA</em>.</li>
+    <li>Valiant, L. G. (1984). A theory of the learnable. <em>CACM</em>, 27(11), 1134–1142.</li>
+    <li>Blumer, A., Ehrenfeucht, A., Haussler, D., &amp; Warmuth, M. K. (1989). Learnability and the Vapnik–Chervonenkis dimension. <em>JACM</em>.</li>
+    <li>Ledoux, M., &amp; Talagrand, M. (1991). <em>Probability in Banach Spaces</em>. Springer.</li>
+    <li>Boser, B. E., Guyon, I. M., &amp; Vapnik, V. N. (1992). Optimal margin classifiers. <em>COLT</em>; Cortes, C., &amp; Vapnik, V. (1995). Support-vector networks. <em>Machine Learning</em>.</li>
+    <li>Geman, S., Bienenstock, E., &amp; Doursat, R. (1992). Neural networks and the bias/variance dilemma. <em>Neural Computation</em>, 4(1), 1–58.</li>
+    <li>Breiman, L. (1996). Bagging predictors. <em>Machine Learning</em>; Breiman, L. (2001). Random forests. <em>Machine Learning</em>, 45, 5–32.</li>
+    <li>Wolpert, D. H. (1996). The lack of a priori distinctions between learning algorithms; Wolpert, D. H., &amp; Macready, W. G. (1997). No free lunch theorems for optimization. <em>IEEE Trans. Evol. Comput.</em></li>
+    <li>Freund, Y., &amp; Schapire, R. E. (1997). AdaBoost. <em>JCSS</em>; Schapire, R. E., Freund, Y., Bartlett, P., &amp; Lee, W. S. (1998). Boosting the margin. <em>Annals of Statistics</em>.</li>
+    <li>Schölkopf, B., Smola, A., &amp; Müller, K.-R. (1998). Nonlinear component analysis as a kernel eigenvalue problem (Kernel PCA). <em>Neural Computation</em>; Schölkopf, B., Herbrich, R., &amp; Smola, A. J. (2001). Generalized representer theorem. <em>COLT</em>.</li>
+    <li>Heskes, T. (1998). Bias/variance decompositions for likelihood-based estimators; Pfau, D. (2013). A generalized bias–variance decomposition for Bregman divergences.</li>
+    <li>Bartlett, P. L. (1998). Sample complexity of pattern classification with neural networks; Bartlett, P. L., Harvey, N., Liaw, C., &amp; Mehrabian, A. (2019). Nearly-tight VC-dimension bounds for ReLU networks. <em>JMLR</em>.</li>
+    <li>McAllester, D. A. (1999). PAC-Bayesian model averaging. <em>COLT</em>; Dziugaite, G. K., &amp; Roy, D. M. (2017). Nonvacuous generalization bounds for deep neural networks. <em>UAI</em>.</li>
+    <li>Domingos, P. (2000). A unified bias–variance decomposition and its applications. <em>ICML</em>.</li>
+    <li>Shi, J., &amp; Malik, J. (2000). Normalized cuts and image segmentation. <em>IEEE TPAMI</em>; Ng, A. Y., Jordan, M. I., &amp; Weiss, Y. (2002). On spectral clustering. <em>NeurIPS</em>.</li>
+    <li>Friedman, J. H. (2001). Greedy function approximation: A gradient boosting machine. <em>Annals of Statistics</em>.</li>
+    <li>Ng, A. Y., &amp; Jordan, M. I. (2002). On discriminative vs. generative classifiers: A comparison of logistic regression and naive Bayes. <em>NeurIPS</em>.</li>
+    <li>Bartlett, P. L., &amp; Mendelson, S. (2002). Rademacher and Gaussian complexities. <em>JMLR</em>, 3, 463–482.</li>
+    <li>Gneiting, T., &amp; Raftery, A. E. (2007). Strictly proper scoring rules, prediction, and estimation. <em>JASA</em>, 102(477), 359–378.</li>
+    <li>Settles, B. (2009). Active learning literature survey. <em>UW–Madison CS Tech Report 1648</em>.</li>
+    <li>Neyshabur, B., Tomioka, R., &amp; Srebro, N. (2015). Norm-based capacity control in neural networks. <em>COLT</em>; Hanneke, S. (2016). Optimal sample complexity of PAC learning. <em>JMLR</em>.</li>
+    <li>Zhang, C., Bengio, S., Hardt, M., Recht, B., &amp; Vinyals, O. (2017). Understanding deep learning requires rethinking generalization. <em>ICLR</em>.</li>
+    <li>Belkin, M., Hsu, D., Ma, S., &amp; Mandal, S. (2019). Reconciling modern machine-learning practice and the classical bias–variance trade-off. <em>PNAS</em>, 116(32), 15849–15854.</li>
+    <li>Wainwright, M. J. (2019). <em>High-Dimensional Statistics: A Non-Asymptotic Viewpoint</em>. Cambridge University Press.</li>
+    <li>Bartlett, P. L., Long, P. M., Lugosi, G., &amp; Tsigler, A. (2020). Benign overfitting in linear regression. <em>PNAS</em>, 117(48), 30063–30070.</li>
+    <li>Hastie, T., Montanari, A., Rosset, S., &amp; Tibshirani, R. J. (2022). Surprises in high-dimensional ridgeless least squares interpolation. <em>Annals of Statistics</em>, 50(2), 949–986.</li>
+  </ol>
+
+  <h3>Information Theory, Compression, Inference, Causality &amp; Classical Search/SAT</h3>
+  <ol class="bib-list">
+    <li>Shannon, C. E. (1948). A mathematical theory of communication. <em>Bell System Technical Journal</em>.</li>
+    <li>Kraft, L. G. (1949); McMillan, B. (1956). Two inequalities implied by unique decipherability. <em>IRE Trans. Inf. Theory</em>.</li>
+    <li>Kullback, S., &amp; Leibler, R. A. (1951). On information and sufficiency. <em>Annals of Mathematical Statistics</em>.</li>
+    <li>Metropolis, N. et al. (1953); Hastings, W. K. (1970). Monte Carlo sampling methods using Markov chains. <em>Biometrika</em>.</li>
+    <li>Fano, R. M. (1961). <em>Transmission of Information</em>; Yu, B. (1997). Assouad, Fano, and Le Cam.</li>
+    <li>Davis, M., Logemann, G., &amp; Loveland, D. (1962). A machine program for theorem-proving (DPLL); Robinson, J. A. (1965). Resolution principle. <em>JACM</em>.</li>
+    <li>Solomonoff, R. J. (1964). A formal theory of inductive inference; Kolmogorov, A. N. (1965); Chaitin, G. J. (1966).</li>
+    <li>Hart, P. E., Nilsson, N. J., &amp; Raphael, B. (1968). A formal basis for the heuristic determination of minimum cost paths ($A^*$). <em>IEEE Trans. SSC</em>; Knuth, D. E., &amp; Moore, R. W. (1975). An analysis of alpha–beta pruning. <em>Artificial Intelligence</em>.</li>
+    <li>Nelder, J. A., &amp; Wedderburn, R. W. M. (1972). Generalized linear models. <em>JRSS-A</em>.</li>
+    <li>Rubin, D. B. (1974). Estimating causal effects of treatments; Imbens, G. W., &amp; Rubin, D. B. (2015). <em>Causal Inference</em>.</li>
+    <li>Dempster, A. P., Laird, N. M., &amp; Rubin, D. B. (1977). Maximum likelihood from incomplete data via the EM algorithm. <em>JRSS-B</em>.</li>
+    <li>Rissanen, J. (1978). Modeling by shortest data description. <em>Automatica</em>; Barron, A., Rissanen, J., &amp; Yu, B. (1998). MDL principle. <em>IEEE Trans. Inf. Theory</em>.</li>
+    <li>Geman, S., &amp; Geman, D. (1984). Gibbs distributions; Lauritzen, S. L., &amp; Spiegelhalter, D. J. (1988). Junction trees. <em>JRSS-B</em>.</li>
+    <li>Pearl, J. (1988). <em>Probabilistic Reasoning in Intelligent Systems</em>; Pearl, J. (2000/2009). <em>Causality: Models, Reasoning, and Inference</em>.</li>
+    <li>Moffat, A. (1990). PPM compression. <em>IEEE Trans. Comm.</em>; Manber, U., &amp; Myers, G. (1990). Suffix arrays. <em>SODA</em>.</li>
+    <li>Russell, S., &amp; Norvig, P. (1995/2020). <em>Artificial Intelligence: A Modern Approach</em> (4th ed.). Pearson.</li>
+    <li>Jordan, M. I. et al. (1999). Variational methods for graphical models; Marques-Silva, J. P., &amp; Sakallah, K. A. (1999). GRASP (CDCL); Moskewicz, M. W. et al. (2001). Chaff. <em>DAC</em>.</li>
+    <li>Hutter, M. (2005). <em>Universal Artificial Intelligence</em>; Legg, S., &amp; Hutter, M. (2007). Universal intelligence.</li>
+    <li>Milch, B., Marthi, B., Russell, S., Sontag, D., Ong, D. L., &amp; Kolobov, A. (2005). BLOG: Probabilistic models with unknown objects. <em>IJCAI</em>.</li>
+    <li>Shpitser, I., &amp; Pearl, J. (2006); Huang, Y., &amp; Valtorta, M. (2006). Completeness of Pearl's do-calculus; Nieuwenhuis, R., Oliveras, A., &amp; Tinelli, C. (2006). DPLL($T$); de Moura, L., &amp; Bjørner, N. (2008). Z3.</li>
+    <li>Wainwright, M. J., &amp; Jordan, M. I. (2008). Graphical models, exponential families, and variational inference.</li>
+    <li>Duda, J. (2009/2013). Asymmetric numeral systems. <em>arXiv:1311.2540</em>.</li>
+    <li>Neal, R. M. (2011). HMC; Hoffman, M. D., &amp; Gelman, A. (2014). NUTS. <em>JMLR</em>; Blei, D. M. et al. (2017). Variational inference. <em>JASA</em>.</li>
+    <li>Delétang, G. et al. (2024). Language modeling is compression. <em>ICLR</em>.</li>
+  </ol>
+
+  <h3>Optimization, Automatic Differentiation &amp; Deep Learning Theory</h3>
+  <ol class="bib-list">
+    <li>Robbins, H., &amp; Monro, S. (1951). A stochastic approximation method; Rosenblatt, F. (1958). The perceptron.</li>
+    <li>Linnainmaa, S. (1970); Werbos, P. (1974); Baur, W., &amp; Strassen, V. (1983). The complexity of partial derivatives. <em>TCS</em>.</li>
+    <li>Nemirovski, A., &amp; Yudin, D. (1983); Nesterov, Y. (1983, 2004). Accelerated convex optimization.</li>
+    <li>Rumelhart, D. E., Hinton, G. E., &amp; Williams, R. J. (1986). Learning representations by back-propagating errors. <em>Nature</em>.</li>
+    <li>Cybenko, G. (1989); Hornik, K. (1991). Universal approximation theorems.</li>
+    <li>Griewank, A. (1992); Griewank, A., &amp; Walther, A. (2008). <em>Evaluating Derivatives</em>; Chen, T. et al. (2016). Gradient checkpointing.</li>
+    <li>Tibshirani, R. (1996). Lasso. <em>JRSS-B</em>; Candès, E. J., Romberg, J., &amp; Tao, T. (2006); Donoho, D. L. (2006). Compressed sensing.</li>
+    <li>Hochreiter, S., &amp; Schmidhuber, J. (1997b). Flat minima; Amari, S. (1998). Natural gradient; Martens, J., &amp; Grosse, R. (2015). K-FAC.</li>
+    <li>Beck, A., &amp; Teboulle, M. (2003, 2009). Mirror descent &amp; FISTA; Zinkevich, M. (2003); Hazan, E. (2016). Online convex optimization.</li>
+    <li>Boyd, S., &amp; Vandenberghe, L. (2004). <em>Convex Optimization</em>. Cambridge Univ. Press.</li>
+    <li>Duchi, J., Hazan, E., &amp; Singer, Y. (2011). AdaGrad; Kingma, D. P., &amp; Ba, J. (2014). Adam; Loshchilov, I., &amp; Hutter, F. (2017). AdamW; Gupta, V. et al. (2018). Shampoo.</li>
+    <li>Telgarsky, M. (2016); Eldan, R., &amp; Shamir, O. (2016). Depth separation in neural networks. <em>COLT</em>.</li>
+    <li>Baydin, A. G. et al. (2018). Automatic differentiation in machine learning: A survey. <em>JMLR</em>.</li>
+    <li>Jacot, A., Gabriel, F., &amp; Hongler, C. (2018). NTK. <em>NeurIPS</em>; Chizat, L., Oyallon, E., &amp; Bach, F. (2019). Lazy training.</li>
+    <li>Soudry, D. et al. (2018). Implicit bias of GD on separable data. <em>JMLR</em>; Ji, Z., &amp; Telgarsky, M. (2019); Lyu, K., &amp; Li, J. (2020).</li>
+    <li>Mei, S., Montanari, A., &amp; Nguyen, P.-M. (2018). Mean-field neural networks. <em>PNAS</em>; Yang, G., &amp; Hu, E. J. (2021). Tensor Programs IV ($\mu$P). <em>ICML</em>.</li>
+    <li>Frankle, J., &amp; Carbin, M. (2019). Lottery ticket hypothesis. <em>ICLR</em>; Power, A. et al. (2022). Grokking; Nanda, N. et al. (2023). Progress measures for grokking. <em>ICLR</em>.</li>
+  </ol>
+
+  <h3>Architectures, Generative Models, Self-Supervision, Scaling &amp; Interpretability</h3>
+  <ol class="bib-list">
+    <li>Anderson, B. D. O. (1982). Reverse-time diffusion equation models; Vincent, P. (2011). Denoising score matching.</li>
+    <li>LeCun, Y. et al. (1989, 1998). CNNs; Elman, J. L. (1990); Bengio, Y. et al. (1994); Hochreiter, S., &amp; Schmidhuber, J. (1997). LSTM.</li>
+    <li>Krizhevsky, A., Sutskever, I., &amp; Hinton, G. E. (2012). AlexNet; Mikolov, T. et al. (2013). word2vec.</li>
+    <li>Kingma, D. P., &amp; Welling, M. (2013). VAE; Rezende, D. J. et al. (2014); Goodfellow, I. et al. (2014). GAN; Arjovsky, M. et al. (2017). WGAN.</li>
+    <li>Bahdanau, D., Cho, K., &amp; Bengio, Y. (2014). Neural attention; Ioffe, S., &amp; Szegedy, C. (2015). BatchNorm; Ba, J. L. et al. (2016). LayerNorm; Zhang, B., &amp; Sennrich, R. (2019). RMSNorm.</li>
+    <li>Rezende, D. J., &amp; Mohamed, S. (2015). Normalizing flows; Dinh, L. et al. (2017). Real NVP; Sohl-Dickstein, J. et al. (2015). Diffusion models.</li>
+    <li>He, K., Zhang, X., Ren, S., &amp; Sun, J. (2016). ResNet; Cohen, T. S., &amp; Welling, M. (2016). $G$-CNNs; Bronstein, M. M. et al. (2021). Geometric Deep Learning.</li>
+    <li>Shazeer, N. et al. (2017). Sparse MoE; Shazeer, N. (2020). SwiGLU; Fedus, W. et al. (2022). Switch Transformers.</li>
+    <li>Kipf, T. N., &amp; Welling, M. (2017). GCN; Gilmer, J. et al. (2017). MPNN; Xu, K. et al. (2019). Expressive power of GNNs (1-WL).</li>
+    <li>Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., &amp; Polosukhin, I. (2017). Attention is all you need. <em>NeurIPS</em>.</li>
+    <li>Chen, R. T. Q. et al. (2018). Neural ODEs; Devlin, J. et al. (2018). BERT; van den Oord, A., Li, Y., &amp; Vinyals, O. (2018). CPC / InfoNCE.</li>
+    <li>Radford, A. et al. (2018, 2019); Brown, T. et al. (2020). GPT-3; Radford, A. et al. (2021). CLIP; Chen, T. et al. (2020). SimCLR; He, K. et al. (2020). MoCo; Wang, T., &amp; Isola, P. (2020). Alignment and uniformity; He, K. et al. (2022). MAE; LeCun, Y. (2022) &amp; Assran, M. et al. (2023). I-JEPA.</li>
+    <li>Song, Y., &amp; Ermon, S. (2019); Ho, J., Jain, A., &amp; Abbeel, P. (2020). DDPM; Song, J. et al. (2020). DDIM; Song, Y. et al. (2021). Score SDEs; Ho, J., &amp; Salimans, T. (2022). CFG; Lipman, Y. et al. (2022). Flow Matching; Liu, X. et al. (2022). Rectified Flow.</li>
+    <li>Kaplan, J. et al. (2020). Scaling laws; Hoffmann, J. et al. (2022). Chinchilla; Wei, J. et al. (2022). Chain-of-thought; Snell, C. et al. (2024). Test-time compute scaling.</li>
+    <li>Gu, A. et al. (2020). HiPPO; Gu, A., Goel, K., &amp; Ré, C. (2022). S4; Gu, A., &amp; Dao, T. (2023). Mamba.</li>
+    <li>Olah, C. et al. (2020). Circuits; Elhage, N. et al. (2021). Transformer circuits; Elhage, N. et al. (2022). Superposition; Olsson, C. et al. (2022). Induction heads; Bricken, T. et al. (2023). Sparse autoencoders.</li>
+    <li>Hu, E. J. et al. (2021). LoRA; Su, J. et al. (2021). RoPE; Dao, T. et al. (2022). FlashAttention; Ainslie, J. et al. (2023). GQA; Garg, S. et al. (2022); von Oswald, J. et al. (2023). Transformers learn in-context by gradient descent.</li>
+  </ol>
+
+  <h3>Bandits, Reinforcement Learning, Game Theory &amp; Interactive Robotics</h3>
+  <ol class="bib-list">
+    <li>von Neumann, J. (1928); Nash, J. F. (1950); Thompson, W. R. (1933); Agrawal, S., &amp; Goyal, N. (2012).</li>
+    <li>Bellman, R. (1957). <em>Dynamic Programming</em>; Puterman, M. L. (1994). <em>Markov Decision Processes</em>.</li>
+    <li>Lai, T. L., &amp; Robbins, H. (1985); Auer, P., Cesa-Bianchi, N., &amp; Fischer, P. (2002). UCB1 &amp; Exp3.</li>
+    <li>Sutton, R. S. (1988). TD($\lambda$); Sutton, R. S., &amp; Barto, A. G. (1998/2018). <em>Reinforcement Learning: An Introduction</em>.</li>
+    <li>Watkins, C. J. C. H. (1989); Watkins, C. J. C. H., &amp; Dayan, P. (1992). Q-learning; Williams, R. J. (1992). REINFORCE; Baird, L. (1995).</li>
+    <li>Kaelbling, L. P., Littman, M. L., &amp; Cassandra, A. R. (1998). POMDPs; Sutton, R. S. et al. (1999). Policy Gradient Theorem.</li>
+    <li>Ng, A. Y., &amp; Russell, S. (2000). IRL; Abbeel, P., &amp; Ng, A. Y. (2004); Ziebart, B. D. et al. (2008). MaxEnt IRL.</li>
+    <li>Kakade, S., &amp; Langford, J. (2002); Kocsis, L., &amp; Szepesvári, C. (2006). UCT; Zinkevich, M. et al. (2007). CFR; Brown, N., &amp; Sandholm, T. (2019). Pluribus.</li>
+    <li>Dragan, A. D., Lee, K. C. T., &amp; Srinivasa, S. S. (2013). Legibility and predictability of robot motion. <em>HRI</em>; Sadigh, D. et al. (2016). Underactuated human–robot dynamics. <em>RSS</em>.</li>
+    <li>Mnih, V. et al. (2015). DQN; Schulman, J. et al. (2015, 2016, 2017). TRPO, GAE, PPO; Bellemare, M. G. et al. (2017). Distributional RL; Haarnoja, T. et al. (2018). SAC.</li>
+    <li>Silver, D. et al. (2016, 2017). AlphaGo &amp; AlphaZero; Schrittwieser, J. et al. (2020). MuZero; Levine, S. et al. (2020). Offline RL; Kumar, A. et al. (2020). CQL; Shao, Z. et al. (2024). GRPO.</li>
+  </ol>
+
+  <h3>Alignment, Preference Training, Social Choice &amp; Intelligence Measures</h3>
+  <ol class="bib-list">
+    <li>Arrow, K. J. (1951). <em>Social Choice and Individual Values</em>; Bradley, R. A., &amp; Terry, M. E. (1952). Paired comparisons.</li>
+    <li>Amodei, D. et al. (2016). Concrete problems in AI safety; Skalse, J. et al. (2022). Reward hacking.</li>
+    <li>Hadfield-Menell, D., Dragan, A., Abbeel, P., &amp; Russell, S. (2016). CIRL; (2017). The off-switch game; Hadfield-Menell, D., Milli, S., Abbeel, P., Russell, S., &amp; Dragan, A. (2017). Inverse reward design.</li>
+    <li>Christiano, P. F. et al. (2017). Deep RL from human preferences; Irving, G., Christiano, P., &amp; Amodei, D. (2018). Debate.</li>
+    <li>Russell, S. (2019). <em>Human Compatible</em>; Chollet, F. (2019). On the measure of intelligence.</li>
+    <li>Ziegler, D. M. et al. (2019); Stiennon, N. et al. (2020); Ouyang, L. et al. (2022). InstructGPT; Bai, Y. et al. (2022a, 2022b). RLHF &amp; Constitutional AI.</li>
+    <li>Perez, E. et al. (2022); Rafailov, R. et al. (2023). DPO; Santurkar, S. et al. (2023); Sharma, M. et al. (2023). Sycophancy.</li>
+    <li>Siththaranjan, A., Laidlaw, C., &amp; Hadfield-Menell, D. (2024). Distributional preference learning (Borda count); Sorensen, T. et al. (2024); Conitzer, V. et al. (2024); Chakraborty, S. et al. (2024).</li>
+  </ol>
+
+  <h3>Logic, Epistemology, Linguistics &amp; Moral Psychology</h3>
+  <ol class="bib-list">
+    <li>Gödel, K. (1931); Tarski, A. (1936); Turing, A. M. (1936, 1950); McCarthy, J. (1959); Minsky, M. (1961); Newell, A., &amp; Simon, H. A. (1976).</li>
+    <li>Lawvere, F. W. (1969). Diagonal arguments and cartesian closed categories. <em>LNM</em>, 92, 134–145.</li>
+    <li>Umāsvāti. <em>Tattvārtha Sūtra</em>; Samantabhadra. <em>Āptamīmāṃsā</em>; Nāgārjuna. <em>Mūlamadhyamakakārikā</em>; Haldane, J. B. S. (1957); Matilal, B. K. (1981); Ganeri, J. (2002); Priest, G. (2008).</li>
+    <li>Pāṇini. <em>Aṣṭādhyāyī</em>; Bhartṛhari. <em>Vākyapadīya</em>; Wittgenstein, L. (1953) §43; Harris, Z. (1954); Firth, J. R. (1957); Labov, W. (1969); Fricker, M. (2007).</li>
+    <li>Haidt, J. (2001, 2012); Henrich, J., Heine, S., &amp; Norenzayan, A. (2010); Keltner, D. &amp; Buswell, B. (1997); Keltner, D. et al. (2003, 2009, 2015, 2016); Galinsky, A. et al. (2006); Carhart-Harris, R. L., &amp; Friston, K. J. (2019). REBUS.</li>
+  </ol>
+
+  <h3>Hyperactivity Primary Works &amp; Checked Modules</h3>
+  <ol class="bib-list">
+    <li>Jain, A. (2026). <a href="/pdf"><em>hyperactivity: A Decentralized Operating System Language for Collective Superintelligence</em></a> (Monograph, <code>docs/hyperactivity.hypercubical</code>).</li>
+    <li>Jain, A. (2026). <a href="/alignment-is-standpoint"><em>Alignment Is Standpoint</em></a> (<code>docs/alignment-is-standpoint.md</code>) &amp; <a href="/the-formalism-abandoned--preference-fitting-against-human-compatible-ai"><em>The Formalism Abandoned</em></a>.</li>
+    <li>Jain, A. (2026). <a href="/compression"><em>Causal Context-Fiber Record Compression</em></a> (<code>lib/compress.hypercubical</code>, <code>lib/compress-stream.hypercubical</code>, <code>lib/optimality.hypercubical</code>).</li>
+    <li>Jain, A. (2026). <a href="/training-agents-into-weights"><em>Training Agents into Weights: Deprogramming and Standpoint</em></a> (<code>docs/training-agents-into-weights.hypercubical</code>).</li>
+    <li>Jain, A. (2026). <a href="/hyperactivity-is-the-theory-of-knowledge-graphs"><em>Hyperactivity as a Theory of Knowledge Graphs</em></a> &amp; <a href="/hyperactive-receptivity"><em>Hyperactive Receptivity</em></a>.</li>
+    <li>Jain, A. (2026). <a href="/language-is-trained-synesthesia"><em>Language Is Trained Synesthesia</em></a>, <a href="/lawvere-fixed-points"><em>Lawvere's Fixed-Point Theorem</em></a>, &amp; <a href="/knowledge-is-a-lack-of-ignorance"><em>Knowledge Is a Lack of Ignorance</em></a>.</li>
+    <li>Checked core modules: <code>lib/observation.hypercubical</code>, <code>lib/fiber.hypercubical</code>, <code>lib/obs.hypercubical</code>, <code>lib/autodiff.hypercubical</code>, <code>lib/meaning.hypercubical</code>, <code>lib/credit.hypercubical</code>, <code>lib/c-sound.hypercubical</code>, <code>lib/singularity.hypercubical</code>, <code>lib/distnet.hypercubical</code>, <code>lib/silicon/tensor.hypercubical</code>, <code>lib/silicon/physics.hypercubical</code>.</li>
+  </ol>
+</section>
+
+  </main>
+</div>
+
+<script>
+// Lab 1: Exact Bias-Variance-Noise & Double Descent (Marchenko-Pastur / Ridge)
+(function() {
+  const stage = document.getElementById('bvStage');
+  const canvas = document.getElementById('bvCanvas');
+  if (!stage || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  const slN = document.getElementById('bvN'), slLam = document.getElementById('bvLam'), slSig = document.getElementById('bvSig');
+  const vN = document.getElementById('bvNV'), vLam = document.getElementById('bvLamV'), vSig = document.getElementById('bvSigV');
+  const statusEl = document.getElementById('bvStatus');
+
+  function resize() {
+    const r = stage.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.floor(r.width * dpr));
+    canvas.height = Math.max(1, Math.floor(r.height * dpr));
+    draw();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  function bvAt(gamma, lam, sig) {
+    // Exact Stieltjes transform of Marchenko-Pastur law for aspect ratio gamma = p/n (HMRT 2022)
+    const z = Math.max(1e-6, lam);
+    const eps = z * 1e-4 + 1e-9;
+    const sq = Math.sqrt((1 - gamma + z) * (1 - gamma + z) + 4 * gamma * z);
+    const ms = (-(1 - gamma + z) + sq) / (2 * gamma * z);
+    const sq2 = Math.sqrt((1 - gamma + z + eps) * (1 - gamma + z + eps) + 4 * gamma * (z + eps));
+    const ms2 = (-(1 - gamma + z + eps) + sq2) / (2 * gamma * (z + eps));
+    const dms = (ms2 - ms) / eps;
+    const variance = sig * sig * Math.max(0, gamma * (ms + z * dms));
+    const approxBias = 0.55 * Math.exp(-1.7 * gamma);
+    const shrinkBias = (1 - Math.exp(-1.7 * gamma)) * Math.max(0, z * z * (-dms));
+    const bias2 = approxBias + shrinkBias;
+    const noise = sig * sig;
+    return { noise, bias2, variance, total: noise + bias2 + variance };
+  }
+
+  function draw() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const W = canvas.width / dpr, H = canvas.height / dpr;
+    const dark = document.documentElement.classList.contains('dark');
+    const ink = dark ? '#ffffff' : '#000000';
+    const muted = dark ? '#999999' : '#555555';
+    const grid = dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
+    const pink = '#ff0a94';
+    const blue = dark ? '#4da3ff' : '#1a73e8';
+
+    const n = parseInt(slN.value, 10);
+    const lam = Math.pow(10, parseFloat(slLam.value));
+    const sig = parseFloat(slSig.value);
+    vN.textContent = n;
+    vLam.textContent = lam < 0.01 ? lam.toExponential(0) : lam.toFixed(2);
+    vSig.textContent = sig.toFixed(2);
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const padL = 54, padR = 24, padT = 26, padB = 42;
+    const pw = W - padL - padR, ph = H - padT - padB;
+    const maxG = 2.8, maxY = 2.4;
+    const tx = g => padL + (g / maxG) * pw;
+    const ty = y => padT + ph - (Math.min(y, maxY) / maxY) * ph;
+
+    ctx.strokeStyle = grid; ctx.lineWidth = 1;
+    for (let y = 0.4; y <= maxY; y += 0.4) {
+      ctx.beginPath(); ctx.moveTo(padL, ty(y)); ctx.lineTo(W - padR, ty(y)); ctx.stroke();
+    }
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + ph); ctx.lineTo(W - padR, padT + ph); ctx.stroke();
+
+    ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = pink; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(tx(1), padT); ctx.lineTo(tx(1), padT + ph); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = pink; ctx.font = '700 10.5px ui-monospace, Menlo, monospace'; ctx.textAlign = 'center';
+    ctx.fillText('p = n (interpolation)', tx(1), padT - 8);
+
+    const pts = [];
+    for (let i = 0; i <= 260; i++) {
+      const g = 0.04 + (i / 260) * (maxG - 0.04);
+      pts.push({ g, ...bvAt(g, lam, sig) });
+    }
+
+    function plotLine(key, col, width, dash) {
+      ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = width;
+      if (dash) ctx.setLineDash(dash);
+      ctx.beginPath();
+      pts.forEach((p, idx) => {
+        const x = tx(p.g), y = ty(p[key]);
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke(); ctx.restore();
+    }
+
+    plotLine('noise', muted, 1.2, [3, 3]);
+    plotLine('bias2', blue, 2, null);
+    plotLine('variance', pink, 2, [5, 3]);
+    plotLine('total', ink, 2.6, null);
+
+    ctx.fillStyle = muted; ctx.font = '600 10.5px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    [0.5, 1.0, 1.5, 2.0, 2.5].forEach(g => ctx.fillText(`p/n=${g.toFixed(1)}`, tx(g), padT + ph + 16));
+    ctx.fillText('Model capacity ratio p / n (n = ' + n + ')', padL + pw / 2, H - 8);
+    ctx.textAlign = 'right';
+    [0, 0.8, 1.6, 2.4].forEach(y => ctx.fillText(y.toFixed(1), padL - 8, ty(y) + 3));
+
+    const lx = W - padR - 175, ly = padT + 8;
+    const leg = [['Total MSE', ink], ['Bias²', blue], ['Variance', pink], ['Noise σ²', muted]];
+    ctx.textAlign = 'left';
+    leg.forEach(([nm, col], i) => {
+      ctx.fillStyle = col; ctx.fillRect(lx, ly + i * 16, 12, 3);
+      ctx.fillStyle = ink; ctx.fillText(nm, lx + 18, ly + i * 16 + 4);
+    });
+
+    const pAt1 = bvAt(1.0, lam, sig), pAt25 = bvAt(2.5, lam, sig);
+    statusEl.textContent = `MSE(p=n)=${pAt1.total > 9 ? '>9' : pAt1.total.toFixed(2)} · MSE(p=2.5n)=${pAt25.total.toFixed(2)} · σ²=${(sig*sig).toFixed(2)}`;
+  }
+
+  slN.oninput = slLam.oninput = slSig.oninput = draw;
+  document.getElementById('bvInterp').onclick = () => { slLam.value = -4.5; draw(); };
+  document.getElementById('bvOpt').onclick = () => { slLam.value = -0.5; draw(); };
+  const mo = new MutationObserver(draw);
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  resize();
+})();
+
+// Lab 2: RLHF Standpoint Marginalization & Exponential Minority Suppression
+(function() {
+  const stage = document.getElementById('rlhfStage');
+  const canvas = document.getElementById('rlhfCanvas');
+  if (!stage || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  const slBeta = document.getElementById('rlhfBeta'), slMaj = document.getElementById('rlhfMaj');
+  const vBeta = document.getElementById('rlhfBetaV'), vMaj = document.getElementById('rlhfMajV');
+  const statusEl = document.getElementById('rlhfStatus');
+  const btnSc = document.getElementById('rlhfModeScalar'), btnSt = document.getElementById('rlhfModeStand');
+  let mode = 'scalar';
+
+  function resize() {
+    const r = stage.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.floor(r.width * dpr));
+    canvas.height = Math.max(1, Math.floor(r.height * dpr));
+    draw();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  function draw() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const W = canvas.width / dpr, H = canvas.height / dpr;
+    const dark = document.documentElement.classList.contains('dark');
+    const ink = dark ? '#ffffff' : '#000000';
+    const muted = dark ? '#999999' : '#555555';
+    const grid = dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
+    const pink = '#ff0a94';
+    const blue = dark ? '#4da3ff' : '#1a73e8';
+
+    const beta = parseFloat(slBeta.value), pM = parseFloat(slMaj.value);
+    vBeta.textContent = beta.toFixed(2);
+    vMaj.textContent = pM.toFixed(2);
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const padL = 58, padR = 24, padT = 28, padB = 42;
+    const pw = W - padL - padR, ph = H - padT - padB;
+    const tx = b => padL + ((b - 0.05) / 0.95) * pw;
+    const ty = r => padT + ph - Math.min(1, Math.max(0, r)) * ph;
+
+    ctx.strokeStyle = grid; ctx.lineWidth = 1;
+    [0.25, 0.5, 0.75, 1.0].forEach(y => {
+      ctx.beginPath(); ctx.moveTo(padL, ty(y)); ctx.lineTo(W - padR, ty(y)); ctx.stroke();
+    });
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + ph); ctx.lineTo(W - padR, padT + ph); ctx.stroke();
+
+    const dr = Math.log((1 - pM) / Math.max(0.01, pM));
+    const ratioAt = b => mode === 'scalar' ? Math.exp(dr / b) : 1.0;
+
+    ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = blue; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(padL, ty(1.0)); ctx.lineTo(W - padR, ty(1.0)); ctx.stroke();
+    ctx.restore();
+
+    ctx.strokeStyle = mode === 'scalar' ? pink : muted;
+    ctx.lineWidth = mode === 'scalar' ? 2.6 : 1.3;
+    ctx.beginPath();
+    for (let i = 0; i <= 190; i++) {
+      const b = 0.05 + (i / 190) * 0.95;
+      const val = Math.exp(dr / b);
+      const x = tx(b), y = ty(val);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    const curVal = ratioAt(beta);
+    const cx = tx(beta), cy = ty(curVal);
+    ctx.fillStyle = mode === 'scalar' ? pink : blue;
+    ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = ink; ctx.font = '700 11px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(mode === 'scalar' ? `π*(y_m)/π*(y_M) = ${curVal.toExponential(2)}` : 'π(y_m | x, u=m) preserved (1.00×)', Math.min(cx + 10, W - 260), Math.max(padT + 14, cy - 8));
+
+    ctx.fillStyle = muted; ctx.font = '600 10.5px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    [0.1, 0.3, 0.5, 0.7, 0.9].forEach(b => ctx.fillText(`β=${b.toFixed(1)}`, tx(b), padT + ph + 16));
+    ctx.fillText('KL temperature β (lower β = tighter RLHF / DPO fit)', padL + pw / 2, H - 8);
+    ctx.textAlign = 'right';
+    [0, 0.5, 1.0].forEach(y => ctx.fillText(y.toFixed(1) + '×', padL - 8, ty(y) + 3));
+
+    statusEl.textContent = mode === 'scalar'
+      ? `Scalar RLHF · Δr̂=${dr.toFixed(2)} · minority weight=${curVal < 0.001 ? curVal.toExponential(1) : curVal.toFixed(3)}×`
+      : 'Standpoint-indexed π(y | x, u): zero minority suppression (1.00×)';
+  }
+
+  slBeta.oninput = slMaj.oninput = draw;
+  btnSc.onclick = () => { mode = 'scalar'; btnSc.classList.add('on'); btnSt.classList.remove('on'); draw(); };
+  btnSt.onclick = () => { mode = 'stand'; btnSt.classList.add('on'); btnSc.classList.remove('on'); draw(); };
+  const mo = new MutationObserver(draw);
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  resize();
+})();
+
+// Lab 3: Observation-Fiber & Active-Querying Refinement
+(function() {
+  const stage = document.getElementById('fibStage');
+  const canvas = document.getElementById('fibCanvas');
+  if (!stage || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('fibStatus');
+  const histories = [
+    { id: 'h₀', safe: true,  a: 1, b: 1, c: 1 },
+    { id: 'h₁', safe: true,  a: 1, b: 1, c: 0 },
+    { id: 'h₂', safe: true,  a: 0, b: 1, c: 1 },
+    { id: 'h₃', safe: true,  a: 0, b: 1, c: 0 },
+    { id: 'h₄', safe: false, a: 1, b: 0, c: 1 },
+    { id: 'h₅', safe: false, a: 1, b: 0, c: 0 },
+    { id: 'h₆', safe: false, a: 0, b: 0, c: 1 },
+    { id: 'h₇', safe: false, a: 0, b: 0, c: 0 },
+  ];
+  let qA = false, qB = false, qC = false;
+
+  function resize() {
+    const r = stage.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.floor(r.width * dpr));
+    canvas.height = Math.max(1, Math.floor(r.height * dpr));
+    draw();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  function compatible(h) {
+    if (qA && h.a !== 1) return false;
+    if (qB && h.b !== 1) return false;
+    if (qC && h.c !== 1) return false;
+    return true;
+  }
+
+  function updateUI() {
+    document.getElementById('qA').classList.toggle('on', qA);
+    document.getElementById('qB').classList.toggle('on', qB);
+    document.getElementById('qC').classList.toggle('on', qC);
+    const alive = histories.filter(compatible);
+    const hasSafe = alive.some(h => h.safe), hasUnsafe = alive.some(h => !h.safe);
+    if (hasSafe && hasUnsafe) {
+      const s = alive.find(h => h.safe), u = alive.find(h => !h.safe);
+      statusEl.textContent = `${alive.length} compatible histories · SPLIT WITNESS (${s.id} vs ${u.id})`;
+    } else {
+      statusEl.textContent = `${alive.length} compatible ${alive.length===1?'history':'histories'} · WARRANTED ACROSS ENTIRE FIBER`;
+    }
+    draw();
+  }
+
+  function draw() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const W = canvas.width / dpr, H = canvas.height / dpr;
+    const dark = document.documentElement.classList.contains('dark');
+    const ink = dark ? '#ffffff' : '#000000';
+    const muted = dark ? '#777777' : '#888888';
+    const pink = '#ff0a94';
+    const blue = dark ? '#4da3ff' : '#1a73e8';
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const obsX = W * 0.16, obsY = H * 0.5;
+    const colX = W * 0.56, resX = W * 0.85;
+    const alive = histories.filter(compatible);
+    const warranted = alive.every(h => h.safe);
+
+    ctx.strokeStyle = ink; ctx.lineWidth = 2;
+    ctx.strokeRect(obsX - 54, obsY - 26, 108, 52);
+    ctx.fillStyle = ink; ctx.font = '700 12px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Obs y = o(h)', obsX, obsY - 3);
+    ctx.font = '600 10px ui-monospace, Menlo, monospace'; ctx.fillStyle = muted;
+    ctx.fillText(`|Fib| = ${alive.length}`, obsX, obsY + 14);
+
+    histories.forEach((h, i) => {
+      const y = 34 + i * ((H - 68) / 7);
+      const ok = compatible(h);
+      ctx.strokeStyle = ok ? (h.safe ? blue : pink) : (dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)');
+      ctx.lineWidth = ok ? 1.8 : 1;
+      ctx.beginPath(); ctx.moveTo(obsX + 54, obsY); ctx.lineTo(colX - 44, y); ctx.stroke();
+
+      ctx.fillStyle = ok ? (h.safe ? blue : pink) : muted;
+      ctx.globalAlpha = ok ? 1 : 0.35;
+      ctx.strokeRect(colX - 44, y - 12, 88, 24);
+      ctx.font = '700 11px ui-monospace, Menlo, monospace';
+      ctx.fillText(`${h.id} · ${h.safe ? 'P' : '¬P'}`, colX, y + 4);
+      ctx.globalAlpha = 1;
+
+      if (ok) {
+        ctx.strokeStyle = h.safe ? blue : pink; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(colX + 44, y); ctx.lineTo(resX - 58, obsY); ctx.stroke();
+      }
+    });
+
+    ctx.strokeStyle = warranted ? blue : pink; ctx.lineWidth = 2;
+    ctx.strokeRect(resX - 58, obsY - 28, 116, 56);
+    ctx.fillStyle = warranted ? blue : pink;
+    ctx.font = '700 11.5px ui-monospace, Menlo, monospace';
+    ctx.fillText(warranted ? 'WARRANTED' : 'BLOCKED', resX, obsY - 4);
+    ctx.font = '600 10px ui-monospace, Menlo, monospace'; ctx.fillStyle = ink;
+    ctx.fillText(warranted ? '∀h∈Fib, P(h)' : 'Split witness', resX, obsY + 13);
+  }
+
+  document.getElementById('qA').onclick = () => { qA = !qA; updateUI(); };
+  document.getElementById('qB').onclick = () => { qB = !qB; updateUI(); };
+  document.getElementById('qC').onclick = () => { qC = !qC; updateUI(); };
+  document.getElementById('qReset').onclick = () => { qA = qB = qC = false; updateUI(); };
+  const mo = new MutationObserver(draw);
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  resize(); updateUI();
+})();
+
+// Lab 4: Streaming rANS Renormalization & Exact Bit-Cost Register
+(function() {
+  const stage = document.getElementById('ransStage');
+  const canvas = document.getElementById('ransCanvas');
+  if (!stage || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('ransStatus');
+
+  const M = 16, L = 256, B = 256;
+  const SYMS = [
+    { name: 'A', f: 8, C: 0,  info: 1.0 },
+    { name: 'B', f: 4, C: 8,  info: 2.0 },
+    { name: 'C', f: 3, C: 12, info: Math.log2(16 / 3) },
+    { name: 'D', f: 1, C: 15, info: 4.0 },
+  ];
+  let s = L, bytes = [], hist = [], idealBits = 0, decoded = [];
+
+  function resize() {
+    const r = stage.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.floor(r.width * dpr));
+    canvas.height = Math.max(1, Math.floor(r.height * dpr));
+    draw();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  function encodeSym(idx) {
+    const sym = SYMS[idx];
+    const maxS = Math.floor((L * B) / M) * sym.f;
+    while (s >= maxS) {
+      bytes.push(s & 0xff);
+      s = Math.floor(s / B);
+    }
+    const q = Math.floor(s / sym.f), r = s % sym.f;
+    s = q * M + sym.C + r;
+    hist.push(sym.name);
+    idealBits += sym.info;
+    draw();
+  }
+
+  function decodeStep() {
+    if (!hist.length) return;
+    const slot = s % M;
+    let sym = SYMS[0];
+    for (const cand of SYMS) {
+      if (slot >= cand.C && slot < cand.C + cand.f) { sym = cand; break; }
+    }
+    s = Math.floor(s / M) * sym.f + (slot - sym.C);
+    while (s < L && bytes.length > 0) {
+      s = s * B + bytes.pop();
+    }
+    hist.pop();
+    idealBits = Math.max(0, idealBits - sym.info);
+    decoded.push(sym.name);
+    if (decoded.length > 18) decoded.shift();
+    draw();
+  }
+
+  function draw() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const W = canvas.width / dpr, H = canvas.height / dpr;
+    const dark = document.documentElement.classList.contains('dark');
+    const ink = dark ? '#ffffff' : '#000000';
+    const muted = dark ? '#999999' : '#555555';
+    const pink = '#ff0a94';
+    const blue = dark ? '#4da3ff' : '#1a73e8';
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const pad = 28;
+    const barX = pad, barY = 58, barW = W - 2 * pad, barH = 38;
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.5;
+    ctx.strokeRect(barX, barY, barW, barH);
+    const frac = Math.max(0, Math.min(1, (Math.log2(s) - Math.log2(L)) / 8));
+    ctx.fillStyle = pink;
+    ctx.fillRect(barX + 1, barY + 1, Math.max(4, frac * (barW - 2)), barH - 2);
+
+    ctx.fillStyle = ink; ctx.font = '700 12px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Active Register s = ${s}  (log₂ s = ${Math.log2(s).toFixed(2)} bits, window [256, 65536))`, barX, barY - 12);
+    ctx.fillStyle = muted; ctx.font = '600 11px ui-monospace, Menlo, monospace';
+    ctx.fillText('L = 256 (8 bits)', barX, barY + barH + 16);
+    ctx.textAlign = 'right';
+    ctx.fillText('256L = 65536 (16 bits → spill byte)', barX + barW, barY + barH + 16);
+
+    ctx.textAlign = 'left'; ctx.fillStyle = ink; ctx.font = '700 12px ui-monospace, Menlo, monospace';
+    ctx.fillText(`LIFO Spilled Bytes (${bytes.length} B):`, barX, 152);
+    const showB = bytes.slice(-14);
+    showB.forEach((b, i) => {
+      const bx = barX + i * 44, by = 166;
+      ctx.strokeStyle = blue; ctx.lineWidth = 1.4;
+      ctx.strokeRect(bx, by, 38, 28);
+      ctx.fillStyle = blue; ctx.font = '700 11px ui-monospace, Menlo, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('0x' + b.toString(16).padStart(2, '0').toUpperCase(), bx + 19, by + 18);
+    });
+    if (!showB.length) {
+      ctx.fillStyle = muted; ctx.font = '600 11px ui-monospace, Menlo, monospace';
+      ctx.fillText('(none spilled yet — register still inside [L, 256L))', barX, 184);
+    }
+
+    const actualBits = bytes.length * 8 + (Math.log2(s) - Math.log2(L));
+    ctx.textAlign = 'left'; ctx.fillStyle = ink; ctx.font = '600 12px ui-monospace, Menlo, monospace';
+    ctx.fillText(`Encoded stack (${hist.length}): ${hist.slice(-24).join(' ') || '∅'}`, barX, 236);
+    ctx.fillStyle = muted;
+    ctx.fillText(`Decoded (LIFO reverse): ${decoded.join(' ') || '∅'}`, barX, 260);
+    ctx.fillStyle = pink; ctx.font = '700 12px ui-monospace, Menlo, monospace';
+    ctx.fillText(`Actual stream: ${actualBits.toFixed(2)} bits   |   Exact Shannon Σ−log₂(f/M): ${idealBits.toFixed(2)} bits`, barX, 290);
+
+    statusEl.textContent = `s=${s} · ${bytes.length} B spilled · actual=${actualBits.toFixed(2)}b vs entropy=${idealBits.toFixed(2)}b`;
+  }
+
+  document.querySelectorAll('[data-sym]').forEach(b => b.onclick = () => encodeSym(parseInt(b.dataset.sym, 10)));
+  document.getElementById('ransDec').onclick = decodeStep;
+  document.getElementById('ransReset').onclick = () => { s = L; bytes = []; hist = []; idealBits = 0; decoded = []; draw(); };
+  const mo = new MutationObserver(draw);
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  resize();
+})();
+</script>
+</body>
+</html>
