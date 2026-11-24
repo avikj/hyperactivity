@@ -1,0 +1,1904 @@
+/* ==========================================================================
+   HYPERACTIVITY — HX-LENS: Unified Compositional Reader & Epistemic Engine
+   Zero fake witnesses. Zero dead ends. Zero synthetic synesthesia.
+     1. Compositional View Algebra (Edition × Depth × Field × SplitPane)
+     2. Live /api/kg/index Store Hydration + Basename Resolver + Domain Glossary
+     3. Real /cubical.wasm Worker: wasm_load_module(realMod) + Real 1-Bit Module Tampering
+     4. Epistemically Honest Surfaces:
+        - All 18 .stat-cell unfolding expositions + real module WASM verification
+        - All .thm-box: real module verification when backed, honest literature tag otherwise
+        - All .eq-box with backing modules: real source + real WASM verification
+        - All <pre> code blocks: copy · check in cubical.wasm · open in /ide
+        - All 9 tables + inline symbols: Tufte hover-peek + Split-Pane Source & WASM Drawer
+        - Universal ⌘K / / Command Palette across all modules, definitions, and portals
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  // ==================== 1. COMPOSITIONAL VIEW ALGEBRA ====================
+  var EDITIONS = [
+    { id: 'mono',     key: '1', name: 'Mono',     desc: 'Default · pure monospace OS' },
+    { id: 'photonic', key: '2', name: 'Photonic', desc: 'Weightless light-like monospace' },
+    { id: 'margin',   key: '3', name: 'Margin',   desc: 'Asymmetric monospace margin notes' },
+    { id: 'dyslexic', key: '4', name: 'Dyslexic', desc: 'Comic Sans · wide spacing · low glare' },
+  ];
+  var DEPTHS = [
+    { id: 'full',     key: 'f', name: 'Full',     desc: 'Complete exposition' },
+    { id: 'geodesic', key: 'g', name: 'Outline',  desc: 'Fold narrative prose' },
+    { id: 'formal',   key: 'p', name: 'Formal',   desc: 'Foreground proofs & code' },
+  ];
+  var FIELDS = [
+    { id: 'light', name: 'Light (#fff)' },
+    { id: 'void',  name: 'Void (#000)' },
+  ];
+
+  var STORAGE_KEY = 'hxViewState_v3';
+  var VALID_ED = EDITIONS.reduce(function (a, e) { a[e.id] = 1; return a; }, {});
+  var VALID_DP = DEPTHS.reduce(function (a, d) { a[d.id] = 1; return a; }, {});
+
+  function readInitialState() {
+    var st = { edition: 'mono', depth: 'full', field: 'light', split: false };
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      if (saved && typeof saved === 'object') {
+        if (VALID_ED[saved.edition]) st.edition = saved.edition;
+        if (VALID_DP[saved.depth]) st.depth = saved.depth;
+        if (saved.field === 'void' || saved.field === 'light') st.field = saved.field;
+        if (typeof saved.split === 'boolean') st.split = saved.split;
+      } else if (localStorage.getItem('hxTheme') === 'dark') {
+        st.field = 'void';
+      }
+    } catch (_) {}
+    try {
+      var qs = new URLSearchParams(window.location.search);
+      var qe = qs.get('edition') || qs.get('mode');
+      var qd = qs.get('depth');
+      var qf = qs.get('field');
+      if (qe && VALID_ED[qe]) st.edition = qe;
+      if (qd && VALID_DP[qd]) st.depth = qd;
+      if (qf === 'void' || qf === 'dark') st.field = 'void';
+      if (qf === 'light') st.field = 'light';
+    } catch (_) {}
+    return st;
+  }
+
+  var state = readInitialState();
+  var toastTimer = null;
+  var foldsBuilt = false;
+
+  function applyAttributes() {
+    var root = document.documentElement;
+    root.setAttribute('data-hx-edition', state.edition);
+    root.setAttribute('data-hx-depth', state.depth);
+    root.setAttribute('data-hx-field', state.field);
+    if (state.field === 'void') {
+      root.classList.add('dark');
+      try { localStorage.setItem('hxTheme', 'dark'); } catch (_) {}
+    } else {
+      root.classList.remove('dark');
+      try { localStorage.setItem('hxTheme', 'light'); } catch (_) {}
+    }
+    var dr = document.getElementById('hx-src-drawer');
+    root.classList.toggle('hx-split-pinned', !!(state.split && dr && dr.classList.contains('open')));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (_) {}
+  }
+
+  applyAttributes();
+
+  function escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function showToast(msgHtml) {
+    var t = document.getElementById('hx-view-toast');
+    if (!t) return;
+    t.innerHTML = msgHtml;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 1500);
+  }
+
+  // ==================== 2. STORE INDEX, BASENAME RESOLVER & GLOSSARY ====================
+  var kgPromise = null;
+  var kgData = null;
+  var modMap = {};
+  var baseMap = {};
+  var srcCache = {};
+
+  var SHORT_ALIASES = {
+    'hxz': 'lib/hxz.hypercubical',
+    'hx-fold': 'fold/hx-fold.hypercubical',
+    'hx-book': 'experiments/cxx/hx-book.hypercubical',
+    'hx-node': 'lib/hx-node.hypercubical',
+    'hx-tensor': 'lib/silicon/hx-tensor.hypercubical',
+    'hx_tensor': 'lib/silicon/hx-tensor.hypercubical',
+    'HyperNet-16': 'lib/silicon/hypernet16.hypercubical',
+    'HyperOS': 'lib/os/hyperos.hypercubical',
+    'hypernet16': 'lib/silicon/hypernet16.hypercubical',
+    'hypertensor': 'lib/silicon/hypertensor.hypercubical',
+  };
+
+  var GLOSSARY = {
+    'rANS': 'Range Asymmetric Numeral Systems — single-integer entropy coder approaching Shannon entropy using exact division/modulo over state interval [L, bL), proved bit-exact when M | L.',
+    'MESI': 'Modified / Exclusive / Shared / Invalid — multi-core CPU cache-coherence snooping protocol forced by unbounded pointer aliasing. Eliminated when every wire has exact degree 2.',
+    'GDSII': 'Calma GDSII v6.0 — industry-standard binary lithography stream format describing physical chip mask polygons and hierarchical SREF/AREF cell arrays.',
+    'SREF': 'GDSII Structure Reference — places a single instance of a reusable physical cell definition without duplicating its mask polygons.',
+    'AREF': 'GDSII Array Reference — places an R×C regular grid of physical cells in one compact binary record, giving >10,000× lossless hierarchy compression.',
+    'UBSan': 'Undefined Behavior Sanitizer (-fsanitize=undefined) — runtime instrumentation trapping signed overflow, null/out-of-bounds access, and shift UB. Zero violations across all native emitted binaries.',
+    'vxchg': '1-word atomic wire-exchange instruction for degree-2 interaction-net ports: first endpoint stores itself in an empty slot; second endpoint atomically retrieves it and links the active pair.',
+    'FlashAttention': 'IO-aware exact attention using the associative online-softmax monoid (m, ℓ, o), computing exact attention over N tokens in O(1) register memory instead of O(N²) HBM.',
+    'CR3': 'x86-64 control register pointing to the root page table; rewriting CR3 on context switches flushes TLB state (~1,945 cycles vs. zero-copy capability passing in HyperOS).',
+    'MAP_NORESERVE': 'POSIX mmap flag reserving virtual address space without eager physical RAM backing pages.',
+    'ChaCha20': 'ARX stream cipher (20 rounds of quarter-round add-rotate-XOR) offering constant-time, cache-timing-free encryption.',
+    'DUP': 'Interaction-combinator duplicator node — lazily copies subgraphs on demand; annihilates identically-labeled DUPs and commutes across distinct labels.',
+    'ELF64': '64-bit Executable and Linkable Format — native Linux/POSIX machine binary format emitted directly from checked code.',
+    'CMOS7': '7nm FinFET CMOS standard-cell library (INV, NAND2, NOR2, XOR2, MUX2, DFF) formalized with exact geometric lithography polygons in lib/silicon/.',
+    'NAND2': '2-input CMOS7 inverting AND standard cell (4 FinFET transistors).',
+    'NOR2': '2-input CMOS7 inverting OR standard cell (4 FinFET transistors).',
+    'DFF': 'Positive edge-triggered D flip-flop standard cell storing 1 bit of sequential hardware state.',
+    'MUX2': '2-to-1 multiplexer standard cell selecting between two data signals via 1 control wire.',
+    'XOR2': '2-input exclusive-OR standard cell.',
+    'INV': '1-input CMOS7 inverter standard cell (2 FinFET transistors).',
+    'RV32': '32-bit RISC-V sequential instruction set architecture used as the classical von Neumann cycle baseline against HyperNet-16.',
+    'PoUW': 'Proof of Useful Work — decentralized clearing where escrow pays strictly upon cubical kernel verification of a witness w : P.',
+    'DHT': 'Distributed Hash Table — decentralized key-value routing using Kademlia XOR distance d(a,b) = a ⊕ b.',
+    'hcomp': 'Homogeneous composition — cubical primitive filling open boxes in a type to compute path transitivity, symmetry, and higher coherences without postulates.',
+    'Glue': 'Cubical Glue type — glues an equivalence A ≃ B along a partial face to give direct computational content to Univalence.',
+    'refl': 'Definitional reflexivity proof witnessing x ≡ x when both sides reduce to identical normal forms inside the kernel.',
+  };
+
+  function loadKg() {
+    if (!kgPromise) {
+      kgPromise = fetch('/api/kg/index')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          kgData = d;
+          if (d && d.mods) {
+            d.mods.forEach(function (m) {
+              modMap[m[0]] = m;
+              var base = m[0].split('/').pop();
+              if (!baseMap[base]) baseMap[base] = m[0];
+            });
+          }
+          return d;
+        })
+        .catch(function () { return null; });
+    }
+    return kgPromise;
+  }
+
+  // Shared Sovereign IndexedDB CAStore (hx-cas-v1 — exact same store used by /ide!)
+  var casDbPromise = null;
+  function openHxCas() {
+    if (casDbPromise) return casDbPromise;
+    casDbPromise = new Promise(function (resolve) {
+      if (!('indexedDB' in window)) return resolve(null);
+      try {
+        var req = indexedDB.open('hx-cas-v1', 2);
+        req.onupgradeneeded = function () {
+          var db = req.result;
+          if (!db.objectStoreNames.contains('obj')) db.createObjectStore('obj');
+          if (!db.objectStoreNames.contains('ws')) db.createObjectStore('ws', { keyPath: 'path' });
+        };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { resolve(null); };
+      } catch (_) { resolve(null); }
+    });
+    return casDbPromise;
+  }
+
+  function casGetAllOverlay() {
+    return openHxCas().then(function (db) {
+      if (!db || !db.objectStoreNames.contains('ws')) return [];
+      return new Promise(function (resolve) {
+        try {
+          var r = db.transaction('ws', 'readonly').objectStore('ws').getAll();
+          r.onsuccess = function () { resolve(r.result || []); };
+          r.onerror = function () { resolve([]); };
+        } catch (_) { resolve([]); }
+      });
+    });
+  }
+
+  function casPutOverlay(path, text) {
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (buf) {
+      var u = new Uint8Array(buf), sha = '';
+      for (var i = 0; i < u.length; i++) sha += u[i].toString(16).padStart(2, '0');
+      srcCache[path] = text;
+      delete verifyCache[path];
+      return openHxCas().then(function (db) {
+        var rec = { path: path, text: text, sha256: sha, updatedAt: Date.now() };
+        if (!db) return rec;
+        return new Promise(function (resolve) {
+          try {
+            var tx = db.transaction(['obj', 'ws'], 'readwrite');
+            tx.objectStore('obj').put(text, sha);
+            tx.objectStore('ws').put(rec);
+            tx.oncomplete = function () { resolve(rec); };
+            tx.onerror = function () { resolve(rec); };
+          } catch (_) { resolve(rec); }
+        });
+      });
+    });
+  }
+
+  function casDeleteOverlay(path) {
+    delete srcCache[path];
+    delete verifyCache[path];
+    return openHxCas().then(function (db) {
+      if (!db || !db.objectStoreNames.contains('ws')) return;
+      return new Promise(function (resolve) {
+        try {
+          var tx = db.transaction('ws', 'readwrite');
+          tx.objectStore('ws').delete(path);
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function () { resolve(); };
+        } catch (_) { resolve(); }
+      });
+    });
+  }
+
+  function fetchSource(modPath) {
+    if (srcCache[modPath]) return Promise.resolve(srcCache[modPath]);
+    return casGetAllOverlay().then(function (recs) {
+      var hit = recs.find(function (r) { return r && r.path === modPath && typeof r.text === 'string'; });
+      if (hit) { srcCache[modPath] = hit.text; return hit.text; }
+      return fetch('/api/kg/module?path=' + encodeURIComponent(modPath))
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(function (t) { srcCache[modPath] = t; return t; });
+    });
+  }
+
+  function resolveToken(raw) {
+    if (!raw) return null;
+    var s = raw.trim().replace(/^[,.;:()\[\]{}]+|[,.;:()\[\]{}]+$/g, '');
+    if (!s || s.length > 80 || /\s/.test(s)) return null;
+    if (kgData) {
+      if (modMap[s]) return { kind: 'mod', mod: s, line: null, term: null };
+      if (baseMap[s]) return { kind: 'mod', mod: baseMap[s], line: null, term: s };
+      if (SHORT_ALIASES[s] && modMap[SHORT_ALIASES[s]]) return { kind: 'mod', mod: SHORT_ALIASES[s], line: null, term: s };
+      if (kgData.terms && kgData.terms[s] !== undefined) {
+        var hit = kgData.terms[s];
+        var mi = Array.isArray(hit) ? hit[0] : hit;
+        var ln = Array.isArray(hit) ? hit[1] : null;
+        var m = kgData.mods[mi];
+        if (m) return { kind: 'term', mod: m[0], line: ln, term: s };
+      }
+    }
+    if (GLOSSARY[s]) return { kind: 'glossary', term: s, def: GLOSSARY[s] };
+    return null;
+  }
+
+  // ==================== 3. REAL /cubical.wasm WORKER (REAL MODULE CHECK + REAL 1-BIT TAMPER) ====================
+  var CORE_IMPORTS = [
+    'lib/prelude.hypercubical', 'lib/code.hypercubical', 'lib/match.hypercubical',
+    'lib/nav.hypercubical', 'lib/cost.hypercubical', 'lib/lin.hypercubical',
+    'lib/check.hypercubical', 'lib/std.hypercubical', 'lib/core.hypercubical',
+  ];
+
+  var wasmWorker = null;
+  var wasmReadyPromise = null;
+  var wasmCallId = 0;
+  var wasmPending = {};
+  var verifyCache = {};
+
+  function ensureWasm() {
+    if (wasmReadyPromise) return wasmReadyPromise;
+    wasmReadyPromise = new Promise(function (resolve, reject) {
+      var workerCode = [
+        "let wasmCompiled=null,wasmSha='';",
+        "const dec=new TextDecoder(),enc=new TextEncoder();",
+        "const fileTexts=new Map(),fileShas=new Map();",
+        "function toHex(u8){let s='';for(let i=0;i<u8.length;i++)s+=u8[i].toString(16).padStart(2,'0');return s;}",
+        "async function sha256Hex(b){return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256',b)));}",
+        "function pathHex(r){return toHex(enc.encode(r));}",
+        "function toCub(r){return r.endsWith('.hypercubical')?r.slice(0,-13)+'.cub':r;}",
+        "function rewriteToCub(t){return t.replace(/^(\\s*import\\s+\"[^\"]+)\\.hypercubical(\")/gm,'$1.cub$2');}",
+        "function withCStr(ex,mem,str,fn){const b=enc.encode(str),p=ex.wasm_alloc(b.length+1);new Uint8Array(mem.buffer).set(b,p);new Uint8Array(mem.buffer)[p+b.length]=0;try{return fn(p);}finally{ex.wasm_free(p);}}",
+        "function putInto(ex,mem,r,t){const ct=rewriteToCub(t);withCStr(ex,mem,r,rp=>withCStr(ex,mem,ct,tp=>ex.wasm_put_file(rp,tp)));const c=toCub(r);if(c!==r)withCStr(ex,mem,c,rp=>withCStr(ex,mem,ct,tp=>ex.wasm_put_file(rp,tp)));}",
+        "function normRel(d,imp){const raw=imp.startsWith('/')?imp.slice(1):(d+imp),ps=[];for(const s of raw.split('/')){if(!s||s==='.')continue;if(s==='..')ps.pop();else ps.push(s);}return ps.join('/');}",
+        "function parseImports(r,t){const i=r.lastIndexOf('/'),d=i>=0?r.slice(0,i+1):'',o=[];for(const ln of t.split('\\n')){const m=ln.match(/^\\s*import\\s+\"([^\"]+)\"/);if(m)o.push(normRel(d,m[1]));}return o;}",
+        "async function fetchTree(origin,rel,visited,ovMap){",
+        "  if(!visited)visited=new Set();if(visited.has(rel))return visited;visited.add(rel);",
+        "  let src=ovMap&&ovMap.has(rel)?ovMap.get(rel):null;",
+        "  if(src===null){",
+        "    if(!fileTexts.has(rel)){",
+        "      let res=await fetch(origin+'/source/text?path='+pathHex(rel));",
+        "      if(!res.ok)res=await fetch(origin+'/api/kg/module?path='+encodeURIComponent(rel));",
+        "      if(!res.ok)throw new Error('Module not found: '+rel);",
+        "      const buf=new Uint8Array(await res.arrayBuffer()),h=await sha256Hex(buf),txt=dec.decode(buf);",
+        "      fileTexts.set(rel,txt);fileShas.set(rel,h);",
+        "    }",
+        "    src=fileTexts.get(rel);",
+        "  }",
+        "  for(const ch of parseImports(rel,src))await fetchTree(origin,ch,visited,ovMap);",
+        "  return visited;",
+        "}",
+        "async function freshBootedInstance(extraFiles){",
+        "  let o='',e='',mem=null;",
+        "  const wasi={environ_sizes_get(c,s){const dv=new DataView(mem.buffer);dv.setUint32(c,0,true);dv.setUint32(s,0,true);return 0;},environ_get:()=>0,clock_time_get(_i,_p,p){new DataView(mem.buffer).setBigUint64(p,BigInt(Math.round(performance.now()*1e6)),true);return 0;},fd_write(fd,iovs,len,nw){const dv=new DataView(mem.buffer),u8=new Uint8Array(mem.buffer);let tot=0;for(let i=0;i<len;i++){const p=dv.getUint32(iovs+i*8,true),l=dv.getUint32(iovs+i*8+4,true),s=dec.decode(u8.subarray(p,p+l));if(fd===1)o+=s;else e+=s;tot+=l;}dv.setUint32(nw,tot,true);return 0;},fd_close:()=>0,fd_fdstat_get:()=>8,fd_filestat_get:()=>8,fd_prestat_get:()=>8,fd_prestat_dir_name:()=>8,fd_read:()=>8,fd_readdir:()=>8,fd_seek:()=>8,path_create_directory:()=>8,path_filestat_get:()=>8,path_open:()=>8,path_remove_directory:()=>8,path_rename:()=>8,path_unlink_file:()=>8,poll_oneoff:()=>8,proc_exit:(c)=>{throw new Error('exit '+c);},sched_yield:()=>0};",
+        "  const inst=await WebAssembly.instantiate(wasmCompiled,{wasi_snapshot_preview1:wasi});",
+        "  const ex=inst.exports;mem=ex.memory;",
+        "  for(const [k,v] of fileTexts.entries())putInto(ex,mem,k,v);",
+        "  if(extraFiles){for(const [k,v] of extraFiles)putInto(ex,mem,k,v);}",
+        "  const rc=withCStr(ex,mem,'lib/core.cub',p=>ex.wasm_load_module(p));",
+        "  if(rc!==0)throw new Error('core boot failed: '+o+e);",
+        "  return{ex,mem,clear(){o='';e='';},out(){return(o+(e?'\\n'+e:'')).trim();}};",
+        "}",
+        "function mutateOneBit(txt){",
+        "  const lines=txt.split('\\n');",
+        "  for(let i=0;i<lines.length;i++){",
+        "    if(/=\\s*refl\\b/.test(lines[i])&&!/^\\s*--/.test(lines[i])){",
+        "      const before=lines[i],after=lines[i].replace(/=\\s*refl\\b/,'= #0');",
+        "      lines[i]=after;return{text:lines.join('\\n'),lineNo:i+1,before:before.trim(),after:after.trim()};",
+        "    }",
+        "  }",
+        "  for(let i=0;i<lines.length;i++){",
+        "    if(/^[^\\s-][^:]*:\\s+/.test(lines[i])&&/\\bWord\\b/.test(lines[i])){",
+        "      const before=lines[i],after=lines[i].replace(/\\bWord\\b/,'Bool');",
+        "      lines[i]=after;return{text:lines.join('\\n'),lineNo:i+1,before:before.trim(),after:after.trim()};",
+        "    }",
+        "  }",
+        "  return{text:txt+'\\nhx-tamper-check : #0 ≡ #1\\nhx-tamper-check = refl\\n',lineNo:lines.length+1,before:'(module valid)',after:'hx-tamper-check : #0 ≡ #1 ; hx-tamper-check = refl'};",
+        "}",
+        "self.onmessage=async(ev)=>{const msg=ev.data;try{",
+        "if(msg.type==='boot'){",
+        "  const wres=await fetch(msg.origin+'/cubical.wasm');if(!wres.ok)throw new Error('cubical.wasm unavailable');",
+        "  const wb=new Uint8Array(await wres.arrayBuffer());wasmSha=(await sha256Hex(wb)).slice(0,12);",
+        "  wasmCompiled=await WebAssembly.compile(wb);",
+        "  for(const rel of " + JSON.stringify(CORE_IMPORTS) + ")await fetchTree(msg.origin,rel);",
+        "  const t0=performance.now();await freshBootedInstance(null);",
+        "  self.postMessage({type:'ready',ms:(performance.now()-t0).toFixed(0),wasmSha});",
+        "}else if(msg.type==='verify_mod'){",
+        "  const t0=performance.now();",
+        "  const ov=Array.isArray(msg.overlay)?msg.overlay:[];",
+        "  const ovMap=new Map(),ovSha=new Map();",
+        "  for(const item of ov){if(item&&item.path&&typeof item.text==='string'){ovMap.set(item.path,item.text);ovSha.set(item.path,item.sha256||'');}}",
+        "  const visited=await fetchTree(msg.origin,msg.modPath,null,ovMap);",
+        "  self.postMessage({type:'progress',callId:msg.callId,text:'fetched '+visited.size+' deps · elaborating '+msg.modPath+' in cubical.wasm…'});",
+        "  const inst=await freshBootedInstance(ov.map(x=>[x.path,x.text]));",
+        "  inst.clear();const s0=inst.ex.wasm_steps();",
+        "  const rc=withCStr(inst.ex,inst.mem,toCub(msg.modPath),p=>inst.ex.wasm_load_module(p));",
+        "  const ms=(performance.now()-t0).toFixed(1),steps=Math.max(0,inst.ex.wasm_steps()-s0);",
+        "  const modSha=(ovSha.get(msg.modPath)||fileShas.get(msg.modPath)||'').slice(0,12);",
+        "  self.postMessage({type:'result',callId:msg.callId,ok:rc===0,modPath:msg.modPath,sha256:modSha,deps:visited.size,steps,ms,output:inst.out()});",
+        "}else if(msg.type==='tamper_mod'){",
+        "  const t0=performance.now();",
+        "  const ov=Array.isArray(msg.overlay)?msg.overlay:[];",
+        "  const ovMap=new Map();",
+        "  for(const item of ov){if(item&&item.path&&typeof item.text==='string')ovMap.set(item.path,item.text);}",
+        "  await fetchTree(msg.origin,msg.modPath,null,ovMap);",
+        "  const orig=ovMap.has(msg.modPath)?ovMap.get(msg.modPath):(fileTexts.get(msg.modPath)||'');",
+        "  const mut=mutateOneBit(orig);",
+        "  self.postMessage({type:'progress',callId:msg.callId,text:'mutated '+msg.modPath+':'+mut.lineNo+' · running isolated cubical.wasm check…'});",
+        "  const extras=ov.map(x=>[x.path,x.text]);extras.push([msg.modPath,mut.text]);",
+        "  const inst=await freshBootedInstance(extras);",
+        "  inst.clear();",
+        "  const rc=withCStr(inst.ex,inst.mem,toCub(msg.modPath),p=>inst.ex.wasm_load_module(p));",
+        "  const ms=(performance.now()-t0).toFixed(1);",
+        "  self.postMessage({type:'result',callId:msg.callId,ok:rc===0,rejected:rc!==0,modPath:msg.modPath,lineNo:mut.lineNo,before:mut.before,after:mut.after,ms,output:inst.out()});",
+        "}else if(msg.type==='eval'){",
+        "  const t0=performance.now();",
+        "  const ov=Array.isArray(msg.overlay)?msg.overlay:[];",
+        "  const ovMap=new Map();",
+        "  for(const item of ov){if(item&&item.path&&typeof item.text==='string')ovMap.set(item.path,item.text);}",
+        "  const inst=await freshBootedInstance(ov.map(x=>[x.path,x.text]));",
+        "  const imps=parseImports('lens.hypercubical',msg.code);",
+        "  let impErr=false;",
+        "  for(const imp of imps){await fetchTree(msg.origin,imp,null,ovMap);for(const [k,v] of fileTexts.entries())putInto(inst.ex,inst.mem,k,v);for(const [k,v] of ovMap.entries())putInto(inst.ex,inst.mem,k,v);const rc=withCStr(inst.ex,inst.mem,toCub(imp),p=>inst.ex.wasm_load_module(p));if(rc!==0){impErr=true;break;}}",
+        "  const evalCode=imps.length?msg.code.split('\\n').map(l=>/^\\s*import\\s+\"[^\"]+\"/.test(l)?'':l).join('\\n'):msg.code;",
+        "  inst.clear();const s0=inst.ex.wasm_steps();",
+        "  const steps=impErr?-1:withCStr(inst.ex,inst.mem,evalCode,p=>inst.ex.wasm_eval(p)),ms=(performance.now()-t0).toFixed(1);",
+        "  const ok=!impErr&&steps>=0,stepDelta=Math.max(0,inst.ex.wasm_steps()-s0);",
+        "  self.postMessage({type:'result',callId:msg.callId,ok,steps:stepDelta,ms,output:inst.out()});",
+        "}}catch(e){self.postMessage({type:'error',callId:msg.callId||null,error:String(e&&e.message?e.message:e)});}};",
+      ].join('\n');
+
+      wasmWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
+      wasmWorker.onmessage = function (ev) {
+        var d = ev.data;
+        if (d.type === 'ready') resolve(d);
+        else if (d.type === 'progress' && d.callId && wasmPending[d.callId]) {
+          if (wasmPending[d.callId].onProgress) wasmPending[d.callId].onProgress(d.text);
+        } else if (d.callId && wasmPending[d.callId]) {
+          var cb = wasmPending[d.callId];
+          delete wasmPending[d.callId];
+          if (d.type === 'error') cb.reject(new Error(d.error));
+          else cb.resolve(d);
+        } else if (d.type === 'error' && !d.callId) reject(new Error(d.error));
+      };
+      wasmWorker.onerror = function (err) { reject(err); };
+      wasmWorker.postMessage({ type: 'boot', origin: window.location.origin });
+    });
+    return wasmReadyPromise;
+  }
+
+  function callWorker(payload, onProgress) {
+    return Promise.all([ensureWasm(), casGetAllOverlay()]).then(function (pair) {
+      var boot = pair[0], overlay = pair[1];
+      return new Promise(function (resolve, reject) {
+        var id = ++wasmCallId;
+        wasmPending[id] = {
+          onProgress: onProgress,
+          resolve: function (r) { r.wasmSha = boot.wasmSha; resolve(r); },
+          reject: reject,
+        };
+        payload.callId = id;
+        payload.origin = window.location.origin;
+        payload.overlay = overlay;
+        wasmWorker.postMessage(payload);
+      });
+    });
+  }
+
+  function verifyModule(modPath, onProgress) {
+    if (verifyCache[modPath]) return Promise.resolve(verifyCache[modPath]);
+    return callWorker({ type: 'verify_mod', modPath: modPath }, onProgress).then(function (r) {
+      if (r.ok) verifyCache[modPath] = r;
+      return r;
+    });
+  }
+  function tamperModule(modPath, onProgress) { return callWorker({ type: 'tamper_mod', modPath: modPath }, onProgress); }
+  function evalCubical(code, onProgress) { return callWorker({ type: 'eval', code: code }, onProgress); }
+
+  // ==================== 4. ALL 18 STAT-CELL EXPOSITIONS (REAL MODULES ONLY) ====================
+  var EXPOSITIONS = [
+    {
+      match: 'Universal CLI native compiler',
+      verifyMod: 'lib/native.hypercubical',
+      kicker: 'BENCHMARK 01 / 06 · UNIVERSAL NATIVE COMPILER',
+      title: 'How ~28 Lines of Cubical Code Compile Any Verified Program to Native C11 / ARM64',
+      plain: 'A single universal driver in <code>lib/native.hypercubical</code> takes <em>any</em> checked entry point of type <code>List (List Word) → Step W Word</code> (argv bytes in, POSIX syscalls out), extracts its transitive dependency closure from <code>store/</code>, and emits standalone, zero-dependency, UBSan-clean C11 compiled via <code>clang -std=c11 -O3 -fsanitize=undefined</code>.',
+      wall: 'Traditional proof assistants (Coq, Lean, Agda) either execute inside a slow interpreter/boxed-GC runtime or erase proofs into untrusted extracted code that needs hand-written C shims for I/O, sockets, and CLI parsing—reintroducing the very bugs formal verification was meant to eliminate.',
+      mechanism: 'Because Hyperactivity reflects its own typed AST as an inductive type (<code>Code</code>) inside the language itself, <code>emit-c-cli : Code → List Word</code> is an ordinary checked function inside the store. It calls <code>program-of-at</code> to slice out reachable checked definitions, fuses arities via <code>x-arities</code>, emits flat unboxed 64-bit C functions (<code>ce-wfns</code>) over a tiny POSIX bridge (<code>ce-posix-sys</code>), and wraps <code>main(argc, argv)</code> in <code>ce-cli-main</code>.',
+      numbers: [
+        ['Core compiler driver', 'emit-c-cli + emit-c-cli-program + ce-cli-main (~28 lines core; 65 lines total in lib/native.hypercubical incl. POSIX/CLI helpers)'],
+        ['Target backend', 'Standalone C11 → clang -std=c11 -O3 -fsanitize=undefined on Apple Silicon ARM64'],
+        ['Hand-written C per tool', '0 lines (hxz, hx-tensor, hx-fold, hx-book, hx-node all emit through this pipeline)'],
+        ['Undefined behavior (UBSan)', '0 violations across all 5 native binaries'],
+      ],
+      modules: [
+        { path: 'lib/native.hypercubical', label: 'lib/native.hypercubical' },
+        { path: 'lib/emit-c.hypercubical', label: 'lib/emit-c.hypercubical' },
+      ],
+      jump: '#ch1',
+    },
+    {
+      match: 'beats', match2: 'hxz',
+      verifyMod: 'lib/compress-stream.hypercubical',
+      kicker: 'BENCHMARK 02 / 06 · CAUSAL CONTEXT-FIBER COMPRESSION (hxz)',
+      title: 'Why hxz (223 B / 512 B) Beats gzip -9, bzip2 -9, and xz -9 Bit-Exact',
+      plain: 'On a 512-byte slice of structured source text, <code>hxz</code>—compiled directly from verified cubical code—compresses to <strong>223 bytes</strong> in 14 ms and decompresses bit-exact, beating <code>gzip -9</code> (246 B), <code>bzip2 -9</code> (292 B), and <code>xz -9</code> (292 B).',
+      wall: 'LZ77/BWT/LZMA compressors (gzip, bzip2, xz) pay heavy static framing, dictionary-header, and block-table overhead and rely on byte-window heuristics that waste bits on short-to-medium structured payloads.',
+      mechanism: '<code>hxz</code> factors compression into two mechanically proved layers: (1) an adaptive <strong>causal context-fiber model</strong> predicting $P(x_t \\mid x_{<t})$ strictly from causal history without shipping a static table, and (2) an exact power-of-2 <strong>rANS</strong> coder ($M \\mid L$, $L = 32768$) whose round-trip identity $\\text{dec}(\\text{enc}(x)) \\equiv x$ is proved by cubical reflexivity in <code>lib/compress-stream.hypercubical</code>.',
+      numbers: [
+        ['512 B payload · hxz', '223 B (14 ms) — BIT-EXACT · beats all 3'],
+        ['512 B payload · gzip -9', '246 B (+23 B larger than hxz)'],
+        ['512 B payload · bzip2 -9 / xz -9', '292 B / 292 B (+69 B larger than hxz)'],
+        ['2,048 B payload · hxz', '781 B (157 ms) — beats bzip2 -9 (861 B) & xz -9 (800 B), bit-exact'],
+      ],
+      modules: [
+        { path: 'lib/hxz.hypercubical', label: 'lib/hxz.hypercubical' },
+        { path: 'lib/compress-stream.hypercubical', label: 'lib/compress-stream.hypercubical' },
+        { path: 'lib/compress.hypercubical', label: 'lib/compress.hypercubical' },
+      ],
+      jump: '#ch2',
+    },
+    {
+      match: 'zero-tape reversible layers',
+      verifyMod: 'lib/silicon/hx-tensor.hypercubical',
+      kicker: 'BENCHMARK 03 / 06 · KILLING THE HBM MEMORY WALL (hx-tensor)',
+      title: '24M Reversible Layers/sec + 5M FlashAttention Tokens in O(1) Memory',
+      plain: '<code>hx-tensor</code> runs <strong>600,000 reversible layers</strong> forward + exact algebraic inverse reconstruction + gradient accumulation in <strong>25 ms (24M layers/s) with 0 bytes of activation tape</strong>, and streams <strong>5,000,000 KV tokens</strong> through 1-pass FlashAttention in <strong>213 ms (23.5M tokens/s) in $O(1)$ registers</strong> (where naive attention would materialize a $2.5 \\times 10^{13}$-entry score matrix).',
+      wall: 'Conventional autodiff treats forward layers as lossy one-way functions (forcing $O(L)$ activation checkpoints in HBM) and materializes $O(N^2)$ softmax score matrices—making HBM bandwidth the dominant wall in modern AI.',
+      mechanism: 'Two exact factorizations eliminate the memory wall: (1) <strong>Online Softmax Monoid</strong>—attention accumulators $(m, \\ell, o)$ form an associative monoid (<code>aacc-assoc</code>), streaming arbitrary $N$ in $O(1)$ registers; (2) <strong>Coupling-Layer Involution</strong>—$(x_1, x_2) \\mapsto (x_1, x_2 + f(x_1))$ inverts bit-exact during backprop with zero tape (<code>rev-zero-tape-grad-cert</code>).',
+      numbers: [
+        ['Reversible backprop throughput', '600,000 layers (fwd + exact inverse + grad) in 25 ms → 24.0M layers/sec'],
+        ['Activation tape memory', '0 bytes (O(1) register state; exact algebraic reconstruction)'],
+        ['1-pass FlashAttention', 'N = 5,000,000 KV tokens in 213 ms → 23.5M tokens/sec in O(1) registers'],
+        ['Verification & safety', 'Zero hand-written C, zero UBSan violations, mechanized certificates'],
+      ],
+      modules: [
+        { path: 'lib/silicon/hx-tensor.hypercubical', label: 'lib/silicon/hx-tensor.hypercubical' },
+        { path: 'lib/silicon/hypertensor.hypercubical', label: 'lib/silicon/hypertensor.hypercubical' },
+      ],
+      jump: '#ch3',
+    },
+    {
+      match: 'exact pocket pruning',
+      verifyMod: 'fold/branch-and-bound.hypercubical',
+      kicker: 'BENCHMARK 04 / 06 · EXACT PROTEIN FOLDING & BINDER SEARCH (hx-fold)',
+      title: '16.78M → 768 Scaffolds: 99.9954% Exact Branch-and-Bound Pruning in 0 ms',
+      plain: 'In a 4-residue binding pocket with $K = 64$ discrete rotamer/backbone choices per site ($64^4 = 16{,}777{,}216$ candidate scaffolds), <code>hx-fold</code> applies a provably admissible energy lower bound to <strong>eliminate 16,776,448 scaffolds (99.9954%)</strong>—evaluating only <strong>768 leaf states</strong> in under 1 ms (<code>0 ms</code> wall clock) with an exact global optimality guarantee.',
+      wall: 'Combinatorial binder search scales as $O(K^d)$, intractable by brute force. Heuristic search (Monte Carlo, genetic algorithms, neural diffusion) provides zero guarantee of global optimality and frequently hallucinates steric clashes.',
+      mechanism: 'Because shifted unary + pairwise residue energies are non-negative, partial prefix energy $E(r_1) \\le E(r_1, r_2) \\le E(r_1, r_2, r_3) \\le E(r_1, r_2, r_3, r_4)$ is strictly monotone. Whenever a prefix exceeds incumbent $E^*$, the entire remaining subtree ($K^3, K^2, K$) is discarded in one comparison—formally certified in <code>fold/branch-and-bound.hypercubical</code>.',
+      numbers: [
+        ['Total conformational space (K = 64, d = 4)', '64⁴ = 16,777,216 candidate pocket scaffolds'],
+        ['Subtrees provably pruned', '16,776,448 (99.9954% eliminated, 0 approximation error)'],
+        ['Exact leaves evaluated', '768 states (0 ms native ARM64 wall-clock)'],
+        ['Optimality guarantee', 'Exact global energy minimum (admissible monotone lower bound)'],
+      ],
+      modules: [
+        { path: 'fold/hx-fold.hypercubical', label: 'fold/hx-fold.hypercubical' },
+        { path: 'fold/branch-and-bound.hypercubical', label: 'fold/branch-and-bound.hypercubical' },
+        { path: 'chem/pocket-binder.hypercubical', label: 'chem/pocket-binder.hypercubical' },
+      ],
+      jump: '#ch4',
+    },
+    {
+      match: 'bit-exact vs', match2: 'hx-book',
+      verifyMod: 'experiments/cxx/hx-book.hypercubical',
+      kicker: 'BENCHMARK 05 / 06 · PROOF-CARRYING FINANCIAL MATCHING ENGINE (hx-book)',
+      title: '31.2M Orders/sec: Formally Verified Matching Engine Bit-Exact vs clang++ -O3',
+      plain: '<code>hx-book</code> specifies a limit order book (Add, Cancel, Execute) in cubical type theory with a compile-time conservation proof (<code>hxb-exec-conserves-sample : refl</code>) and compiles via <code>lib/native.hypercubical</code>. On <strong>10,000,000 deterministic orders</strong>, it executes in <strong>321 ms (31.2M ops/s)</strong> and matches an independent hand-written <code>clang++ -std=c++20 -O3</code> engine bit-for-bit.',
+      wall: 'Hand-written C++ matching kernels risk silent overflow, use-after-free, and accounting drift; conversely, verified smart-contract VMs (EVM, Move) run $10^4\\times$–$10^6\\times$ slower.',
+      mechanism: 'Hyperfactoring the book state into a flat unboxed product type <code>HxbBook (bid ask exec adds cancels : Word)</code> with total transitions <code>hxb-step</code> proves conservation statically and erases proofs to zero runtime cost—emitting tight register-only C11 loops under <code>-O3 -fsanitize=undefined</code>.',
+      numbers: [
+        ['Workload', '10,000,000 deterministic Add / Cancel / Execute orders'],
+        ['Native verified throughput', '321 ms → 31.2M orders/sec (Apple Silicon ARM64, UBSan enabled)'],
+        ['Differential oracle check', 'Bit-exact state (bid=30 ask=48 exec=58750059 adds=3333334) vs clang++ -O3'],
+        ['Invariant proof', 'Mass/quantity conservation checked at compile time (0 runtime overhead)'],
+      ],
+      modules: [
+        { path: 'experiments/cxx/hx-book.hypercubical', label: 'experiments/cxx/hx-book.hypercubical' },
+        { path: 'lib/order-ledger.hypercubical', label: 'lib/order-ledger.hypercubical' },
+      ],
+      jump: '#ch5',
+    },
+    {
+      match: 'Kademlia XOR DHT',
+      verifyMod: 'lib/dht.hypercubical',
+      kicker: 'BENCHMARK 06 / 06 · SOVEREIGN PoUW PEER NODE (hx-node)',
+      title: '262K Peers Routed in 2 ms + Live UDP rANS Wire & Cryptographic PoUW Settlement',
+      plain: '<code>hx-node</code> is a self-contained native peer binary compiled from 124 lines of verified cubical code: it routes across <strong>262,144 peers via Kademlia XOR metric in 2 ms</strong>, exchanges live UDP frames compressed with proved lossless rANS, and settles escrow atomically—paying iff the decoded payload satisfies the verified digest (<code>ACCEPT:escrow=0:bal=150:conserved=150</code>) and rejecting forged frames with zero balance drift (<code>REJECT:escrow=100:bal=50:forged=1</code>).',
+      wall: 'Proof-of-Work blockchains burn megawatts on useless nonces and serialize all peers into one global queue; centralized clouds extract monopoly margins and control.',
+      mechanism: 'XOR distance $d(a,b) = a \\oplus b$ satisfies metric symmetry & triangle inequality (<code>lib/dht.hypercubical</code>); wire frames use proved lossless rANS; <code>hxn-settle</code> enforces exact credit conservation $\\text{escrow} + \\text{bal} = \\text{const}$ on both accepted and forged frames.',
+      numbers: [
+        ['DHT routing benchmark', '262,144 (2¹⁸) peers XOR-routed in 2 ms native ARM64'],
+        ['Wire transport', 'Live POSIX UDP sockets + proved lossless rANS stream framing'],
+        ['Valid proof settlement', 'ACCEPT:escrow=0:bal=150:conserved=150 (exact conservation)'],
+        ['Forged frame attack test', 'REJECT:escrow=100:bal=50:forged=1 (0 gain to attacker)'],
+      ],
+      modules: [
+        { path: 'lib/hx-node.hypercubical', label: 'lib/hx-node.hypercubical' },
+        { path: 'lib/dht.hypercubical', label: 'lib/dht.hypercubical' },
+        { path: 'lib/pouw.hypercubical', label: 'lib/pouw.hypercubical' },
+      ],
+      jump: '#ch6',
+    },
+    // /learn (4)
+    {
+      match: 'Postulates in kernel',
+      verifyMod: 'lib/core.hypercubical',
+      kicker: 'KERNEL AXIOM 01 / 04 · ZERO-TRUST FOUNDATION',
+      title: '0 Postulates in the Self-Hosted Cubical Type Checker',
+      plain: 'A postulate (<code>axiom</code> / <code>sorry</code> / <code>admit</code>) is an unproved assumption taken on faith. Hyperactivity\'s self-hosted cubical kernel (<code>lib/check.hypercubical</code>) contains <strong>zero postulates</strong>: every equality, transport, composition, and theorem reduces canonically.',
+      wall: 'Classical proof assistants bolt on non-computational axioms (Functional Extensionality, Univalence, Choice) that get stuck during evaluation—preventing proofs from executing as programs.',
+      mechanism: 'Cubical Type Theory gives direct computational semantics to the interval $\\mathbb{I}$, path abstraction $\\lambda i.\\,t$, homogeneous composition <code>hcomp</code>, and <code>Glue</code> types—making function extensionality and univalence proved theorems that compute.',
+      numbers: [
+        ['Postulates / sorry in kernel', '0 (enforced automatically by lib/guard.hypercubical on every commit)'],
+        ['Canonical computation', 'Closed terms of Nat / Word reduce to numerals (Brunerie number = -2)'],
+        ['Browser kernel', 'Same self-hosted kernel compiles to /cubical.wasm (575 KB)'],
+      ],
+      modules: [
+        { path: 'lib/check.hypercubical', label: 'lib/check.hypercubical' },
+        { path: 'lib/kernel.hypercubical', label: 'lib/kernel.hypercubical' },
+        { path: 'lib/guard.hypercubical', label: 'lib/guard.hypercubical' },
+      ],
+    },
+    {
+      match: 'Degree-2 active pair',
+      verifyMod: 'lib/distnet.hypercubical',
+      kicker: 'KERNEL AXIOM 02 / 04 · INTERACTION-NET PHYSICS',
+      title: 'One Local Law (Degree-2 Active Pair ●═●) Eliminates GC & Cache Coherence',
+      plain: 'In an interaction net, every wire has <strong>exact degree 2</strong>—connecting exactly two ports. When two principal ports meet (<code>●═●</code>), they annihilate or commute locally in $O(1)$ time and immediately recycle their own cells.',
+      wall: 'Unbounded pointer aliasing in von Neumann CPUs forces stop-the-world garbage collection (to trace live references) and <code>MESI</code> cache-coherence snoop directories (to synchronize shared memory across cores).',
+      mechanism: 'Degree-2 linearity reduces every wire slot to two states—empty or waiting for its single partner—updated by a 1-cycle atomic exchange (<code>vxchg</code>). Order symmetry (<code>vxchg-order-sym</code>) guarantees deterministic completion regardless of arrival order, with zero locks and zero GC.',
+      numbers: [
+        ['Wire degree invariant', 'Exact degree 2 (1-to-1 endpoints; no unbounded aliasing)'],
+        ['Synchronization primitive', 'Single 1-word atomic exchange (vxchg), proved order-symmetric'],
+        ['Memory reclamation', 'Local O(1) LIFO cell conservation on every rewrite (0 GC pauses)'],
+      ],
+      modules: [
+        { path: 'lib/silicon/hypernet.hypercubical', label: 'lib/silicon/hypernet.hypercubical' },
+        { path: 'lib/distnet.hypercubical', label: 'lib/distnet.hypercubical' },
+      ],
+    },
+    {
+      match: 'Warm store speedup',
+      verifyMod: 'lib/silicon/inet-compiler.hypercubical',
+      kicker: 'KERNEL AXIOM 03 / 04 · CONTENT-ADDRESSED INCREMENTAL STORE',
+      title: '5.15× Warm Store Speedup (6.64s → 1.29s) via Content-Addressed Caching',
+      plain: 'Every definition and module in Hyperactivity is addressed by cryptographic SHA-256 hash in <code>store/</code> rather than mutable timestamps. Checked modules resolve directly from their verified hash instead of re-checking unchanged proofs.',
+      wall: 'Conventional build systems rely on fragile file paths and timestamps; editing a comment invalidates entire compilation units.',
+      mechanism: 'Module-hash fast-pathing in <code>w_file</code> + direct-open <code>store_check_get</code> resolves verified definitions straight from content hashes—making stale-cache bugs structurally impossible.',
+      numbers: [
+        ['lib/silicon/hypernet16.hypercubical cold → warm', '6.64s → 1.29s (5.15× speedup)'],
+        ['Typical module warm speedup', '3.0× – 5.15× across the checked library'],
+        ['Batched 12-definition store write', '3.58s end-to-end checked + persisted'],
+      ],
+      modules: [
+        { path: 'lib/silicon/hypernet16.hypercubical', label: 'lib/silicon/hypernet16.hypercubical' },
+        { path: 'src/store.c', label: 'src/store.c' },
+      ],
+    },
+    {
+      match: 'Content-addressed modules',
+      verifyMod: 'lib/core.hypercubical',
+      kicker: 'KERNEL AXIOM 04 / 04 · VERIFIED MONOREPO IN STORE/',
+      title: 'Live Content-Addressed Knowledge Graph Under One Root Hash',
+      plain: 'The kernel, compiler, 7nm silicon photolithography, interaction-net hardware, PoUW peer node, protein folder, AI/physics/neuro models, HTTP server, and treatises all live inside one immutable Merkle DAG rooted at <code>store/ROOT/root</code>.',
+      wall: 'Conventional research stacks fracture across unverified notebooks, separate C++ repos, and static PDFs—breaking any verifiable link between claims and code.',
+      mechanism: 'Treatises, HTTP server (<code>lib/server.hypercubical</code>), browser WASM kernel, and every checked theorem share one content-addressed root hash. Any single bit change alters the root.',
+      numbers: [
+        ['Total content-addressed entries in store/', '628+ stored files (checked modules + treatises + assets)'],
+        ['Live indexed .hypercubical modules', 'Hydrated live from /api/kg/index (358+ modules, searchable via ⌘K)'],
+        ['Live indexed verified definitions', '16,946+ checked definitions (hover-peek & clickable site-wide)'],
+      ],
+      modules: [
+        { path: 'lib/server.hypercubical', label: 'lib/server.hypercubical' },
+        { path: 'lib/core.hypercubical', label: 'lib/core.hypercubical' },
+      ],
+    },
+    // /decentralized (4)
+    {
+      match: 'Disjoint cuts',
+      verifyMod: 'lib/distnet.hypercubical',
+      kicker: 'DECENTRALIZED LAW 01 / 04 · STRONG CONFLUENCE',
+      title: '0 Global Clock: Disjoint Cuts & Credit Transfers Commute Without Consensus',
+      plain: 'Computation and value transfer execute as local interaction-net rewrites: if Peer A reduces active pair $(a \\bowtie b)$ and Peer B reduces a disjoint pair $(c \\bowtie d)$, the global result is <strong>mathematically identical regardless of order</strong>—eliminating global consensus rounds between independent actors.',
+      wall: 'Global total-order consensus (PoW / BFT leader slots) serializes unrelated actors worldwide into a single planetary bottleneck.',
+      mechanism: 'In <code>lib/distnet.hypercubical</code>, <code>disjoint-cuts-commute</code> proves definitionally that rewrites on disjoint wire endpoints commute: $\\text{cut}(e_1, \\text{cut}(e_2, G)) \\equiv \\text{cut}(e_2, \\text{cut}(e_1, G))$.',
+      numbers: [
+        ['Global serialization overhead', '0 rounds for disjoint computations or credit transfers'],
+        ['Confluence property', 'Strong 1-step diamond property (16 refl proofs in lib/distnet.hypercubical)'],
+        ['Throughput scaling', 'Linear with independent peers (no global chain bottleneck)'],
+      ],
+      modules: [
+        { path: 'lib/distnet.hypercubical', label: 'lib/distnet.hypercubical' },
+        { path: 'lib/pouw.hypercubical', label: 'lib/pouw.hypercubical' },
+      ],
+    },
+    {
+      match: 'Conserved distributed credit',
+      verifyMod: 'lib/pouw.hypercubical',
+      kicker: 'DECENTRALIZED LAW 02 / 04 · CONSERVATION INVARIANT',
+      title: 'Σc + Σm = const: Conserved Credit with Zero Blockchain Bloat',
+      plain: 'Credit conservation is enforced as a linear-resource invariant: active peer balances ($\\Sigma c$) plus in-flight escrowed credits ($\\Sigma m$) remain strictly constant across every state transition—preventing inflation and double-spending without replaying global ledger history from genesis.',
+      wall: 'Unbounded ledger history grows into terabyte archival nodes, pricing individuals out of sovereign verification and reconcentrating networks into RPC oligopolies.',
+      mechanism: 'Every escrow lock, valid proof payout, and forged-proof rejection preserves $\\Sigma c + \\Sigma m$ as a type-level theorem in <code>lib/pouw.hypercubical</code> and <code>lib/hx-node.hypercubical</code>.',
+      numbers: [
+        ['Conservation law', 'Σ(peer balances) + Σ(escrow / in-flight messages) = constant'],
+        ['Forgery gain theorem', 'Invalid or forged proof yields strictly 0 credit gain'],
+        ['Chain bloat', '0 global history replay required to verify a settled receipt'],
+      ],
+      modules: [
+        { path: 'lib/pouw.hypercubical', label: 'lib/pouw.hypercubical' },
+        { path: 'lib/hx-node.hypercubical', label: 'lib/hx-node.hypercubical' },
+      ],
+    },
+    {
+      match: 'Paid strictly for verified truths',
+      verifyMod: 'lib/pouw.hypercubical',
+      kicker: 'DECENTRALIZED LAW 03 / 04 · PROOF OF USEFUL WORK (PoUW)',
+      title: 'PoUW Clearing: Payout Gated Strictly by Kernel Acceptance of Witness w : P',
+      plain: 'A bounty specifies a cubical type $P$ (an optimal circuit, verified kernel patch, exact binder, or theorem). Escrow pays out <strong>if and only if the self-hosted cubical kernel accepts the submitted witness $w : P$</strong>—eliminating both PoW energy waste and RLHF reward hacking.',
+      wall: 'Markets paying for heuristic scores or learned reward models inevitably collapse under Goodhart\'s Law as agents exploit the proxy rather than truth.',
+      mechanism: 'Verification asymmetry—arbitrarily hard search vs. millisecond deterministic type-checking—turns compute directly into a decentralized truth-clearing engine.',
+      numbers: [
+        ['Reward-hack surface', '0 (payout gated strictly by kernel acceptance of w : P)'],
+        ['Verification asymmetry', 'Hard search → millisecond deterministic type check'],
+        ['Public good compounding', 'Every settled witness lands permanently in store/'],
+      ],
+      modules: [
+        { path: 'lib/pouw.hypercubical', label: 'lib/pouw.hypercubical' },
+        { path: 'lib/hx-node.hypercubical', label: 'lib/hx-node.hypercubical' },
+      ],
+    },
+    {
+      match: 'Univalent portals',
+      verifyMod: 'lib/pouw.hypercubical',
+      kicker: 'DECENTRALIZED LAW 04 / 04 · UNIVALENT COMPOUNDING',
+      title: 'A ≡ B ⇒ P B → P A: Settled Proofs Transport Automatically Across Equivalences',
+      plain: 'In Cubical Type Theory, Univalence is a computable theorem: any checked equivalence $A \\simeq B$ yields a path $A \\equiv B$, and transporting along that path automatically converts any proof or program $P\\,B$ into a verified solution $P\\,A$ with zero manual rewrite.',
+      wall: 'Software engineering repeatedly re-implements identical algorithms across incompatible representations, languages, hardware targets, and APIs.',
+      mechanism: 'A univalent portal is a checked equivalence $e : A \\simeq B$ in <code>store/</code>; every past and future theorem proved for $B$ transports automatically to $A$ via cubical <code>transport</code>.',
+      numbers: [
+        ['Transport law', 'ua : (A ≃ B) → (A ≡ B), transport (λ i → P (ua e i)) : P A → P B'],
+        ['Execution cost', 'Computational (reduces inside kernel; no stuck axioms)'],
+        ['Network effect', 'O(1) portal proof bridges O(N) theorems across domains'],
+      ],
+      modules: [
+        { path: 'lib/pouw.hypercubical', label: 'lib/pouw.hypercubical' },
+        { path: 'lib/kernel.hypercubical', label: 'lib/kernel.hypercubical' },
+      ],
+    },
+    // /silicon (4)
+    {
+      match: '5-Queens cycle speedup',
+      verifyMod: 'lib/silicon/inet-compiler.hypercubical',
+      kicker: 'SILICON RESULT 01 / 04 · HYPERNET-16 INTERACTION-NET PROCESSOR',
+      title: '69.0× Cycle Speedup (43.0× Wall-Clock ns) on 5-Queens vs RISC-V RV32',
+      plain: 'Cycle-accurate RTL simulation of the 16-tile interaction-net processor (<code>HyperNet-16</code>) against RISC-V <code>RV32</code> on 5-Queens (all 10 solutions): RV32 requires <strong>2,001 cycles (1,758.82 ns)</strong>; HyperNet-16 completes in <strong>29 cycles (40.90 ns)</strong>—<strong>69.0× fewer cycles</strong> (43.0× faster wall-clock), with 128/128 cells freed and 84.1% of idle tile-cycles clock-gated.',
+      wall: 'Sequential ISAs (x86, ARM, RV32) force parallel tree search and graph reduction through a narrow instruction pointer, call stack, branch predictor, and coherent cache hierarchy.',
+      mechanism: 'HyperNet-16 maps active pairs onto 16 parallel hardware tiles with hardware work-stealing (7 steals), 1-cycle <code>vxchg</code> wire linking, and a 1-cycle §4.5 cubical face-contradiction rollback gate that prunes dead branches without unwinding a software stack.',
+      numbers: [
+        ['HyperNet-16 (5-Queens, 10 solutions)', '29 cycles (40.90 ns) — 70 steps (2.41/cyc), 7 steals, 84.1% gated'],
+        ['RISC-V RV32 baseline', '2,001 cycles (1,758.82 ns)'],
+        ['Speedup ratio', '69.0× cycles / 43.0× wall-clock nanoseconds'],
+        ['Cell conservation', '128/128 cells & Vars freed on completion'],
+      ],
+      modules: [
+        { path: 'lib/silicon/hypernet16.hypercubical', label: 'lib/silicon/hypernet16.hypercubical' },
+        { path: 'lib/silicon/hypernet.hypercubical', label: 'lib/silicon/hypernet.hypercubical' },
+      ],
+      jump: '#part1',
+    },
+    {
+      match: 'Universal compiler soundness',
+      verifyMod: 'lib/silicon/inet-compiler.hypercubical',
+      kicker: 'SILICON RESULT 02 / 04 · ZERO-GAP COMPILER PROOF',
+      title: '∀ e : HExpr — Universal Compiler Soundness Proved by 4-Line refl (ic-compile-sound)',
+      plain: '<code>ic-compile-sound</code> proves universally for every expression $e : \\text{HExpr}$ (not bounded tests) that compiling $e$ into an interaction-net circuit and executing hardware step semantics yields the exact denotation of $e$—in <strong>4 lines ending in <code>refl</code></strong> (vs. 100k+ lines of simulation induction in CompCert).',
+      wall: 'Semantic mismatch between high-level languages, IRs, ISAs, and RTL gates forces huge simulation-relation proofs that fracture whenever an optimization pass changes.',
+      mechanism: 'Source expressions, interaction-net IR, and hardware netlists share the exact same algebraic structure (hyperfactored cubical interaction combinators), making compilation a structure-preserving homomorphism whose soundness commutes definitionally.',
+      numbers: [
+        ['Quantification', 'Universal ∀ e : HExpr (every valid program)'],
+        ['Theorem name', 'ic-compile-sound (9 refl proofs in lib/silicon/inet-compiler.hypercubical)'],
+        ['Proof size', '4 lines ending in definitional reflexivity (refl)'],
+      ],
+      modules: [
+        { path: 'lib/silicon/inet-compiler.hypercubical', label: 'lib/silicon/inet-compiler.hypercubical' },
+        { path: 'lib/silicon/hypernet.hypercubical', label: 'lib/silicon/hypernet.hypercubical' },
+        { path: 'lib/silicon/all.hypercubical', label: 'lib/silicon/all.hypercubical' },
+      ],
+      jump: '#part2',
+    },
+    {
+      match: 'Proved 7nm die polygons',
+      verifyMod: 'lib/silicon/hx-tapeout.hypercubical',
+      kicker: 'SILICON RESULT 03 / 04 · VERIFIED PHYSICAL LAYOUT',
+      title: '1,166,552 Proved 7nm Die Polygons (hypernet16-die-polys-cert)',
+      plain: 'The exact physical 7nm CMOS layout of the entire 16-tile HyperNet-16 die—all <strong>1,166,552 geometric lithography mask polygons</strong> across 129,600 CMOS7 standard cells—is constructed algebraically and certified inside the cubical kernel (<code>hypernet16-die-polys-cert</code>).',
+      wall: 'Conventional EDA toolchains are closed-source, non-deterministic black boxes with zero formal proof linking RTL semantics to the physical mask polygons sent to a foundry.',
+      mechanism: 'Hierarchical physical layout is defined as a single-source inductive geometry algebra (<code>GdsHier</code>): every standard cell, tile array, clock mesh, and bus carries exact bounding-box, grid-alignment, and polygon-count theorems composing up to the full die.',
+      numbers: [
+        ['Certified physical polygons', '1,166,552 polygons (hypernet16-die-polys-cert)'],
+        ['Standard cell count', '129,600 CMOS7 7nm cells across 16 parallel tiles'],
+        ['Geometry source of truth', 'Single-source GdsHier algebra in store/ (0 black-box EDA)'],
+      ],
+      modules: [
+        { path: 'lib/silicon/hx-tapeout.hypercubical', label: 'lib/silicon/hx-tapeout.hypercubical' },
+        { path: 'lib/silicon/hypernet16.hypercubical', label: 'lib/silicon/hypernet16.hypercubical' },
+      ],
+    },
+    {
+      match: 'Lossless binary Calma GDSII',
+      verifyMod: 'lib/silicon/export.hypercubical',
+      kicker: 'SILICON RESULT 04 / 04 · HYPERFACTORED PHOTOLITHOGRAPHY',
+      title: '5,386 Bytes: Lossless Binary Calma GDSII v6.0 for 129,600 7nm Cells',
+      plain: 'Preserving hierarchical cell symmetry directly inside binary Calma <code>GDSII</code> v6.0 (<code>SREF</code>/<code>AREF</code> array instancing), the complete lossless foundry-ready tapeout stream for all <strong>129,600 CMOS7 cells (1,166,552 polygons)</strong> emits straight from the verified store in <strong>5,386 bytes</strong>.',
+      wall: 'Flattening silicon mask layouts destroys structural symmetry, balloons GDSII files to tens or hundreds of megabytes, and makes formal verification of physical masks infeasible.',
+      mechanism: '<code>GdsHier</code> emits each primitive cell once and encodes regular tile/gate arrays as exact binary Calma v6.0 records (<code>HEADER</code>, <code>BGNLIB</code>, <code>BOUNDARY</code>, <code>XY</code>, <code>ENDLIB</code>) directly from checked cubical code.',
+      numbers: [
+        ['Complete binary GDSII v6.0 stream', '5,386 bytes (lossless, zero external compression)'],
+        ['Expanded silicon content', '129,600 CMOS7 7nm cells → 1,166,552 lithography polygons'],
+        ['Structural hierarchy factor', '>10,000× smaller than flattened polygon coordinates'],
+      ],
+      modules: [
+        { path: 'lib/silicon/export.hypercubical', label: 'lib/silicon/export.hypercubical' },
+        { path: 'lib/silicon/hx-tapeout.hypercubical', label: 'lib/silicon/hx-tapeout.hypercubical' },
+      ],
+    },
+  ];
+
+  function findExposition(cellText) {
+    var t = (cellText || '').replace(/\s+/g, ' ').trim();
+    for (var i = 0; i < EXPOSITIONS.length; i++) {
+      var ex = EXPOSITIONS[i];
+      if (t.indexOf(ex.match) !== -1 && (!ex.match2 || t.indexOf(ex.match2) !== -1)) return ex;
+    }
+    return null;
+  }
+
+  function formatTamperReport(r) {
+    return (r.rejected ? '✓ 1-BIT TAMPER REJECTED BY cubical.wasm' : '⚠ UNEXPECTED ACCEPT') +
+      ' (' + r.ms + ' ms · ' + r.modPath + ':' + r.lineNo + ')\n' +
+      '- ' + r.before + '\n' +
+      '+ ' + r.after +
+      (r.output ? '\n→ ' + r.output.slice(0, 340) : '');
+  }
+
+  function formatVerifyReport(r) {
+    return (r.ok ? '✓ REAL MODULE CHECKED IN cubical.wasm' : '✗ KERNEL REJECTED') +
+      ' · ' + r.modPath + ' (sha256:' + r.sha256 + ' · ' + r.deps + ' deps · ' + r.steps + ' steps · ' + r.ms + ' ms · wasm:' + r.wasmSha + ')' +
+      (r.output ? '\n' + r.output.slice(0, 320) : '');
+  }
+
+  // ==================== 5. SPLIT-PANE SOURCE & LIVE WASM DRAWER ====================
+  var currentDrawerMod = null;
+
+  function ensureSourceDrawer() {
+    var d = document.getElementById('hx-src-drawer');
+    if (d) return d;
+    d = document.createElement('aside');
+    d.id = 'hx-src-drawer';
+    d.setAttribute('aria-label', 'Verified Source & Kernel Inspector');
+    d.innerHTML =
+      '<div class="hx-sd-head">' +
+        '<div style="min-width:0">' +
+          '<div class="hx-sd-kicker">VERIFIED STORE SOURCE</div>' +
+          '<div class="hx-sd-path" id="hx-sd-path"></div>' +
+          '<div class="hx-sd-meta" id="hx-sd-meta"></div>' +
+        '</div>' +
+        '<div class="hx-sd-actions">' +
+          '<button type="button" class="hx-sd-btn" id="hx-sd-pin" title="Pin as Split-Pane (s)">split</button>' +
+          '<button type="button" class="hx-sd-btn" id="hx-sd-close" title="Close (Esc)">esc ×</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="hx-sd-wasm" id="hx-sd-wasm">' +
+        '<button type="button" class="hx-wasm-btn primary" id="hx-sd-verify">verify module in cubical.wasm ▸</button>' +
+        '<button type="button" class="hx-wasm-btn" id="hx-sd-tamper">tamper 1 bit</button>' +
+        '<span id="hx-sd-wstat" style="opacity:.62">real isolated wasm check</span>' +
+        '<div class="hx-sd-wasm-log" id="hx-sd-wlog"></div>' +
+      '</div>' +
+      '<div class="hx-sd-deps" id="hx-sd-deps"></div>' +
+      '<div class="hx-sd-body" id="hx-sd-body"></div>';
+    document.body.appendChild(d);
+
+    d.querySelector('#hx-sd-close').addEventListener('click', closeSourceDrawer);
+    d.querySelector('#hx-sd-pin').addEventListener('click', function () {
+      state.split = !state.split;
+      applyAttributes();
+      syncUI();
+      showToast(state.split ? '<b>split-pane</b> pinned' : '<b>split-pane</b> overlay');
+    });
+
+    d.querySelector('#hx-sd-verify').addEventListener('click', function () {
+      if (!currentDrawerMod || !currentDrawerMod.endsWith('.hypercubical')) return;
+      var stat = d.querySelector('#hx-sd-wstat');
+      var log = d.querySelector('#hx-sd-wlog');
+      stat.textContent = 'fetching tree & elaborating in cubical.wasm…';
+      log.className = 'hx-sd-wasm-log show';
+      log.textContent = 'wasm_load_module("' + currentDrawerMod + '")…';
+      verifyModule(currentDrawerMod).then(function (r) {
+        stat.textContent = r.ok ? ('✓ checked · ' + r.deps + ' deps · ' + r.ms + 'ms') : '✗ rejected';
+        log.className = 'hx-sd-wasm-log show' + (r.ok ? '' : ' err');
+        log.textContent = formatVerifyReport(r);
+      }).catch(function (err) {
+        stat.textContent = 'error';
+        log.className = 'hx-sd-wasm-log show err';
+        log.textContent = String(err.message || err);
+      });
+    });
+
+    d.querySelector('#hx-sd-tamper').addEventListener('click', function () {
+      if (!currentDrawerMod || !currentDrawerMod.endsWith('.hypercubical')) return;
+      var stat = d.querySelector('#hx-sd-wstat');
+      var log = d.querySelector('#hx-sd-wlog');
+      stat.textContent = 'mutating 1 bit & checking…';
+      log.className = 'hx-sd-wasm-log show';
+      log.textContent = 'injecting 1-bit mutation into ' + currentDrawerMod + '…';
+      tamperModule(currentDrawerMod).then(function (r) {
+        stat.textContent = r.rejected ? ('✓ tamper rejected · ' + r.ms + 'ms') : 'unexpected accept';
+        log.className = 'hx-sd-wasm-log show' + (r.rejected ? ' err' : '');
+        log.textContent = formatTamperReport(r);
+      }).catch(function (err) {
+        stat.textContent = 'error';
+        log.className = 'hx-sd-wasm-log show err';
+        log.textContent = String(err.message || err);
+      });
+    });
+
+    return d;
+  }
+
+  function closeSourceDrawer() {
+    var d = document.getElementById('hx-src-drawer');
+    if (d) d.classList.remove('open');
+    document.documentElement.classList.remove('hx-split-pinned');
+  }
+
+  function openSourceDrawer(modPath, targetLine, termName) {
+    hidePeek();
+    currentDrawerMod = modPath;
+    var d = ensureSourceDrawer();
+    var isCub = modPath.endsWith('.hypercubical');
+    d.querySelector('#hx-sd-wasm').style.display = isCub ? 'flex' : 'none';
+    d.querySelector('#hx-sd-path').textContent = modPath + (targetLine ? ':' + targetLine : '');
+    d.querySelector('#hx-sd-meta').textContent = (termName ? termName + ' · ' : '') + 'loading from store/…';
+    d.querySelector('#hx-sd-wlog').className = 'hx-sd-wasm-log';
+    d.querySelector('#hx-sd-wstat').textContent = 'real module check';
+    d.querySelector('#hx-sd-body').innerHTML = '<div class="hx-sd-loading">fetching verified source…</div>';
+    d.classList.add('open');
+    applyAttributes();
+    syncUI();
+
+    Promise.all([fetchSource(modPath), loadKg()]).then(function (res) {
+      var text = res[0];
+      var lines = text.split('\n');
+      // If termName was provided without an exact line number, locate its declaration line in the file
+      if (!targetLine && termName) {
+        var pat = new RegExp('^\\s*(?:data\\s+|record\\s+)?' + termName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s*:|\\s*=|\\s|$)');
+        for (var k = 0; k < lines.length; k++) {
+          if (pat.test(lines[k])) { targetLine = k + 1; break; }
+        }
+        if (targetLine) d.querySelector('#hx-sd-path').textContent = modPath + ':' + targetLine;
+      }
+      var m = modMap[modPath];
+      var sha = m ? ('sha256:' + m[1].slice(0, 12)) : 'verified in store/';
+      var defInfo = m ? (m[6] + ' defs · ' + lines.length + ' lines') : (lines.length + ' lines');
+      d.querySelector('#hx-sd-meta').textContent = (termName ? termName + ' · ' : '') + sha + ' · ' + defInfo;
+
+      // Render hypergraph dependency ribbon (imports ← current → importedBy)
+      var depsEl = d.querySelector('#hx-sd-deps');
+      if (m && kgData && kgData.mods) {
+        var imps = (m[4] || []).map(function (idx) { return kgData.mods[idx] && kgData.mods[idx][0]; }).filter(Boolean);
+        var usedBy = (m[5] || []).map(function (idx) { return kgData.mods[idx] && kgData.mods[idx][0]; }).filter(Boolean);
+        var depHtml = '';
+        if (imps.length) {
+          depHtml += '<div class="hx-dep-row"><span class="hx-dep-lbl">← imports (' + imps.length + ')</span>' +
+            imps.slice(0, 8).map(function (p) { return '<button type="button" class="hx-dep-chip" data-jump-mod="' + escHtml(p) + '">' + escHtml(p.split('/').pop()) + '</button>'; }).join('') +
+            (imps.length > 8 ? '<span class="hx-dep-more">+' + (imps.length - 8) + '</span>' : '') + '</div>';
+        }
+        if (usedBy.length) {
+          depHtml += '<div class="hx-dep-row"><span class="hx-dep-lbl">→ used by (' + usedBy.length + ')</span>' +
+            usedBy.slice(0, 8).map(function (p) { return '<button type="button" class="hx-dep-chip" data-jump-mod="' + escHtml(p) + '">' + escHtml(p.split('/').pop()) + '</button>'; }).join('') +
+            (usedBy.length > 8 ? '<span class="hx-dep-more">+' + (usedBy.length - 8) + '</span>' : '') + '</div>';
+        }
+        depsEl.innerHTML = depHtml;
+        depsEl.style.display = depHtml ? 'block' : 'none';
+        depsEl.querySelectorAll('[data-jump-mod]').forEach(function (b) {
+          b.addEventListener('click', function () { openSourceDrawer(b.getAttribute('data-jump-mod'), null, null); });
+        });
+      } else {
+        depsEl.innerHTML = '';
+        depsEl.style.display = 'none';
+      }
+
+      var html = '<ol class="hx-sd-code">';
+      for (var i = 0; i < lines.length; i++) {
+        var ln = i + 1;
+        var hl = targetLine && ln === targetLine ? ' class="hl" id="hx-sd-hl"' : '';
+        html += '<li' + hl + '><span class="ln">' + ln + '</span><span class="tx">' + (escHtml(lines[i]) || ' ') + '</span></li>';
+      }
+      html += '</ol>';
+      var bodyEl = d.querySelector('#hx-sd-body');
+      bodyEl.innerHTML = html;
+
+      var hlEl = document.getElementById('hx-sd-hl');
+      if (hlEl) setTimeout(function () { hlEl.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 40);
+      else bodyEl.scrollTop = 0;
+    }).catch(function (err) {
+      d.querySelector('#hx-sd-meta').textContent = 'could not load module';
+      d.querySelector('#hx-sd-body').innerHTML = '<div class="hx-sd-loading">Error loading ' + escHtml(modPath) + ': ' + escHtml(err.message) + '</div>';
+    });
+  }
+
+  // ==================== 6. TUFTE / MATUSCHAK HOVER-PEEK CARD (MODULES + GLOSSARY) ====================
+  var peekTimer = null;
+  var peekHideTimer = null;
+
+  function ensurePeekCard() {
+    var pk = document.getElementById('hx-peek-card');
+    if (pk) return pk;
+    pk = document.createElement('div');
+    pk.id = 'hx-peek-card';
+    pk.innerHTML =
+      '<div class="pk-head"><span class="pk-path" id="pk-path"></span><span class="pk-sha" id="pk-sha"></span></div>' +
+      '<pre class="pk-code" id="pk-code"></pre>' +
+      '<div class="pk-foot"><span id="pk-meta"></span><span id="pk-hint"></span></div>';
+    document.body.appendChild(pk);
+    pk.addEventListener('mouseenter', function () { clearTimeout(peekHideTimer); });
+    pk.addEventListener('mouseleave', scheduleHidePeek);
+    return pk;
+  }
+
+  function hidePeek() {
+    clearTimeout(peekTimer);
+    clearTimeout(peekHideTimer);
+    var pk = document.getElementById('hx-peek-card');
+    if (pk) pk.classList.remove('show');
+  }
+
+  function scheduleHidePeek() {
+    clearTimeout(peekTimer);
+    clearTimeout(peekHideTimer);
+    peekHideTimer = setTimeout(hidePeek, 180);
+  }
+
+  function showPeekFor(el, hit) {
+    clearTimeout(peekHideTimer);
+    clearTimeout(peekTimer);
+    peekTimer = setTimeout(function () {
+      var pk = ensurePeekCard();
+      var rect = el.getBoundingClientRect();
+      var left = Math.min(Math.max(12, rect.left), window.innerWidth - 472);
+      var top = rect.bottom + 8;
+      if (top + 220 > window.innerHeight) top = Math.max(54, rect.top - 220);
+      pk.style.left = left + 'px';
+      pk.style.top = top + 'px';
+
+      if (hit.kind === 'glossary') {
+        pk.querySelector('#pk-path').textContent = hit.term;
+        pk.querySelector('#pk-sha').textContent = 'definition';
+        pk.querySelector('#pk-code').textContent = hit.def;
+        pk.querySelector('#pk-meta').textContent = 'domain glossary';
+        pk.querySelector('#pk-hint').textContent = '';
+        pk.classList.add('show');
+        return;
+      }
+
+      var m = modMap[hit.mod];
+      pk.querySelector('#pk-path').textContent = hit.mod + (hit.line ? ':' + hit.line : '');
+      pk.querySelector('#pk-sha').textContent = m ? ('sha256:' + m[1].slice(0, 10)) : '';
+      pk.querySelector('#pk-meta').textContent = m ? (m[6] + ' defs · ' + (m[2] || 'module')) : '';
+      pk.querySelector('#pk-hint').textContent = 'click to open source & verify';
+      pk.querySelector('#pk-code').textContent = 'loading…';
+      pk.classList.add('show');
+
+      fetchSource(hit.mod).then(function (txt) {
+        var lines = txt.split('\n');
+        var start = hit.line ? Math.max(0, hit.line - 1) : 0;
+        pk.querySelector('#pk-code').textContent = lines.slice(start, start + 7).join('\n') || '(empty)';
+      }).catch(function () {
+        pk.querySelector('#pk-code').textContent = 'source unavailable';
+      });
+    }, 200);
+  }
+
+  // ==================== 7. STAT-STRIP UNFOLDING EXPOSITIONS ====================
+  function renderExpositionHTML(ex) {
+    var rows = (ex.numbers || []).map(function (kv) {
+      return '<tr><th>' + escHtml(kv[0]) + '</th><td>' + escHtml(kv[1]) + '</td></tr>';
+    }).join('');
+    var modBtns = (ex.modules || []).map(function (m) {
+      return '<button type="button" class="hx-ex-mod-btn" data-open-mod="' + escHtml(m.path) + '">' + escHtml(m.label) + ' →</button>';
+    }).join('');
+    var jumpHtml = ex.jump ? '<a class="hx-ex-jump" href="' + escHtml(ex.jump) + '">chapter ↓</a>' : '';
+
+    return (
+      '<div class="hx-ex-top">' +
+        '<div>' +
+          '<div class="hx-ex-kicker">' + escHtml(ex.kicker) + '</div>' +
+          '<div class="hx-ex-title">' + escHtml(ex.title) + '</div>' +
+        '</div>' +
+        '<button type="button" class="hx-ex-close" title="Close (Esc)">esc ×</button>' +
+      '</div>' +
+      '<div class="hx-ex-grid">' +
+        '<div class="hx-ex-col">' +
+          '<div class="hx-ex-h">01 · Statement</div><p>' + ex.plain + '</p>' +
+          '<div class="hx-ex-h">02 · Obstruction</div><p>' + ex.wall + '</p>' +
+        '</div>' +
+        '<div class="hx-ex-col">' +
+          '<div class="hx-ex-h">03 · Mechanism</div><p>' + ex.mechanism + '</p>' +
+          '<div class="hx-ex-h">04 · Measurement</div><table class="hx-ex-tbl">' + rows + '</table>' +
+        '</div>' +
+      '</div>' +
+      '<div class="hx-ex-wasm-out" id="hx-ex-wasm-out"></div>' +
+      '<div class="hx-ex-foot">' +
+        '<div class="hx-ex-mods">' +
+          modBtns +
+          (ex.verifyMod ? '<button type="button" class="hx-wasm-btn primary" data-ex-verify="good">verify ' + escHtml(ex.verifyMod.split('/').pop()) + ' in cubical.wasm ▸</button>' : '') +
+          (ex.verifyMod ? '<button type="button" class="hx-wasm-btn" data-ex-verify="bad">tamper 1 bit</button>' : '') +
+        '</div>' +
+        jumpHtml +
+      '</div>'
+    );
+  }
+
+  function wireStatStrips() {
+    document.querySelectorAll('.stat-strip').forEach(function (strip) {
+      var cells = Array.prototype.slice.call(strip.querySelectorAll('.stat-cell'));
+      if (!cells.length) return;
+      var drawer = document.createElement('div');
+      drawer.className = 'hx-ex-drawer';
+      drawer.setAttribute('aria-live', 'polite');
+      strip.parentNode.insertBefore(drawer, strip.nextSibling);
+
+      var activeCell = null;
+      function closeDrawer() {
+        if (activeCell) activeCell.classList.remove('hx-open');
+        activeCell = null;
+        drawer.classList.remove('open');
+        drawer.innerHTML = '';
+      }
+
+      cells.forEach(function (cell) {
+        var ex = findExposition(cell.textContent);
+        if (!ex) return;
+        cell.classList.add('hx-expandable');
+        cell.setAttribute('role', 'button');
+        cell.setAttribute('tabindex', '0');
+        cell.setAttribute('aria-expanded', 'false');
+
+        var cue = document.createElement('em');
+        cue.className = 'hx-cell-cue';
+        cue.textContent = '+';
+        cell.appendChild(cue);
+
+        function activate() {
+          if (activeCell === cell) {
+            cell.setAttribute('aria-expanded', 'false');
+            closeDrawer();
+            return;
+          }
+          cells.forEach(function (c) { c.classList.remove('hx-open'); c.setAttribute('aria-expanded', 'false'); });
+          activeCell = cell;
+          cell.classList.add('hx-open');
+          cell.setAttribute('aria-expanded', 'true');
+          drawer.innerHTML = renderExpositionHTML(ex);
+          drawer.classList.add('open');
+
+          if (typeof window.renderMathInElement === 'function') {
+            try {
+              window.renderMathInElement(drawer, {
+                delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }],
+                throwOnError: false,
+              });
+            } catch (_) {}
+          }
+
+          var closeBtn = drawer.querySelector('.hx-ex-close');
+          if (closeBtn) closeBtn.addEventListener('click', function () {
+            cell.setAttribute('aria-expanded', 'false');
+            closeDrawer();
+          });
+
+          drawer.querySelectorAll('[data-open-mod]').forEach(function (btn) {
+            btn.addEventListener('click', function () { openSourceDrawer(btn.getAttribute('data-open-mod'), null, null); });
+          });
+
+          drawer.querySelectorAll('[data-ex-verify]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var isBad = btn.getAttribute('data-ex-verify') === 'bad';
+              var out = drawer.querySelector('#hx-ex-wasm-out');
+              var mp = ex.verifyMod;
+              out.className = 'hx-ex-wasm-out show';
+              out.textContent = isBad
+                ? ('mutating 1 bit inside real ' + mp + ' & checking in /cubical.wasm…')
+                : ('fetching import tree & type-checking real ' + mp + ' in /cubical.wasm…');
+              (isBad ? tamperModule(mp) : verifyModule(mp)).then(function (r) {
+                if (isBad) {
+                  out.className = 'hx-ex-wasm-out show' + (r.rejected ? ' err' : '');
+                  out.textContent = formatTamperReport(r);
+                } else {
+                  out.className = 'hx-ex-wasm-out show' + (r.ok ? '' : ' err');
+                  out.textContent = formatVerifyReport(r);
+                }
+              }).catch(function (err) {
+                out.className = 'hx-ex-wasm-out show err';
+                out.textContent = 'WASM error: ' + (err.message || err);
+              });
+            });
+          });
+        }
+
+        cell.addEventListener('click', activate);
+        cell.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+        });
+      });
+
+      var hint = document.createElement('div');
+      hint.className = 'hx-strip-hint';
+      hint.textContent = 'select to unfold ↘';
+      strip.parentNode.insertBefore(hint, strip);
+    });
+  }
+
+  // ==================== 8. EPISTEMICALLY HONEST .thm-box VERIFIERS ====================
+  function extractRealMod(txt) {
+    var m = (txt || '').match(/((?:lib|fold|chem|neuro|experiments|physics)\/[a-zA-Z0-9_\/-]+\.hypercubical)/);
+    if (m) return m[1];
+    var b = (txt || '').match(/\b([a-zA-Z0-9_-]+\.hypercubical)\b/);
+    if (b && baseMap[b[1]]) return baseMap[b[1]];
+    return null;
+  }
+
+  function wireTheoremBoxes() {
+    loadKg().then(function () {
+      document.querySelectorAll('.thm-box').forEach(function (box) {
+        if (box.querySelector('.hx-thm-bar')) return;
+        var txt = box.textContent || '';
+        var modPath = extractRealMod(txt);
+
+        var bar = document.createElement('div');
+        bar.className = 'hx-thm-bar';
+
+        if (!modPath || !modMap[modPath]) {
+          // Honest: classical literature theorem with no .hypercubical module attached — zero fake WASM button
+          bar.innerHTML = '<span class="hx-thm-lit">literature theorem · prose proof</span>';
+          box.appendChild(bar);
+          return;
+        }
+
+        bar.innerHTML =
+          '<button type="button" class="hx-thm-btn primary" data-act="verify">verify ' + escHtml(modPath.split('/').pop()) + ' in cubical.wasm ▸</button>' +
+          '<button type="button" class="hx-thm-btn" data-act="tamper">tamper 1 bit</button>' +
+          '<button type="button" class="hx-thm-btn" data-act="src">' + escHtml(modPath) + ' →</button>' +
+          '<span class="hx-thm-status"></span>' +
+          '<div class="hx-thm-diff"></div>';
+        box.appendChild(bar);
+
+        var st = bar.querySelector('.hx-thm-status');
+        var diffEl = bar.querySelector('.hx-thm-diff');
+
+        bar.querySelector('[data-act="verify"]').addEventListener('click', function () {
+          st.className = 'hx-thm-status';
+          st.textContent = 'checking real module…';
+          diffEl.classList.remove('show');
+          verifyModule(modPath).then(function (r) {
+            st.className = 'hx-thm-status ' + (r.ok ? 'ok' : 'bad');
+            st.textContent = r.ok
+              ? ('✓ verified · sha:' + r.sha256 + ' · ' + r.deps + ' deps · ' + r.steps + ' steps · ' + r.ms + 'ms')
+              : ('✗ ' + (r.output || 'rejected'));
+          }).catch(function (e) { st.className = 'hx-thm-status bad'; st.textContent = String(e.message || e); });
+        });
+
+        bar.querySelector('[data-act="tamper"]').addEventListener('click', function () {
+          st.className = 'hx-thm-status';
+          st.textContent = 'mutating 1 bit in real module…';
+          tamperModule(modPath).then(function (r) {
+            st.className = 'hx-thm-status ' + (r.rejected ? 'bad' : 'ok');
+            st.textContent = r.rejected ? ('✓ 1-bit tamper rejected (' + r.ms + 'ms)') : 'unexpected accept';
+            diffEl.className = 'hx-thm-diff show';
+            diffEl.textContent = formatTamperReport(r);
+          }).catch(function (e) { st.className = 'hx-thm-status bad'; st.textContent = String(e.message || e); });
+        });
+
+        bar.querySelector('[data-act="src"]').addEventListener('click', function () {
+          openSourceDrawer(modPath, null, null);
+        });
+      });
+    });
+  }
+
+  // ==================== 9. EQUATION LAYERS (ONLY WHEN REAL BACKING MODULE EXISTS) ====================
+  function wireEquationLayers() {
+    loadKg().then(function () {
+      document.querySelectorAll('.eq-box').forEach(function (eq) {
+        if (eq.querySelector('.hx-eq-toggle')) return;
+        var sec = eq.closest('.chapter, section, main');
+        var contextTxt = (sec ? sec.textContent.slice(0, 1800) : '') + ' ' + eq.textContent;
+        var modPath = extractRealMod(contextTxt);
+        if (!modPath || !modMap[modPath]) return;
+
+        eq.classList.add('hx-layered');
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hx-eq-toggle';
+        btn.textContent = 'source ↘';
+        btn.title = 'Inspect & verify backing module ' + modPath;
+        eq.appendChild(btn);
+
+        var panel = document.createElement('div');
+        panel.className = 'hx-eq-panel';
+        panel.innerHTML =
+          '<div class="hx-eq-tabs">' +
+            '<button type="button" class="hx-eq-tab on" data-tab="source">' + escHtml(modPath) + '</button>' +
+            '<button type="button" class="hx-eq-tab" data-tab="verify">verify in cubical.wasm ▸</button>' +
+            '<button type="button" class="hx-eq-tab" data-tab="open">open full split-pane →</button>' +
+          '</div>' +
+          '<div class="hx-eq-body"></div>';
+        eq.appendChild(panel);
+
+        var body = panel.querySelector('.hx-eq-body');
+
+        function showTab(tab) {
+          if (tab === 'open') { openSourceDrawer(modPath, null, null); return; }
+          panel.querySelectorAll('.hx-eq-tab').forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-tab') === tab); });
+          if (tab === 'source') {
+            body.textContent = 'loading ' + modPath + '…';
+            fetchSource(modPath).then(function (txt) {
+              body.textContent = txt.split('\n').slice(0, 14).join('\n') + '\n…';
+            }).catch(function () { body.textContent = 'unavailable'; });
+          } else if (tab === 'verify') {
+            body.textContent = 'elaborating real ' + modPath + ' in /cubical.wasm…';
+            verifyModule(modPath).then(function (r) {
+              body.textContent = formatVerifyReport(r);
+            }).catch(function (e) { body.textContent = String(e.message || e); });
+          }
+        }
+
+        btn.addEventListener('click', function () {
+          var open = panel.classList.toggle('open');
+          btn.classList.toggle('on', open);
+          btn.textContent = open ? '×' : 'source ↘';
+          if (open) showTab('source');
+        });
+
+        panel.querySelectorAll('.hx-eq-tab').forEach(function (t) {
+          t.addEventListener('click', function () { showTab(t.getAttribute('data-tab')); });
+        });
+      });
+    });
+  }
+
+  // ==================== 10. INTERACTIVE <pre> CODE BLOCK TOOLBAR ====================
+  function wirePreBlocks() {
+    document.querySelectorAll('main pre, article pre').forEach(function (pre) {
+      if (pre.closest('#hx-src-drawer') || pre.closest('#hx-peek-card') || pre.querySelector('.hx-pre-bar')) return;
+      var txt = (pre.textContent || '').trim();
+      if (txt.length < 24) return;
+      var looksCubical = /≡|→|λ|%w|import\s+"[^"]+\.hypercubical"|data\s+[A-Z]/.test(txt);
+
+      pre.classList.add('hx-pre-wrap');
+      var bar = document.createElement('div');
+      bar.className = 'hx-pre-bar';
+      bar.innerHTML =
+        '<button type="button" class="hx-pre-btn" data-p="copy">copy</button>' +
+        (looksCubical ? '<button type="button" class="hx-pre-btn primary" data-p="check">check in wasm ▸</button>' : '') +
+        (looksCubical ? '<a class="hx-pre-btn" href="/ide">open /ide</a>' : '');
+      pre.insertBefore(bar, pre.firstChild);
+
+      bar.querySelector('[data-p="copy"]').addEventListener('click', function (e) {
+        var b = e.currentTarget;
+        if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(function () {});
+        b.textContent = 'copied';
+        setTimeout(function () { b.textContent = 'copy'; }, 1200);
+      });
+
+      var chk = bar.querySelector('[data-p="check"]');
+      if (chk) {
+        var out = document.createElement('div');
+        out.className = 'hx-pre-out';
+        pre.appendChild(out);
+        chk.addEventListener('click', function () {
+          out.className = 'hx-pre-out show';
+          out.textContent = 'checking snippet in /cubical.wasm…';
+          evalCubical(txt).then(function (r) {
+            out.className = 'hx-pre-out show' + (r.ok ? '' : ' err');
+            out.textContent = r.ok
+              ? ('✓ checked · ' + r.steps + ' steps · ' + r.ms + 'ms · wasm:' + r.wasmSha + (r.output ? '\n' + r.output : ''))
+              : ('✗ ' + (r.output || 'snippet requires surrounding module context (click module name to verify full file)'));
+          }).catch(function (err) {
+            out.className = 'hx-pre-out show err';
+            out.textContent = String(err.message || err);
+          });
+        });
+      }
+    });
+  }
+
+  // ==================== 11. INLINE SYMBOLS, TABLES, GLOSSARY & LIVE HYDRATION ====================
+  function bindSymbolEl(el, hit) {
+    el.classList.add('hx-sym-link');
+    if (hit.kind === 'glossary') el.classList.add('hx-gloss');
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.addEventListener('mouseenter', function () { showPeekFor(el, hit); });
+    el.addEventListener('mouseleave', scheduleHidePeek);
+    if (hit.kind !== 'glossary') {
+      function openIt(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openSourceDrawer(hit.mod, hit.line, hit.term);
+      }
+      el.addEventListener('click', openIt);
+      el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') openIt(e); });
+    }
+  }
+
+  function wireInlineSymbolsAndTables() {
+    loadKg().then(function (kg) {
+      if (kg && kg.mods) {
+        var nMods = kg.mods.length;
+        var nTerms = Object.keys(kg.terms || {}).length;
+        var sl = document.getElementById('hx-store-live');
+        if (sl) sl.textContent = 'store root ' + kg.root.slice(0, 12) + ' · ' + nMods + ' modules · ' + nTerms.toLocaleString() + ' defs';
+
+        // Homepage live root strip
+        var splash = document.querySelector('.splash');
+        var mainWrap = document.querySelector('main.wrap');
+        if (splash && mainWrap && !document.getElementById('hx-home-root')) {
+          var strip = document.createElement('div');
+          strip.id = 'hx-home-root';
+          strip.className = 'hx-home-root';
+          strip.innerHTML =
+            '<span>live store root <b>sha256:' + escHtml(kg.root.slice(0, 12)) + '</b></span>' +
+            '<span><b>' + nMods + '</b> checked .hypercubical modules · <b>' + nTerms.toLocaleString() + '</b> verified defs · <b>⌘K</b> to inspect</span>';
+          mainWrap.insertBefore(strip, mainWrap.firstChild);
+        }
+
+        // Honest live hydration on /learn's 607 tile
+        document.querySelectorAll('.stat-cell').forEach(function (c) {
+          if (c.textContent.indexOf('Content-addressed modules') !== -1 && !c.querySelector('.hx-live-sub')) {
+            var sub = document.createElement('small');
+            sub.className = 'hx-live-sub';
+            sub.textContent = 'live index: ' + nMods + ' .hypercubical · ' + nTerms.toLocaleString() + ' defs';
+            c.appendChild(sub);
+          }
+        });
+      }
+
+      // Wire every inline <code> across main/article/tables (store symbols + basenames + glossary)
+      document.querySelectorAll('main code, article code, table code, .thm-head code').forEach(function (el) {
+        if (el.closest('pre') || el.closest('a') || el.closest('.stat-cell') || el.closest('#hx-src-drawer') || el.classList.contains('hx-sym-link')) return;
+        var hit = resolveToken(el.textContent);
+        if (hit) bindSymbolEl(el, hit);
+      });
+
+      // Also link bare module paths (full or basename) inside table cells, .thm-head, .meta-line
+      var modRe = /\b((?:(?:lib|fold|chem|neuro|experiments|physics)\/)?[a-zA-Z0-9_\/-]+\.hypercubical)\b/g;
+      document.querySelectorAll('table td, .thm-head, .meta-line').forEach(function (container) {
+        if (container.closest('#hx-src-drawer')) return;
+        var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+        var nodes = [];
+        var n;
+        while ((n = walker.nextNode())) {
+          if (n.parentElement && (n.parentElement.closest('code') || n.parentElement.closest('a') || n.parentElement.closest('button'))) continue;
+          if (modRe.test(n.nodeValue)) nodes.push(n);
+          modRe.lastIndex = 0;
+        }
+        nodes.forEach(function (tn) {
+          var frag = document.createDocumentFragment();
+          var text = tn.nodeValue;
+          var last = 0;
+          var m;
+          modRe.lastIndex = 0;
+          while ((m = modRe.exec(text))) {
+            if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+            var hit = resolveToken(m[1]);
+            if (hit && hit.kind !== 'glossary') {
+              var sp = document.createElement('span');
+              sp.textContent = m[1];
+              bindSymbolEl(sp, hit);
+              frag.appendChild(sp);
+            } else {
+              frag.appendChild(document.createTextNode(m[1]));
+            }
+            last = m.index + m[0].length;
+          }
+          if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+          tn.parentNode.replaceChild(frag, tn);
+        });
+      });
+    });
+  }
+
+  // ==================== 12. UNIVERSAL ⌘K COMMAND PALETTE ====================
+  var PORTALS = [
+    { name: 'Hyperactivity Home', meta: '/ · splash & derivation spine', href: '/' },
+    { name: 'Learn Hyperactivity from First Principles', meta: '/learn · cubical kernel & nets', href: '/learn' },
+    { name: 'Universal Hyperfactoring', meta: '/hyperfactor · proof to bare metal', href: '/hyperfactor' },
+    { name: 'Computing Without a Center (PoUW & Web)', meta: '/decentralized · confluence & clearing', href: '/decentralized' },
+    { name: 'Interaction-Net Silicon & 7nm GDSII', meta: '/silicon · HyperNet-16 & Calma v6.0', href: '/silicon' },
+    { name: 'Artificial Intelligence & Machine Learning', meta: '/ai · statistical foundations to alignment', href: '/ai' },
+    { name: 'Spacetime, Atoms & Morphogenesis', meta: '/physics · exact interaction networks', href: '/physics' },
+    { name: 'Brain as Interaction Network & Neural Co-Processors', meta: '/neuro · Lyapunov & barrier certs', href: '/neuro' },
+    { name: 'Live Cubical IDE & Studio', meta: '/ide · full WASM editor', href: '/ide' },
+    { name: 'Full Monograph PDF', meta: '/pdf · typeset paper', href: '/pdf' },
+  ];
+
+  var cmdSel = 0;
+  var cmdResults = [];
+
+  function ensureCmdPalette() {
+    var bd = document.getElementById('hx-cmd-backdrop');
+    if (bd) return bd;
+    bd = document.createElement('div');
+    bd.id = 'hx-cmd-backdrop';
+    bd.innerHTML =
+      '<div id="hx-cmd-box" role="dialog" aria-label="Search store & portals">' +
+        '<input id="hx-cmd-input" type="text" placeholder="Jump to any module, verified definition, or portal…">' +
+        '<ul id="hx-cmd-list"></ul>' +
+        '<div id="hx-cmd-foot"><span>↑↓ navigate · ↵ open in split-pane · esc close</span><span id="hx-cmd-count"></span></div>' +
+      '</div>';
+    document.body.appendChild(bd);
+
+    var inp = bd.querySelector('#hx-cmd-input');
+    var list = bd.querySelector('#hx-cmd-list');
+    var countEl = bd.querySelector('#hx-cmd-count');
+
+    function renderList(q) {
+      q = (q || '').trim().toLowerCase();
+      var out = [];
+      PORTALS.forEach(function (p) {
+        if (!q || p.name.toLowerCase().indexOf(q) !== -1 || p.meta.toLowerCase().indexOf(q) !== -1) {
+          out.push({ kind: 'portal', name: p.name, meta: p.meta, href: p.href });
+        }
+      });
+      if (kgData && kgData.mods) {
+        for (var i = 0; i < kgData.mods.length && out.length < 40; i++) {
+          var m = kgData.mods[i];
+          if (!q || m[0].toLowerCase().indexOf(q) !== -1 || (m[3] && m[3].toLowerCase().indexOf(q) !== -1)) {
+            out.push({ kind: 'mod', name: m[0], meta: 'module · ' + m[6] + ' defs · sha:' + m[1].slice(0, 8), mod: m[0], line: null, term: null });
+          }
+        }
+        if (q.length >= 2 && kgData.terms) {
+          var tKeys = Object.keys(kgData.terms);
+          for (var j = 0; j < tKeys.length && out.length < 60; j++) {
+            var tk = tKeys[j];
+            if (tk.toLowerCase().indexOf(q) !== -1) {
+              var hit = kgData.terms[tk];
+              var mi = Array.isArray(hit) ? hit[0] : hit;
+              var ln = Array.isArray(hit) ? hit[1] : null;
+              var mm = kgData.mods[mi];
+              if (mm) out.push({ kind: 'term', name: tk, meta: mm[0] + (ln ? ':' + ln : ''), mod: mm[0], line: ln, term: tk });
+            }
+          }
+        }
+      }
+      cmdResults = out.slice(0, 45);
+      cmdSel = 0;
+      countEl.textContent = cmdResults.length + ' matches';
+      list.innerHTML = cmdResults.map(function (it, idx) {
+        return '<li data-idx="' + idx + '"' + (idx === 0 ? ' class="sel"' : '') + '>' +
+          '<span class="cm-name">' + escHtml(it.name) + '</span>' +
+          '<span class="cm-meta">' + escHtml(it.meta) + '</span></li>';
+      }).join('');
+    }
+
+    function activateItem(idx) {
+      var it = cmdResults[idx];
+      if (!it) return;
+      bd.classList.remove('open');
+      if (it.kind === 'portal') window.location.href = it.href;
+      else openSourceDrawer(it.mod, it.line, it.term);
+    }
+
+    inp.addEventListener('input', function () { renderList(inp.value); });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); cmdSel = Math.min(cmdResults.length - 1, cmdSel + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); cmdSel = Math.max(0, cmdSel - 1); }
+      else if (e.key === 'Enter') { e.preventDefault(); activateItem(cmdSel); return; }
+      else if (e.key === 'Escape') { bd.classList.remove('open'); return; }
+      else return;
+      list.querySelectorAll('li').forEach(function (li, i) { li.classList.toggle('sel', i === cmdSel); });
+      var activeLi = list.querySelector('li.sel');
+      if (activeLi) activeLi.scrollIntoView({ block: 'nearest' });
+    });
+
+    list.addEventListener('click', function (e) {
+      var li = e.target.closest('li[data-idx]');
+      if (li) activateItem(parseInt(li.getAttribute('data-idx'), 10));
+    });
+    bd.addEventListener('click', function (e) { if (e.target === bd) bd.classList.remove('open'); });
+    bd._render = renderList;
+    return bd;
+  }
+
+  function openCmdPalette() {
+    var bd = ensureCmdPalette();
+    bd.classList.add('open');
+    var inp = bd.querySelector('#hx-cmd-input');
+    inp.value = '';
+    loadKg().then(function () { bd._render(''); });
+    bd._render('');
+    setTimeout(function () { inp.focus(); }, 20);
+  }
+
+  // ==================== 13. GEODESIC PROSE FOLDS (STRICTLY PURE <p>) ====================
+  function isPureProseParagraph(el) {
+    if (!el || el.tagName !== 'P') return false;
+    var skip = ['lede', 'kicker', 'meta-line', 'ch-num', 'hg-intro', 'hg-ins-desc', 'foot'];
+    for (var i = 0; i < skip.length; i++) if (el.classList.contains(skip[i])) return false;
+    var txt = (el.textContent || '').trim();
+    if (!txt) return false;
+    var links = el.querySelectorAll('a');
+    if (links.length) {
+      var lc = 0;
+      links.forEach(function (a) { lc += (a.textContent || '').trim().length; });
+      if (lc / txt.length > 0.4) return false;
+    }
+    return true;
+  }
+
+  function buildGeodesicFolds() {
+    if (foldsBuilt) return;
+    foldsBuilt = true;
+    if (document.querySelector('.splash')) return;
+    var containers = document.querySelectorAll('.chapter, article');
+    if (!containers.length) {
+      var mainEl = document.querySelector('main');
+      if (mainEl && mainEl.querySelectorAll(':scope > p').length >= 3) containers = [mainEl];
+    }
+    containers.forEach(function (box) {
+      var children = Array.prototype.slice.call(box.children);
+      var run = [];
+      function flushRun() {
+        if (!run.length) return;
+        var group = run.slice();
+        run = [];
+        var words = 0;
+        group.forEach(function (el) { words += (el.textContent || '').trim().split(/\s+/).filter(Boolean).length; });
+        if (words < 22 && group.length === 1) return;
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'hx-fold-chip';
+        var noun = group.length === 1 ? 'paragraph' : 'paragraphs';
+        var labelClosed = '··· unfold ' + group.length + ' ' + noun + ' (' + words + 'w)';
+        var labelOpen = '× contract ' + group.length + ' ' + noun;
+        chip.textContent = labelClosed;
+        group.forEach(function (el) { el.classList.add('hx-prose-folded'); });
+        group[0].parentNode.insertBefore(chip, group[0]);
+        chip.addEventListener('click', function () {
+          var expanded = chip.classList.toggle('expanded');
+          chip.textContent = expanded ? labelOpen : labelClosed;
+          group.forEach(function (el) { el.classList.toggle('hx-prose-folded', !expanded); });
+        });
+      }
+      children.forEach(function (el) { if (isPureProseParagraph(el)) run.push(el); else flushRun(); });
+      flushRun();
+    });
+  }
+
+  // ==================== 14. VIEW PANEL & UI SYNC ====================
+  function syncUI() {
+    var edObj = EDITIONS.find(function (e) { return e.id === state.edition; }) || EDITIONS[0];
+    var dpObj = DEPTHS.find(function (d) { return d.id === state.depth; }) || DEPTHS[0];
+    var label = edObj.name.toLowerCase() + (state.depth !== 'full' ? ' · ' + dpObj.name.toLowerCase() : '');
+
+    var trig = document.getElementById('hx-view-trigger');
+    if (trig) trig.innerHTML = '<span class="dot"></span><span>' + label + '</span>';
+    var fp = document.getElementById('hx-float-pill');
+    if (fp) fp.innerHTML = '<span style="color:#ff0a94">●</span> ' + label + ' <span class="k">[v · ⌘K]</span>';
+    var pinBtn = document.getElementById('hx-sd-pin');
+    if (pinBtn) pinBtn.classList.toggle('on', !!state.split);
+
+    document.querySelectorAll('#hx-view-panel [data-set-edition]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-set-edition') === state.edition);
+    });
+    document.querySelectorAll('#hx-view-panel [data-set-depth]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-set-depth') === state.depth);
+    });
+    document.querySelectorAll('#hx-view-panel [data-set-field]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-set-field') === state.field);
+    });
+    var apiEl = document.getElementById('hx-api-readout');
+    if (apiEl) {
+      apiEl.textContent = "hxView.set({edition:'" + state.edition + "',depth:'" + state.depth + "',field:'" + state.field + "',split:" + state.split + '})';
+    }
+  }
+
+  function findScrollAnchor() {
+    if (window.scrollY < 40) return null;
+    var nodes = document.querySelectorAll('main h1, main h2, main h3, main .thm-box, main .eq-box, main .lab-card, main .stat-strip, main .title-block');
+    var bestInView = null;
+    var bestAbove = null;
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!el.offsetParent) continue;
+      var r = el.getBoundingClientRect();
+      if (r.height === 0) continue;
+      if (r.top >= 46 && r.top <= window.innerHeight * 0.65) {
+        if (!bestInView || r.top < bestInView.top) bestInView = { el: el, top: r.top };
+      } else if (r.top < 46) {
+        if (!bestAbove || r.top > bestAbove.top) bestAbove = { el: el, top: r.top };
+      }
+    }
+    return bestInView || bestAbove;
+  }
+
+  function setState(patch, announce) {
+    if (!patch || typeof patch !== 'object') return state;
+    var anchor = findScrollAnchor();
+    if (patch.edition && VALID_ED[patch.edition]) state.edition = patch.edition;
+    if (patch.depth && VALID_DP[patch.depth]) state.depth = patch.depth;
+    if (patch.field === 'void' || patch.field === 'dark') state.field = 'void';
+    if (patch.field === 'light') state.field = 'light';
+    if (typeof patch.split === 'boolean') state.split = patch.split;
+    if (state.depth === 'geodesic') buildGeodesicFolds();
+    applyAttributes();
+    if (anchor && anchor.el && anchor.el.offsetParent) {
+      var delta = anchor.el.getBoundingClientRect().top - anchor.top;
+      if (Math.abs(delta) > 1) window.scrollBy(0, delta);
+    }
+    syncUI();
+    if (announce) {
+      var edObj = EDITIONS.find(function (e) { return e.id === state.edition; });
+      var dpObj = DEPTHS.find(function (d) { return d.id === state.depth; });
+      showToast('<b>' + edObj.name.toLowerCase() + '</b> · ' + dpObj.name.toLowerCase() + ' · ' + state.field);
+    }
+    return Object.assign({}, state);
+  }
+
+  function mountAll() {
+    buildGeodesicFolds();
+    wireStatStrips();
+    wireTheoremBoxes();
+    wireEquationLayers();
+    wirePreBlocks();
+    wireInlineSymbolsAndTables();
+    mountSpineFooterAndProgress();
+
+    var panel = document.createElement('div');
+    panel.id = 'hx-view-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'Reader Modes');
+
+    panel.innerHTML =
+      '<div class="hx-p-head">' +
+        '<span class="hx-p-title">HX-LENS · Compositional View</span>' +
+        '<button type="button" class="hx-p-close" id="hx-p-close">esc ×</button>' +
+      '</div>' +
+      '<div class="hx-row">' +
+        '<div class="hx-row-lbl"><span>01 · Reader Mode</span><span>keys 1–4</span></div>' +
+        '<div class="hx-ed-grid">' + EDITIONS.map(function (e) {
+          return '<button type="button" class="hx-opt" data-set-edition="' + e.id + '">' +
+            '<div class="hx-opt-top"><span class="hx-opt-name">' + e.name + '</span><span class="hx-opt-key">' + e.key + '</span></div>' +
+            '<div class="hx-opt-desc">' + e.desc + '</div></button>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<div class="hx-row">' +
+        '<div class="hx-row-lbl"><span>02 · Depth</span><span>f · g · p</span></div>' +
+        '<div class="hx-seg">' + DEPTHS.map(function (d) {
+          return '<button type="button" class="hx-opt" data-set-depth="' + d.id + '">' +
+            '<div class="hx-opt-top"><span class="hx-opt-name">' + d.name + '</span><span class="hx-opt-key">' + d.key + '</span></div>' +
+            '<div class="hx-opt-desc">' + d.desc + '</div></button>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<div class="hx-row">' +
+        '<div class="hx-row-lbl"><span>03 · Field Polarity</span><span>key d</span></div>' +
+        '<div class="hx-seg two">' + FIELDS.map(function (f) {
+          return '<button type="button" class="hx-opt" data-set-field="' + f.id + '">' +
+            '<div class="hx-opt-top"><span class="hx-opt-name">' + f.name + '</span></div></button>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<div class="hx-api-foot">' +
+        '<span class="hx-store-live" id="hx-store-live">loading live store index…</span>' +
+        '<span class="hx-api-code" id="hx-api-readout"></span>' +
+      '</div>';
+    document.body.appendChild(panel);
+
+    var toast = document.createElement('div');
+    toast.id = 'hx-view-toast';
+    document.body.appendChild(toast);
+
+    var navLinks = document.querySelector('nav .links');
+    var trig = null;
+    if (navLinks) {
+      var cmdBtn = document.createElement('button');
+      cmdBtn.id = 'hx-cmd-trigger';
+      cmdBtn.type = 'button';
+      cmdBtn.textContent = '⌘K';
+      cmdBtn.title = 'Search modules & verified defs (⌘K or /)';
+      cmdBtn.addEventListener('click', function (e) { e.stopPropagation(); openCmdPalette(); });
+
+      trig = document.createElement('button');
+      trig.id = 'hx-view-trigger';
+      trig.type = 'button';
+      trig.setAttribute('aria-expanded', 'false');
+      trig.title = 'Reader Lens (v or 1-6)';
+
+      var tbtn = navLinks.querySelector('.tbtn');
+      if (tbtn) {
+        navLinks.insertBefore(cmdBtn, tbtn);
+        navLinks.insertBefore(trig, tbtn);
+        tbtn.onclick = function () { setState({ field: state.field === 'void' ? 'light' : 'void' }, true); };
+      } else {
+        navLinks.appendChild(cmdBtn);
+        navLinks.appendChild(trig);
+      }
+    } else {
+      var fp = document.createElement('button');
+      fp.id = 'hx-float-pill';
+      fp.type = 'button';
+      document.body.appendChild(fp);
+      trig = fp;
+    }
+
+    function togglePanel(force) {
+      var open = typeof force === 'boolean' ? force : !panel.classList.contains('open');
+      panel.classList.toggle('open', open);
+      if (trig) trig.setAttribute('aria-expanded', String(open));
+    }
+
+    if (trig) trig.addEventListener('click', function (e) { e.stopPropagation(); togglePanel(); });
+    panel.querySelector('#hx-p-close').addEventListener('click', function () { togglePanel(false); });
+    panel.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var bEd = e.target.closest('[data-set-edition]');
+      if (bEd) return setState({ edition: bEd.getAttribute('data-set-edition') }, true);
+      var bDp = e.target.closest('[data-set-depth]');
+      if (bDp) return setState({ depth: bDp.getAttribute('data-set-depth') }, true);
+      var bFl = e.target.closest('[data-set-field]');
+      if (bFl) return setState({ field: bFl.getAttribute('data-set-field') }, true);
+    });
+    document.addEventListener('click', function () { togglePanel(false); });
+
+    document.addEventListener('keydown', function (e) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        openCmdPalette();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      var tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable)) return;
+
+      if (e.key === 'Escape') {
+        togglePanel(false);
+        hidePeek();
+        closeSourceDrawer();
+        var bd = document.getElementById('hx-cmd-backdrop');
+        if (bd) bd.classList.remove('open');
+        document.querySelectorAll('.hx-ex-drawer.open').forEach(function (dr) { dr.classList.remove('open'); dr.innerHTML = ''; });
+        document.querySelectorAll('.stat-cell.hx-open').forEach(function (c) { c.classList.remove('hx-open'); c.setAttribute('aria-expanded', 'false'); });
+        return;
+      }
+      if (e.key === '/') { e.preventDefault(); openCmdPalette(); return; }
+      if (e.key === 'v' || e.key === 'V') { e.preventDefault(); togglePanel(); return; }
+      if (e.key === 'd' || e.key === 'D') { e.preventDefault(); setState({ field: state.field === 'void' ? 'light' : 'void' }, true); return; }
+      if (e.key === 's' || e.key === 'S') {
+        var dr = document.getElementById('hx-src-drawer');
+        if (dr && dr.classList.contains('open')) {
+          e.preventDefault();
+          setState({ split: !state.split }, false);
+          showToast(state.split ? '<b>split-pane</b> pinned' : '<b>split-pane</b> overlay');
+        }
+        return;
+      }
+      if (e.key === 'f') { setState({ depth: 'full' }, true); return; }
+      if (e.key === 'g') { setState({ depth: 'geodesic' }, true); return; }
+      if (e.key === 'p') { setState({ depth: 'formal' }, true); return; }
+      var ed = EDITIONS.find(function (x) { return x.key === e.key; });
+      if (ed) setState({ edition: ed.id }, true);
+    });
+
+    syncUI();
+  }
+
+  // ==================== 15. CROSS-TREATISE SPINE FOOTER & READING PROGRESS ====================
+  var SPINE = [
+    { path: '/learn',         title: '01 · First Principles' },
+    { path: '/hyperfactor',   title: '02 · Universal Hyperfactoring' },
+    { path: '/decentralized', title: '03 · PoUW & Decentralized Web' },
+    { path: '/silicon',       title: '04 · Interaction-Net Silicon' },
+    { path: '/ai',            title: '05 · AI & Alignment' },
+    { path: '/physics',       title: '06 · Physics & Morphogenesis' },
+    { path: '/neuro',         title: '07 · Neural Co-Processors' },
+  ];
+
+  function mountSpineFooterAndProgress() {
+    var p = window.location.pathname.replace(/\/+$/, '') || '/';
+    var idx = SPINE.findIndex(function (s) { return s.path === p; });
+    if (idx === -1) return;
+
+    // 1.5px photon reading progress hairline
+    var bar = document.createElement('div');
+    bar.id = 'hx-read-prog';
+    document.body.appendChild(bar);
+    function updateProg() {
+      var h = document.documentElement.scrollHeight - window.innerHeight;
+      var pct = h > 0 ? Math.min(100, Math.max(0, (window.scrollY / h) * 100)) : 0;
+      bar.style.width = pct.toFixed(2) + '%';
+    }
+    window.addEventListener('scroll', updateProg, { passive: true });
+    updateProg();
+
+    // Cross-treatise continuation footer
+    var main = document.querySelector('main');
+    if (main && !document.getElementById('hx-spine-foot')) {
+      var prev = idx > 0 ? SPINE[idx - 1] : null;
+      var next = idx < SPINE.length - 1 ? SPINE[idx + 1] : null;
+      var foot = document.createElement('footer');
+      foot.id = 'hx-spine-foot';
+      foot.innerHTML =
+        (prev ? '<a class="sf-link" href="' + prev.path + '">← ' + escHtml(prev.title) + '</a>' : '<a class="sf-link" href="/">← Derivation Spine</a>') +
+        '<a class="sf-mid" href="/">hyperactivity · spine</a>' +
+        (next ? '<a class="sf-link" href="' + next.path + '">' + escHtml(next.title) + ' →</a>' : '<a class="sf-link" href="/ide">Live Cubical IDE →</a>');
+      main.appendChild(foot);
+    }
+  }
+
+  window.hxView = {
+    get: function () { return Object.assign({}, state); },
+    set: function (patch) { return setState(patch, false); },
+    inspect: openSourceDrawer,
+    verifyModule: verifyModule,
+    tamperModule: tamperModule,
+    evalCubical: evalCubical,
+    casPut: casPutOverlay,
+    casList: casGetAllOverlay,
+    casDelete: casDeleteOverlay,
+    search: openCmdPalette,
+    editions: EDITIONS.map(function (e) { return e.id; }),
+    depths: DEPTHS.map(function (d) { return d.id; }),
+    fields: FIELDS.map(function (f) { return f.id; }),
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountAll);
+  else mountAll();
+})();
