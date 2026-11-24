@@ -1,0 +1,12 @@
+hd-record-target : Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+hd-record-target mem idx s0 s1 k =
+  let id1 = %wsucc idx
+      hit0 = if %weq s0 hd-spec-avg-s0 then %weq s1 hd-spec-avg-s1 else false
+      hit1 = if %weq s0 hd-spec-clb-s0 then %weq s1 hd-spec-clb-s1 else false
+      hit2 = if %weq s0 hd-spec-ilb-s0 then %weq s1 hd-spec-ilb-s1 else false
+      hit3 = if %weq s0 hd-spec-cavg-s0 then %weq s1 hd-spec-cavg-s1 else false
+  in if hit0 then scmd (w-store (hd-st-at mem #2) id1) (λ _ → k #0)
+     else if hit1 then scmd (w-store (hd-st-at mem #3) id1) (λ _ → k #0)
+     else if hit2 then scmd (w-store (hd-st-at mem #4) id1) (λ _ → k #0)
+     else if hit3 then scmd (w-store (hd-st-at mem #5) id1) (λ _ → k #0)
+     else k #0

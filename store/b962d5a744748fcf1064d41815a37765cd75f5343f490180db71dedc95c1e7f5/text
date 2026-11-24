@@ -1,0 +1,15 @@
+-- Expand all unary ops (NOT=4, SHR1=5, SHL1=6) on classes of exact cost (target_cost - 1)
+hd-exp-uop : Nat → Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+hd-exp-uop zero _ _ _ _ k = k #0
+hd-exp-uop (suc rem) mem i tcost op k =
+  let ea = hd-e-at mem i
+  in scmd (w-load (%wadd ea #16)) (λ meta →
+     let ic = %wshr meta #32
+     in if %weq (%wsucc ic) tcost then
+          scmd (w-load ea) (λ s0 →
+          scmd (w-load (%wadd ea #8)) (λ s1 →
+          let ns0 = hd-uop2 op s0
+              ns1 = hd-uop2 op s1
+              nm  = %wor op (%wor (%wshl i #8) (%wshl tcost #32))
+          in hd-insert mem ns0 ns1 nm (λ _ → hd-exp-uop rem mem (%wsucc i) tcost op k)))
+        else hd-exp-uop rem mem (%wsucc i) tcost op k)

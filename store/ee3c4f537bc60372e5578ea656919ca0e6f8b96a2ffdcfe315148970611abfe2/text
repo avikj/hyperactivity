@@ -1,0 +1,18 @@
+-- Expand binary op `op` over pairs (i, j) with cost(i) + cost(j) + 1 == tcost
+hd-exp-bop-j : Nat → Word → Word → Word → Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+hd-exp-bop-j zero _ _ _ _ _ _ _ k = k #0
+hd-exp-bop-j (suc rem) mem i is0 is1 j need op k =
+  hd-yield j (λ _ →
+  let eaj = hd-e-at mem j
+  in scmd (w-load (%wadd eaj #16)) (λ jm →
+     let jc = %wshr jm #32
+     in if %weq jc need then
+          scmd (w-load eaj) (λ js0 →
+          scmd (w-load (%wadd eaj #8)) (λ js1 →
+          scmd (w-load (%wadd (hd-e-at mem i) #16)) (λ im →
+          let ns0 = hd-bop2 op is0 js0
+              ns1 = hd-bop2 op is1 js1
+              tc  = %wsucc (%wadd (%wshr im #32) jc)
+              nm  = %wor op (%wor (%wshl i #8) (%wor (%wshl j #20) (%wshl tc #32)))
+          in hd-insert mem ns0 ns1 nm (λ _ → hd-exp-bop-j rem mem i is0 is1 (%wsucc j) need op k))))
+        else hd-exp-bop-j rem mem i is0 is1 (%wsucc j) need op k))

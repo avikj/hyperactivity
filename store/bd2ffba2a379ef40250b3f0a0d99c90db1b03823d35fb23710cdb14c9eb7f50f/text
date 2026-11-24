@@ -1,0 +1,18 @@
+-- Save a target hit even if the general OE bank is full (slots 4091..4094 reserved for target formulas!)
+hd-check-full-hit : Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+hd-check-full-hit mem s0 s1 meta k =
+  let hit0 = if %weq s0 hd-spec-avg-s0 then %weq s1 hd-spec-avg-s1 else false
+      hit3 = if %weq s0 hd-spec-cavg-s0 then %weq s1 hd-spec-cavg-s1 else false
+  in if hit0 then
+       scmd (w-load (hd-st-at mem #2)) (λ cur →
+       if %weq cur #0 then
+         scmd (w-store (%wadd (hd-e-at mem #4091) #16) meta) (λ _ →
+         scmd (w-store (hd-st-at mem #2) #4092) (λ _ → k #0))
+       else k #0)
+     else if hit3 then
+       scmd (w-load (hd-st-at mem #5)) (λ cur →
+       if %weq cur #0 then
+         scmd (w-store (%wadd (hd-e-at mem #4092) #16) meta) (λ _ →
+         scmd (w-store (hd-st-at mem #5) #4093) (λ _ → k #0))
+       else k #0)
+     else k #0

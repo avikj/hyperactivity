@@ -1,0 +1,14 @@
+-- Open-addressed probe in HT: returns 0 if not found (and slot in snd), else (idx+1, slot)
+hd-probe-go : Nat → Word → Word → Word → Word → (Word → Word → Step W Word) → Step W Word
+hd-probe-go zero _ _ _ slot k = k #0 slot
+hd-probe-go (suc rem) mem s0 s1 slot k =
+  scmd (w-load (hd-ht-at mem slot)) (λ ent →
+  if %weq ent #0 then k #0 slot
+  else let idx = %wsub ent #1
+           ea  = hd-e-at mem idx
+       in scmd (w-load ea) (λ es0 →
+          scmd (w-load (%wadd ea #8)) (λ es1 →
+          if %weq es0 s0 then
+            if %weq es1 s1 then k ent slot
+            else hd-probe-go rem mem s0 s1 (%wand (%wsucc slot) #16383) k
+          else hd-probe-go rem mem s0 s1 (%wand (%wsucc slot) #16383) k)))

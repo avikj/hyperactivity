@@ -1,0 +1,14 @@
+-- Print first K discovered irreducible algebraic laws!
+hd-print-laws : Nat → Word → Word → Word → Step W Word → Step W Word
+hd-print-laws zero _ _ _ next = next
+hd-print-laws (suc rem) mem i nl next =
+  if %wlt i nl then
+    let la = hd-law-at mem i
+    in scmd (w-load la) (λ lm →
+       scmd (w-load (%wadd la #8)) (λ ridx →
+       scmd (w-load (%wadd (hd-e-at mem ridx) #16)) (λ rm →
+       hd-fmt-meta (toNat #8) mem lm (λ sl →
+       hd-fmt-meta (toNat #8) mem rm (λ sr →
+       cli-say (list-append "  LAW[" (list-append (ce-dec i) (list-append "]: " (list-append sl (list-append " == " sr)))))
+         (hd-print-laws rem mem (%wsucc i) nl next))))))
+  else next

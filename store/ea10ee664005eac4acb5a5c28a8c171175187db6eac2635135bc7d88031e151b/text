@@ -1,0 +1,17 @@
+hd-exp-bop-i : Nat → Word → Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+hd-exp-bop-i zero _ _ _ _ _ k = k #0
+hd-exp-bop-i (suc rem) mem i n0 tcost op k =
+  hd-yield i (λ _ →
+  let ea = hd-e-at mem i
+  in scmd (w-load (%wadd ea #16)) (λ im →
+     let ic = %wshr im #32
+     in if %wlt ic tcost then
+          let need = %wsub (%wsub tcost #1) ic
+              is_comm = if %weq op #11 then false else true
+              jstart  = if is_comm then i else #0
+              jcnt    = %wsub n0 jstart
+          in scmd (w-load ea) (λ is0 →
+             scmd (w-load (%wadd ea #8)) (λ is1 →
+             hd-exp-bop-j (toNat jcnt) mem i is0 is1 jstart need op (λ _ →
+             hd-exp-bop-i rem mem (%wsucc i) n0 tcost op k)))
+        else hd-exp-bop-i rem mem (%wsucc i) n0 tcost op k))

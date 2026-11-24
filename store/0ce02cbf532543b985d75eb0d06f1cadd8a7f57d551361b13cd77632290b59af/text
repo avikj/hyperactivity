@@ -1,0 +1,36 @@
+-- Insert candidate (s0, s1, meta) into OE table; if collision with existing class j, record algebraic law!
+hd-insert : Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+hd-insert mem s0 s1 meta k =
+  scmd (w-load (hd-st-at mem #6)) (λ ev →
+  scmd (w-store (hd-st-at mem #6) (%wsucc ev)) (λ _ →
+  hd-probe-go (toNat #64) mem s0 s1 (hd-hash s0 s1) (λ ent slot →
+  if %weq ent #0 then
+    scmd (w-load (hd-st-at mem #0)) (λ n →
+    if %wlt #4089 n then hd-check-full-hit mem s0 s1 meta k
+    else let ea = hd-e-at mem n
+         in scmd (w-store ea s0) (λ _ →
+            scmd (w-store (%wadd ea #8) s1) (λ _ →
+            scmd (w-store (%wadd ea #16) meta) (λ _ →
+            scmd (w-store (hd-ht-at mem slot) (%wsucc n)) (λ _ →
+            scmd (w-store (hd-st-at mem #0) (%wsucc n)) (λ _ →
+            hd-record-target mem n s0 s1 k))))))
+  else
+    -- Non-trivial algebraic identity discovered: candidate `meta` == existing minimal class `rhs = ent - 1`!
+    let rhs  = %wsub ent #1
+        op   = %wand meta #255
+        cost = %wshr meta #32
+    in scmd (w-load (%wadd (hd-e-at mem rhs) #16)) (λ rmeta →
+       let rcost = %wshr rmeta #32
+           rop   = %wand rmeta #255
+           keep  = if %wlt #1 cost then
+                     if %weq op rop then false
+                     else if %wlt #0 rcost then true else %wlt #2 cost
+                   else false
+       in if keep then
+            scmd (w-load (hd-st-at mem #1)) (λ nl →
+            if %wlt #250 nl then k #0
+            else let la = hd-law-at mem nl
+                 in scmd (w-store la meta) (λ _ →
+                    scmd (w-store (%wadd la #8) rhs) (λ _ →
+                    scmd (w-store (hd-st-at mem #1) (%wsucc nl)) (λ _ → k #0))))
+          else k #0))))

@@ -1,0 +1,11 @@
+hd-run-gpu-emit : List (List Word) → Step W Word
+hd-run-gpu-emit args =
+  let p  = hd-pref args
+      mf = list-append p ".metal"
+      hf = list-append p "_bench.m"
+  in scmd w-now (λ t0 →
+     scmd (w-file-write-named mf hd-gpu-metal-src) (λ bm →
+     scmd (w-file-write-named hf (hd-gpu-host-src mf)) (λ bh →
+     scmd w-now (λ t1 →
+     cli-say (list-append "HX-DISCOVER GPU emitter Metal=" (list-append (ce-dec bm) (list-append "B Host=" (list-append (ce-dec bh) (list-append "B (" (list-append (ce-dec (%wdiv (%wsub t1 t0) #1000)) " us)"))))))
+       (sdone #0)))))

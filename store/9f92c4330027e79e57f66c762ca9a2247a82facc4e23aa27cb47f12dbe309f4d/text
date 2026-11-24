@@ -1,0 +1,38 @@
+-- Run the Pure Symbolic OE Bitvector Superoptimizer & Algebraic Law Discoverer!
+hd-run-oe : Step W Word
+hd-run-oe =
+  scmd w-now (λ t0 →
+  scmd (w-alloc #524288) (λ mem →
+  -- Seed cost-0 atoms: 0 (op=0), 1 (op=1), x (op=2), y (op=3)
+  hd-insert mem #0 #0 #0 (λ _ →
+  hd-insert mem (hd-pk2 #1 #1) (hd-pk2 #1 #1) #1 (λ _ →
+  hd-insert mem (hd-pk2 hd-x0 hd-x1) (hd-pk2 hd-x2 hd-x3) #2 (λ _ →
+  hd-insert mem (hd-pk2 hd-y0 hd-y1) (hd-pk2 hd-y2 hd-y3) #3 (λ _ →
+  -- Bottom-up OE levels 1, 2, 3, 4! (Invents Hacker's Delight (x&y)+((x^y)>>1) & (x|y)-((x^y)>>1) at cost 4!)
+  hd-run-level mem #1 (λ _ →
+  hd-run-level mem #2 (λ _ →
+  hd-run-level mem #3 (λ _ →
+  hd-run-level mem #4 (λ _ →
+  scmd (w-load (hd-st-at mem #0)) (λ ncls →
+  scmd (w-load (hd-st-at mem #1)) (λ nlaw →
+  scmd (w-load (hd-st-at mem #2)) (λ i_avg →
+  scmd (w-load (hd-st-at mem #3)) (λ i_clb →
+  scmd (w-load (hd-st-at mem #4)) (λ i_ilb →
+  scmd (w-load (hd-st-at mem #5)) (λ i_cavg →
+  scmd (w-load (hd-st-at mem #6)) (λ nevs →
+  hd-fmt-idx mem i_avg (λ s_avg →
+  hd-fmt-idx mem i_clb (λ s_clb →
+  hd-fmt-idx mem i_ilb (λ s_ilb →
+  hd-fmt-idx mem i_cavg (λ s_cavg →
+  scmd w-now (λ t1 →
+  let us = %wdiv (%wsub t1 t0) #1000
+  in cli-say (list-append "HX-DISCOVER OE-Superopt (ZERO LLM): evals=" (list-append (ce-dec nevs)
+       (list-append " eq_classes=" (list-append (ce-dec ncls)
+       (list-append " laws=" (list-append (ce-dec nlaw)
+       (list-append " (" (list-append (ce-dec us) " us)"))))))))
+     (cli-say (list-append "  INVENTED avg_floor(x,y) [overflow-free]: " s_avg)
+     (cli-say (list-append "  INVENTED avg_ceil(x,y)  [overflow-free]: " s_cavg)
+     (cli-say (list-append "  INVENTED clear_lsb(x)   [branchless]   : " s_clb)
+     (cli-say (list-append "  INVENTED isol_lsb(x)    [branchless]   : " s_ilb)
+     (hd-print-laws (toNat #8) mem #0 nlaw
+       (scmd (w-free mem) (λ _ → sdone #0)))))))))))))))))))))))))))))

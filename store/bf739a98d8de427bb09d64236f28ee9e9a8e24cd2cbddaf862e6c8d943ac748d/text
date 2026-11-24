@@ -1,0 +1,1678 @@
+/* ==========================================================================
+   HYPERACTIVITY — Sovereign Identity, Personal Knowledge Graph,
+   Signed Question Forum (root@hyperactivity.ai), & Supergenius Oracle
+   (KV-Cached Context + KG Tools + Sandboxed On-Demand hx-lab Web Apps)
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  var ID_KEY = 'hxIdentity_v1';
+  var PKG_KEY = 'hxPersonalKG_v1';
+
+  function escHtml(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function toHex(buf) {
+    var u = new Uint8Array(buf), s = '';
+    for (var i = 0; i < u.length; i++) s += u[i].toString(16).padStart(2, '0');
+    return s;
+  }
+
+  // ==================== 1. SOVEREIGN CRYPTOGRAPHIC IDENTITY (WebCrypto ECDSA P-256) ====================
+  var identityPromise = null;
+
+  async function ensureIdentity() {
+    if (identityPromise) return identityPromise;
+    identityPromise = (async function () {
+      try {
+        var saved = JSON.parse(localStorage.getItem(ID_KEY) || 'null');
+        if (saved && saved.did && saved.pubJwk && saved.privJwk) {
+          var priv = await crypto.subtle.importKey('jwk', saved.privJwk, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
+          var pub = await crypto.subtle.importKey('jwk', saved.pubJwk, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['verify']);
+          return { did: saved.did, handle: saved.handle || '', isRootLocal: !!saved.isRootLocal, pubJwk: saved.pubJwk, privJwk: saved.privJwk, priv: priv, pub: pub };
+        }
+      } catch (_) {}
+
+      // Generate fresh sovereign ECDSA P-256 keypair in browser (zero accounts / zero server secrets)
+      var kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+      var pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
+      var privJwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+      var pubBytes = new TextEncoder().encode(JSON.stringify({ x: pubJwk.x, y: pubJwk.y }));
+      var hash = await crypto.subtle.digest('SHA-256', pubBytes);
+      var did = 'did:hx:' + toHex(hash).slice(0, 12);
+      var rec = { did: did, handle: '', isRootLocal: false, pubJwk: pubJwk, privJwk: privJwk };
+      try { localStorage.setItem(ID_KEY, JSON.stringify(rec)); } catch (_) {}
+      return Object.assign({}, rec, { priv: kp.privateKey, pub: kp.publicKey });
+    })();
+    return identityPromise;
+  }
+
+  async function signPayload(obj) {
+    var id = await ensureIdentity();
+    var bytes = new TextEncoder().encode(JSON.stringify(obj));
+    var sigBuf = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, id.priv, bytes);
+    return { did: id.did, handle: id.handle, pubJwk: id.pubJwk, sig: toHex(sigBuf), isRootLocal: id.isRootLocal };
+  }
+
+  function updateIdentityMeta(patch) {
+    return ensureIdentity().then(function (id) {
+      if (typeof patch.handle === 'string') id.handle = patch.handle.trim().slice(0, 32);
+      if (typeof patch.isRootLocal === 'boolean') id.isRootLocal = patch.isRootLocal;
+      try {
+        localStorage.setItem(ID_KEY, JSON.stringify({
+          did: id.did, handle: id.handle, isRootLocal: id.isRootLocal, pubJwk: id.pubJwk, privJwk: id.privJwk,
+        }));
+      } catch (_) {}
+      return id;
+    });
+  }
+
+  // ==================== 2. PERSONAL KNOWLEDGE GRAPH (Local Sovereign Store) ====================
+  function loadPKG() {
+    try {
+      var d = JSON.parse(localStorage.getItem(PKG_KEY) || 'null');
+      if (d && typeof d === 'object') {
+        d.highlights = Array.isArray(d.highlights) ? d.highlights : [];
+        d.verified = Array.isArray(d.verified) ? d.verified : [];
+        d.visited = d.visited && typeof d.visited === 'object' ? d.visited : {};
+        return d;
+      }
+    } catch (_) {}
+    return { highlights: [], verified: [], visited: {} };
+  }
+
+  function savePKG(pkg) {
+    try { localStorage.setItem(PKG_KEY, JSON.stringify(pkg)); } catch (_) {}
+  }
+
+  function recordVisit() {
+    var route = window.location.pathname || '/';
+    var pkg = loadPKG();
+    var prev = pkg.visited[route] || { count: 0, title: document.title, last: 0 };
+    prev.count += 1;
+    prev.title = document.title.replace(/\s*[·|]\s*hyperactivity.*$/i, '').trim() || route;
+    prev.last = Date.now();
+    pkg.visited[route] = prev;
+    savePKG(pkg);
+  }
+
+  function addHighlight(quote, note, sectionId) {
+    var pkg = loadPKG();
+    var item = {
+      id: 'hl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      route: window.location.pathname || '/',
+      sectionId: sectionId || '',
+      quote: quote.trim().slice(0, 600),
+      note: (note || '').trim(),
+      ts: Date.now(),
+    };
+    pkg.highlights.unshift(item);
+    savePKG(pkg);
+    return item;
+  }
+
+  function updateHighlightNote(id, note) {
+    var pkg = loadPKG();
+    var it = pkg.highlights.find(function (h) { return h.id === id; });
+    if (it) { it.note = note.trim(); savePKG(pkg); }
+  }
+
+  function deleteHighlight(id) {
+    var pkg = loadPKG();
+    pkg.highlights = pkg.highlights.filter(function (h) { return h.id !== id; });
+    savePKG(pkg);
+  }
+
+  function recordVerifiedModule(modPath) {
+    var pkg = loadPKG();
+    if (pkg.verified.indexOf(modPath) === -1) {
+      pkg.verified.unshift(modPath);
+      savePKG(pkg);
+    }
+  }
+
+  // Re-apply saved highlights on current page (best-effort clean text-node wrap)
+  function applySavedHighlightsOnPage() {
+    var route = window.location.pathname || '/';
+    var pkg = loadPKG();
+    var ours = pkg.highlights.filter(function (h) { return h.route === route && h.quote && h.quote.length >= 6; });
+    if (!ours.length) return;
+    var main = document.querySelector('main');
+    if (!main) return;
+
+    ours.forEach(function (h) {
+      if (main.querySelector('mark[data-hl-id="' + h.id + '"]')) return;
+      var needle = h.quote.slice(0, 80);
+      var walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT, null, false);
+      var n;
+      while ((n = walker.nextNode())) {
+        if (!n.parentElement || n.parentElement.closest('pre, script, style, mark, button, nav')) continue;
+        var idx = n.nodeValue.indexOf(needle);
+        if (idx !== -1) {
+          try {
+            var range = document.createRange();
+            range.setStart(n, idx);
+            range.setEnd(n, Math.min(n.nodeValue.length, idx + h.quote.length));
+            var mk = document.createElement('mark');
+            mk.className = 'hx-hl';
+            mk.setAttribute('data-hl-id', h.id);
+            mk.title = h.note ? ('Note: ' + h.note) : 'Highlighted in your Personal KG (click to inspect)';
+            range.surroundContents(mk);
+            mk.addEventListener('click', function () { openHub('kg'); });
+          } catch (_) {}
+          break;
+        }
+      }
+    });
+  }
+
+  // ==================== 3. FLOATING SELECTION TOOLBAR ====================
+  var activeQuote = '';
+  var activeSectionId = '';
+  var activeRange = null;
+
+  function nearestSectionId(node) {
+    var el = node && node.nodeType === 1 ? node : (node && node.parentElement);
+    while (el && el !== document.body) {
+      if (el.id) return el.id;
+      var prev = el.previousElementSibling;
+      while (prev) {
+        if (prev.id) return prev.id;
+        prev = prev.previousElementSibling;
+      }
+      el = el.parentElement;
+    }
+    return '';
+  }
+
+  function ensureSelBar() {
+    var bar = document.getElementById('hx-sel-bar');
+    if (bar) return bar;
+    bar = document.createElement('div');
+    bar.id = 'hx-sel-bar';
+    bar.innerHTML =
+      '<button type="button" data-sel="hl">highlight</button>' +
+      '<button type="button" data-sel="note">+ note</button>' +
+      '<button type="button" data-sel="oracle" class="accent">Supergenius ✦</button>' +
+      '<button type="button" data-sel="question">question ?</button>';
+    document.body.appendChild(bar);
+
+    bar.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    bar.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-sel]');
+      if (!btn || !activeQuote) return;
+      var act = btn.getAttribute('data-sel');
+      var q = activeQuote;
+      var sec = activeSectionId;
+      bar.classList.remove('show');
+
+      if (act === 'hl') {
+        var it = addHighlight(q, '', sec);
+        try {
+          if (activeRange) {
+            var mk = document.createElement('mark');
+            mk.className = 'hx-hl';
+            mk.setAttribute('data-hl-id', it.id);
+            mk.title = 'Highlighted in your Personal KG';
+            activeRange.surroundContents(mk);
+            mk.addEventListener('click', function () { openHub('kg'); });
+          }
+        } catch (_) { applySavedHighlightsOnPage(); }
+        if (window.getSelection) window.getSelection().removeAllRanges();
+        refreshKGView();
+      } else if (act === 'note') {
+        var noteText = window.prompt('Add note to your Personal Knowledge Graph:\n“' + q.slice(0, 120) + (q.length > 120 ? '…' : '') + '”', '');
+        if (noteText !== null) {
+          addHighlight(q, noteText, sec);
+          applySavedHighlightsOnPage();
+          openHub('kg');
+        }
+      } else if (act === 'oracle') {
+        openHub('oracle', { quote: q, sectionId: sec });
+      } else if (act === 'question') {
+        openHub('forum', { quote: q, sectionId: sec });
+      }
+    });
+    return bar;
+  }
+
+  function wireSelectionPopover() {
+    var bar = ensureSelBar();
+    document.addEventListener('mouseup', function (e) {
+      if (e.target && e.target.closest('#hx-sel-bar, #hx-hub-drawer, #hx-src-drawer, #hx-view-panel, #hx-cmd-backdrop')) return;
+      setTimeout(function () {
+        var sel = window.getSelection && window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) { bar.classList.remove('show'); return; }
+        var txt = sel.toString().trim();
+        if (txt.length < 4 || txt.length > 800) { bar.classList.remove('show'); return; }
+        var range = sel.getRangeAt(0);
+        var container = range.commonAncestorContainer;
+        var el = container.nodeType === 1 ? container : container.parentElement;
+        if (!el || !el.closest('main, article')) { bar.classList.remove('show'); return; }
+
+        activeQuote = txt;
+        activeSectionId = nearestSectionId(el);
+        activeRange = range.cloneRange();
+
+        var rect = range.getBoundingClientRect();
+        var left = Math.min(Math.max(12, rect.left + rect.width / 2 - 155), window.innerWidth - 330);
+        var top = Math.max(52, rect.top - 42);
+        bar.style.left = left + 'px';
+        bar.style.top = top + 'px';
+        bar.classList.add('show');
+      }, 15);
+    });
+    document.addEventListener('mousedown', function (e) {
+      if (!e.target.closest('#hx-sel-bar')) bar.classList.remove('show');
+    });
+  }
+
+  // ==================== 4. TRUE HYPERACTIVE OS DATAFLOW ====================
+  // Supergenius emits PURE .hypercubical -> /cubical.wasm type-checks & reduces
+  // to canonical OsEffect normal form -> Last-Layer Projector renders DOM/CSS/Canvas/Audio!
+  var OS_EFFECT_PRELUDE = [
+    'data OsEdition = ed-mono | ed-photonic | ed-margin | ed-dyslexic',
+    'data OsDepth   = dp-full | dp-outline | dp-formal',
+    'data OsField   = fl-light | fl-void',
+    'data CanvasOp  = cv-clear (hex : List Word)',
+    '               | cv-rect (x : Word) (y : Word) (w : Word) (h : Word) (hex : List Word)',
+    '               | cv-circle (x : Word) (y : Word) (r : Word) (hex : List Word)',
+    '               | cv-line (x1 : Word) (y1 : Word) (x2 : Word) (y2 : Word) (hex : List Word)',
+    '               | cv-text (x : Word) (y : Word) (txt : List Word) (hex : List Word)',
+    'data DawEffect = daw-bpm (bpm : Word)',
+    '               | daw-loop (startBar : Word) (endBar : Word)',
+    '               | daw-grid (snapSixtyFourths : Word)',
+    '               | daw-clear (trk : Word)',
+    '               | daw-clip (trk : Word) (startBar : Word) (lenBars : Word) (name : List Word)',
+    '               | daw-note (trk : Word) (stepQ : Word) (row : Word) (durQ : Word) (velPct : Word)',
+    '               | daw-patch (trk : Word) (kind : List Word) (cutPct : Word) (resPct : Word) (drvPct : Word) (fmPct : Word)',
+    '               | daw-mix (trk : Word) (gainPct : Word) (revPct : Word) (dlyPct : Word)',
+    '               | daw-wasm (expr : List Word)',
+    '               | daw-mesh4',
+    '               | daw-play (on : Bool)',
+    '               | daw-seq (a : DawEffect) (b : DawEffect)',
+    'data UiTree    = ui-text (txt : List Word)',
+    '               | ui-heading (txt : List Word)',
+    '               | ui-box (cls : List Word) (children : List UiTree)',
+    '               | ui-row (children : List UiTree)',
+    '               | ui-canvas (w : Word) (h : Word) (ops : List CanvasOp)',
+    '               | ui-daw-btn (label : List Word) (eff : DawEffect)',
+    'data OsEffect  = eff-view (ed : OsEdition) (dp : OsDepth) (fl : OsField) (fontPx : Word)',
+    '               | eff-accent (hex : List Word)',
+    '               | eff-inspect (path : List Word) (split : Bool)',
+    '               | eff-verify (path : List Word)',
+    '               | eff-mount-note (title : List Word) (body : List Word)',
+    '               | eff-mount-inet (title : List Word) (nPairs : Word)',
+    '               | eff-mount-app (title : List Word) (html : List Word)',
+    '               | eff-mount-ui (title : List Word) (tree : UiTree)',
+    '               | eff-daw (d : DawEffect)',
+    '               | eff-scroll (query : List Word)',
+    '               | eff-nav (route : List Word)',
+    '               | eff-reset',
+    '               | eff-seq (a : OsEffect) (b : OsEffect)',
+  ].join('\n');
+
+  // Shared BroadcastChannel for instant live sync across /daw, /ide, and Supergenius tabs
+  var casChan = null;
+  try { casChan = new BroadcastChannel('hx-cas-v1'); } catch (_) {}
+  function notifyCasSync(kind, modPath) {
+    if (casChan) { try { casChan.postMessage({ type: kind, path: modPath, ts: Date.now() }); } catch (_) {} }
+  }
+
+  // Strictly gated BYOK Browser-Direct Gemini (gemini-4-neon & gemini-4-carbon ONLY; never leaves browser!)
+  var BYOK_ALLOWED_MODELS = ['gemini-4-neon', 'gemini-4-carbon'];
+  var BYOK_SESS_KEY = 'hx_byok_gemini_sess_v1';
+  var byokKeyMem = '';
+  var byokModel = 'gemini-4-neon';
+  var byokVerified = false;
+  var byokStatusMsg = '';
+  try {
+    var savedByok = sessionStorage.getItem(BYOK_SESS_KEY);
+    if (savedByok) {
+      var parsedByok = JSON.parse(savedByok);
+      if (parsedByok && parsedByok.key && BYOK_ALLOWED_MODELS.indexOf(parsedByok.model) !== -1) {
+        byokKeyMem = String(parsedByok.key);
+        byokModel = parsedByok.model;
+        byokVerified = true;
+        byokStatusMsg = 'verified ' + byokModel;
+      }
+    }
+  } catch (_) {}
+
+  async function verifyAndEnableByok(apiKey, desiredModel, persistSession) {
+    var key = String(apiKey || '').trim();
+    var model = String(desiredModel || 'gemini-4-neon').trim();
+    if (!key) throw new Error('Paste a Gemini API key first.');
+    if (BYOK_ALLOWED_MODELS.indexOf(model) === -1) {
+      throw new Error('BYOK strictly gated to gemini-4-neon and gemini-4-carbon ONLY (Flash/older models refused).');
+    }
+    var r = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+      method: 'GET',
+      headers: { 'x-goog-api-key': key },
+    });
+    if (!r.ok) {
+      var errTxt = await r.text().catch(function () { return ''; });
+      throw new Error('Gemini key check failed (HTTP ' + r.status + '): ' + errTxt.slice(0, 140));
+    }
+    var j = await r.json();
+    var names = (j.models || []).map(function (m) { return String(m.name || '').replace(/^models\//, ''); });
+    var matched = names.indexOf(model) !== -1;
+    if (!matched) {
+      var avail = BYOK_ALLOWED_MODELS.filter(function (m) { return names.indexOf(m) !== -1; });
+      if (avail.length) {
+        model = avail[0];
+      } else {
+        throw new Error('This key does not have access to gemini-4-neon or gemini-4-carbon (lower/Flash models are refused).');
+      }
+    }
+    byokKeyMem = key;
+    byokModel = model;
+    byokVerified = true;
+    byokStatusMsg = 'verified ' + model + ' (browser-direct)';
+    try {
+      if (persistSession) sessionStorage.setItem(BYOK_SESS_KEY, JSON.stringify({ key: key, model: model }));
+      else sessionStorage.removeItem(BYOK_SESS_KEY);
+    } catch (_) {}
+    refreshOracleBudget();
+    return { model: model };
+  }
+
+  function clearByokKey() {
+    byokKeyMem = ''; byokVerified = false; byokStatusMsg = '';
+    try { sessionStorage.removeItem(BYOK_SESS_KEY); } catch (_) {}
+    refreshOracleBudget();
+  }
+
+  function buildByokSystemPrompt() {
+    var dawInfo = (window.HX_DAW && window.HX_DAW.getStateSummary) ? ('\n\nLive /daw state:\n' + window.HX_DAW.getStateSummary()) : '';
+    return [
+      'You are Supergenius, the living pure-Hyperactivity OS agent on hyperactivity.ai.',
+      'You operate strictly via pure checked .hypercubical code verified in /cubical.wasm before projection:',
+      '1. To write & verify a new module in Sovereign hx-cas-v1 (shared live with /ide & /daw), emit:',
+      '   ```hypercubical-put path="user/example.hypercubical"\n   ...\n   ```',
+      '2. To mutate the live OS UI, mount a typed Canvas/UI widget, OR rewrite the live /daw (tempo, notes, patches, mix, hot-compiled WASM DSP plugins), emit:',
+      '   ```hypercubical-os\n   os-main : OsEffect\n   os-main = ...\n   ```',
+      'Available OsEffect / DawEffect / UiTree constructors (already in scope):',
+      OS_EFFECT_PRELUDE,
+      'For daw-wasm, pass a pure sound/wave.hypercubical DSP expression over (in, sc, p1, p2, st) and ops (add, sub, mul, div, min, max, abs, neg), e.g.:',
+      '  daw-wasm "mul (div (mul in p1) (add 1.0 (abs (mul in p1)))) p2"',
+      'For daw-note, stepQ and durQ are in 1/64th-note ticks (4 = 1/16th, 8 = 1/8th, 16 = 1/4th), row is 0..23 (C3=0, A3=9), velPct is 1..100.',
+      'Be concise, mathematically exact, and zero-postulate.' + dawInfo,
+    ].join('\n');
+  }
+
+  var osMutationCount = 0;
+
+  function updateResetUiBtn() {
+    var b = document.getElementById('hx-os-reset');
+    if (b) b.style.display = osMutationCount > 0 ? 'inline-flex' : 'none';
+  }
+
+  function resetAllOsMutations() {
+    document.querySelectorAll('style.hx-os-style, .hx-os-injected').forEach(function (n) { n.remove(); });
+    osMutationCount = 0;
+    updateResetUiBtn();
+  }
+
+  function insertIntoMain(node) {
+    var main = document.querySelector('main') || document.body;
+    var h1 = main.querySelector('.title-block, h1');
+    if (h1 && h1.parentNode) h1.parentNode.insertBefore(node, h1.nextSibling);
+    else main.insertBefore(node, main.firstChild);
+  }
+
+  // Deterministic S-expression parser for canonical cubical normal forms printed by `#show`
+  function parseCubicalNormalForm(str) {
+    var s = String(str || '').replace(/\[[0-9]+ steps[^\]]*\]/g, '').trim();
+    var eq = s.indexOf('=');
+    if (eq !== -1) s = s.slice(eq + 1).trim();
+    var tokens = s.match(/\(|\)|[^\s()]+/g) || [];
+    var pos = 0;
+    function parseAtom() {
+      if (pos >= tokens.length) return null;
+      var t = tokens[pos++];
+      if (t === '(') {
+        var list = [];
+        while (pos < tokens.length && tokens[pos] !== ')') {
+          list.push(parseAtom());
+        }
+        if (tokens[pos] === ')') pos++;
+        return list;
+      }
+      return t;
+    }
+    var root = [];
+    while (pos < tokens.length) root.push(parseAtom());
+    return root.length === 1 && Array.isArray(root[0]) ? root[0] : root;
+  }
+
+  function decodeWordList(ast) {
+    var codes = [];
+    var cur = ast;
+    while (Array.isArray(cur) && cur[0] === 'cons' && cur.length >= 3) {
+      var w = String(cur[1] || '');
+      if (w.charAt(0) === '#') codes.push(parseInt(w.slice(1), 10) || 32);
+      cur = cur[2];
+    }
+    try { return new TextDecoder().decode(new Uint8Array(codes)); }
+    catch (_) { return String.fromCharCode.apply(null, codes); }
+  }
+
+  function decodeWord(atom) {
+    var s = String(atom || '');
+    return s.charAt(0) === '#' ? (parseInt(s.slice(1), 10) || 0) : (parseInt(s, 10) || 0);
+  }
+
+  function buildInetLabHtml(title, nPairs) {
+    var n = Math.max(1, Math.min(8, nPairs || 3));
+    return '<!doctype html><html><head><meta charset="utf-8"><style>' +
+      'body{margin:0;background:#000;color:#fff;font:12px/1.4 ui-monospace,monospace;display:flex;flex-direction:column;height:100vh}' +
+      '.top{padding:8px 12px;border-bottom:1px solid #ff0a94;display:flex;justify-content:space-between;align-items:center}' +
+      'button{font:600 11px ui-monospace,monospace;background:none;color:#ff0a94;border:1px solid #ff0a94;padding:4px 9px;cursor:pointer}' +
+      'canvas{flex:1;width:100%;display:block}</style></head><body>' +
+      '<div class="top"><span>' + escHtml(title) + ' (' + n + ' degree-2 active pairs ●═●)</span><div><button id="step">reduce next</button> <button id="rst">reset</button></div></div>' +
+      '<canvas id="c"></canvas><script>' +
+      'const c=document.getElementById("c"),x=c.getContext("2d"),N=' + n + ';let ps=[];' +
+      'function init(){ps=[];for(let i=0;i<N;i++)ps.push({r:0,lbl:(i%2?"δ ⋈ δ":"γ ⋈ γ")});}' +
+      'function sz(){c.width=c.clientWidth*2;c.height=c.clientHeight*2;x.setTransform(2,0,0,2,0,0);}' +
+      'function draw(){const w=c.clientWidth,h=c.clientHeight;x.fillStyle="#000";x.fillRect(0,0,w,h);' +
+      'ps.forEach((p,i)=>{const cx=(i+0.5)*w/N,cy=h*0.5;x.strokeStyle=p.r?"rgba(255,255,255,.28)":"#ff0a94";x.lineWidth=2;' +
+      'if(!p.r){x.beginPath();x.moveTo(cx-26,cy);x.lineTo(cx+26,cy);x.stroke();x.fillStyle="#ff0a94";x.beginPath();x.arc(cx-26,cy,7,0,6.28);x.arc(cx+26,cy,7,0,6.28);x.fill();x.fillStyle="#fff";x.fillText(p.lbl,cx-20,cy-15);}' +
+      'else{x.beginPath();x.moveTo(cx-32,cy-12);x.lineTo(cx+32,cy-12);x.moveTo(cx-32,cy+12);x.lineTo(cx+32,cy+12);x.stroke();x.fillStyle="#ff0a94";x.fillText("O(1) freed",cx-28,cy+4);}});' +
+      'x.fillStyle="rgba(255,255,255,.52)";x.fillText("Compiled from checked cubical OsEffect normal form (eff-mount-inet)",12,h-12);}' +
+      'c.onclick=e=>{const i=Math.floor(e.offsetX/c.clientWidth*N);if(ps[i]){ps[i].r=1;draw();}};' +
+      'document.getElementById("step").onclick=()=>{const p=ps.find(a=>!a.r);if(p){p.r=1;draw();}};' +
+      'document.getElementById("rst").onclick=()=>{init();draw();};window.onresize=()=>{sz();draw();};init();sz();draw();' +
+      '</script></body></html>';
+  }
+
+  function decodeListAst(ast) {
+    var out = [], cur = ast;
+    while (Array.isArray(cur) && cur[0] === 'cons' && cur.length >= 3) {
+      out.push(cur[1]);
+      cur = cur[2];
+    }
+    return out;
+  }
+
+  function safeHex(s, fallback) {
+    var v = String(s || '').trim();
+    return /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : (fallback || '#ff0a94');
+  }
+
+  function renderCanvasOps(canvas, opsAst) {
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    var ops = decodeListAst(opsAst);
+    ops.forEach(function (op) {
+      if (!Array.isArray(op) || !op.length) return;
+      var k = op[0];
+      if (k === 'cv-clear') {
+        ctx.fillStyle = safeHex(decodeWordList(op[1]), '#0a0a0e');
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      } else if (k === 'cv-rect') {
+        ctx.fillStyle = safeHex(decodeWordList(op[5]), '#ff0a94');
+        ctx.fillRect(decodeWord(op[1]), decodeWord(op[2]), decodeWord(op[3]), decodeWord(op[4]));
+      } else if (k === 'cv-circle') {
+        ctx.fillStyle = safeHex(decodeWordList(op[4]), '#ff0a94');
+        ctx.beginPath();
+        ctx.arc(decodeWord(op[1]), decodeWord(op[2]), Math.max(1, decodeWord(op[3])), 0, Math.PI * 2);
+        ctx.fill();
+      } else if (k === 'cv-line') {
+        ctx.strokeStyle = safeHex(decodeWordList(op[5]), '#4da3ff');
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(decodeWord(op[1]), decodeWord(op[2]));
+        ctx.lineTo(decodeWord(op[3]), decodeWord(op[4]));
+        ctx.stroke();
+      } else if (k === 'cv-text') {
+        ctx.fillStyle = safeHex(decodeWordList(op[4]), '#ffffff');
+        ctx.font = '600 11px ui-monospace,monospace';
+        ctx.fillText(decodeWordList(op[3]), decodeWord(op[1]), decodeWord(op[2]));
+      }
+    });
+  }
+
+  function projectUiTree(ast, log) {
+    if (!Array.isArray(ast) || !ast.length) return document.createTextNode('');
+    var k = ast[0];
+    if (k === 'ui-text') {
+      var p = document.createElement('p');
+      p.style.cssText = 'margin:4px 0;font-size:12px;line-height:1.45';
+      p.textContent = decodeWordList(ast[1]);
+      return p;
+    }
+    if (k === 'ui-heading') {
+      var h = document.createElement('h4');
+      h.style.cssText = 'margin:6px 0 4px;font:700 13px/1.2 ui-monospace,monospace;color:#ff0a94';
+      h.textContent = decodeWordList(ast[1]);
+      return h;
+    }
+    if (k === 'ui-box') {
+      var div = document.createElement('div');
+      var cls = decodeWordList(ast[1]).replace(/[^a-zA-Z0-9 _-]/g, '');
+      if (cls) div.className = 'hx-ui-' + cls;
+      div.style.cssText = 'padding:8px 10px;border:1px solid rgba(255,255,255,.14);border-radius:4px;margin:6px 0';
+      decodeListAst(ast[2]).forEach(function (ch) { div.appendChild(projectUiTree(ch, log)); });
+      return div;
+    }
+    if (k === 'ui-row') {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0';
+      decodeListAst(ast[1]).forEach(function (ch) { row.appendChild(projectUiTree(ch, log)); });
+      return row;
+    }
+    if (k === 'ui-canvas') {
+      var cv = document.createElement('canvas');
+      cv.width = Math.max(32, Math.min(960, decodeWord(ast[1]) || 320));
+      cv.height = Math.max(32, Math.min(480, decodeWord(ast[2]) || 120));
+      cv.style.cssText = 'display:block;max-width:100%;border:1px solid rgba(255,255,255,.18);border-radius:3px;background:#0a0a0e';
+      renderCanvasOps(cv, ast[3]);
+      return cv;
+    }
+    if (k === 'ui-daw-btn') {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'hx-wasm-btn';
+      btn.textContent = decodeWordList(ast[1]);
+      btn.addEventListener('click', function () {
+        if (window.HX_DAW && window.HX_DAW.applyEffect) window.HX_DAW.applyEffect(ast[2], []);
+      });
+      return btn;
+    }
+    return document.createTextNode('');
+  }
+
+  // Last-Layer Deterministic Projector: canonical checked OsEffect AST -> DOM/CSS/Canvas/Audio
+  function projectCheckedEffect(ast, log) {
+    if (!ast) return;
+    if (typeof ast === 'string') {
+      if (ast === 'eff-reset') { resetAllOsMutations(); log.push('eff-reset'); }
+      return;
+    }
+    if (!Array.isArray(ast) || !ast.length) return;
+    var head = ast[0];
+
+    if (head === 'eff-seq') {
+      projectCheckedEffect(ast[1], log);
+      projectCheckedEffect(ast[2], log);
+    } else if (head === 'eff-view' && window.hxView) {
+      var edMap = { 'ed-mono': 'mono', 'ed-photonic': 'photonic', 'ed-margin': 'margin', 'ed-dyslexic': 'dyslexic' };
+      var dpMap = { 'dp-full': 'full', 'dp-outline': 'geodesic', 'dp-formal': 'formal' };
+      var flMap = { 'fl-light': 'light', 'fl-void': 'void' };
+      var ed = edMap[ast[1]] || 'mono';
+      var dp = dpMap[ast[2]] || 'full';
+      var fl = flMap[ast[3]] || 'light';
+      var px = decodeWord(ast[4]);
+      window.hxView.set({ edition: ed, depth: dp, field: fl });
+      if (px >= 12 && px <= 24) {
+        var st = document.createElement('style');
+        st.className = 'hx-os-style';
+        st.textContent = 'body{font-size:' + px + 'px !important}';
+        document.head.appendChild(st);
+        osMutationCount++;
+      }
+      log.push('eff-view(' + ed + ',' + dp + ',' + fl + (px ? ',' + px + 'px' : '') + ')');
+    } else if (head === 'eff-accent') {
+      var hex = decodeWordList(ast[1]).trim();
+      if (/^#[0-9a-fA-F]{3,8}$/.test(hex)) {
+        var st2 = document.createElement('style');
+        st2.className = 'hx-os-style';
+        st2.textContent = ':root{--hx-pink:' + hex + ';--pink:' + hex + ';}';
+        document.head.appendChild(st2);
+        osMutationCount++;
+        log.push('eff-accent(' + hex + ')');
+      }
+    } else if (head === 'eff-inspect' && window.hxView && window.hxView.inspect) {
+      var mp = decodeWordList(ast[1]);
+      var sp = ast[2] === 'true';
+      if (sp && window.hxView.set) window.hxView.set({ split: true });
+      window.hxView.inspect(mp, null, null);
+      log.push('eff-inspect(' + mp + ')');
+    } else if (head === 'eff-verify' && window.hxView && window.hxView.inspect) {
+      var mp2 = decodeWordList(ast[1]);
+      window.hxView.inspect(mp2, null, null);
+      setTimeout(function () { var vb = document.getElementById('hx-sd-verify'); if (vb) vb.click(); }, 140);
+      log.push('eff-verify(' + mp2 + ')');
+    } else if (head === 'eff-mount-note') {
+      var title = decodeWordList(ast[1]);
+      var body = decodeWordList(ast[2]);
+      var wrap = document.createElement('section');
+      wrap.className = 'hx-os-injected';
+      wrap.innerHTML =
+        '<div class="hx-osi-head"><span>CHECKED CUBICAL NODE · ' + escHtml(title) + '</span>' +
+          '<button type="button" class="hx-osi-x">×</button></div>' +
+        '<div class="hx-osi-body"><p style="margin:0;white-space:pre-wrap">' + escHtml(body) + '</p></div>';
+      wrap.querySelector('.hx-osi-x').addEventListener('click', function () {
+        wrap.remove(); osMutationCount = Math.max(0, osMutationCount - 1); updateResetUiBtn();
+      });
+      insertIntoMain(wrap);
+      if (typeof window.renderMathInElement === 'function') {
+        try { window.renderMathInElement(wrap, { delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }], throwOnError: false }); } catch (_) {}
+      }
+      wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      osMutationCount++;
+      log.push('eff-mount-note(' + title + ')');
+    } else if (head === 'eff-mount-inet') {
+      var t2 = decodeWordList(ast[1]);
+      var np = decodeWord(ast[2]);
+      var wrap2 = document.createElement('section');
+      wrap2.className = 'hx-os-injected lab';
+      var srcdoc = buildInetLabHtml(t2, np).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      wrap2.innerHTML =
+        '<div class="hx-osi-head"><span>CHECKED CUBICAL NET · ' + escHtml(t2) + '</span>' +
+          '<button type="button" class="hx-osi-x">×</button></div>' +
+        '<iframe class="hx-osi-frame" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="' + srcdoc + '"></iframe>';
+      wrap2.querySelector('.hx-osi-x').addEventListener('click', function () {
+        wrap2.remove(); osMutationCount = Math.max(0, osMutationCount - 1); updateResetUiBtn();
+      });
+      insertIntoMain(wrap2);
+      wrap2.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      osMutationCount++;
+      log.push('eff-mount-inet(' + t2 + ', ' + np + ')');
+    } else if (head === 'eff-mount-app') {
+      var appTitle = decodeWordList(ast[1]);
+      var appHtml = decodeWordList(ast[2]);
+      var wrap3 = document.createElement('section');
+      wrap3.className = 'hx-os-injected lab';
+      var appDoc = appHtml.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      wrap3.innerHTML =
+        '<div class="hx-osi-head"><span>CHECKED CUBICAL APP · ' + escHtml(appTitle) + '</span>' +
+          '<button type="button" class="hx-osi-x">×</button></div>' +
+        '<iframe class="hx-osi-frame" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="' + appDoc + '"></iframe>';
+      wrap3.querySelector('.hx-osi-x').addEventListener('click', function () {
+        wrap3.remove(); osMutationCount = Math.max(0, osMutationCount - 1); updateResetUiBtn();
+      });
+      insertIntoMain(wrap3);
+      wrap3.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      osMutationCount++;
+      log.push('eff-mount-app(' + appTitle + ')');
+    } else if (head === 'eff-mount-ui') {
+      var uiTitle = decodeWordList(ast[1]);
+      var wrap4 = document.createElement('section');
+      wrap4.className = 'hx-os-injected';
+      var hd4 = document.createElement('div');
+      hd4.className = 'hx-osi-head';
+      hd4.innerHTML = '<span>CHECKED TYPED UITREE · ' + escHtml(uiTitle) + '</span><button type="button" class="hx-osi-x">×</button>';
+      var bd4 = document.createElement('div');
+      bd4.className = 'hx-osi-body';
+      bd4.appendChild(projectUiTree(ast[2], log));
+      hd4.querySelector('.hx-osi-x').addEventListener('click', function () {
+        wrap4.remove(); osMutationCount = Math.max(0, osMutationCount - 1); updateResetUiBtn();
+      });
+      wrap4.appendChild(hd4); wrap4.appendChild(bd4);
+      insertIntoMain(wrap4);
+      wrap4.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      osMutationCount++;
+      log.push('eff-mount-ui(' + uiTitle + ')');
+    } else if (head === 'eff-daw') {
+      if (window.HX_DAW && window.HX_DAW.applyEffect) {
+        window.HX_DAW.applyEffect(ast[1], log);
+      } else {
+        log.push('eff-daw(open /daw to project)');
+      }
+    } else if (head === 'eff-scroll') {
+      var q = decodeWordList(ast[1]).toLowerCase();
+      var targets = document.querySelectorAll('main h1, main h2, main h3, main .thm-box, main .chapter, main section');
+      for (var i = 0; i < targets.length; i++) {
+        if ((targets[i].textContent || '').toLowerCase().indexOf(q) !== -1) {
+          targets[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+          targets[i].classList.add('hx-os-spotlight');
+          setTimeout((function (el) { return function () { el.classList.remove('hx-os-spotlight'); }; })(targets[i]), 2200);
+          log.push('eff-scroll(' + q + ')');
+          break;
+        }
+      }
+    } else if (head === 'eff-nav') {
+      var rt = decodeWordList(ast[1]).trim();
+      if (/^\/[a-zA-Z0-9_\/-]*$/.test(rt)) {
+        log.push('eff-nav(' + rt + ')');
+        setTimeout(function () { window.location.href = rt; }, 700);
+      }
+    } else if (head === 'eff-reset') {
+      resetAllOsMutations();
+      log.push('eff-reset');
+    }
+    updateResetUiBtn();
+  }
+
+  async function executeHypercubicalOsBlock(userCode, statusEl, retryDepth) {
+    var depth = retryDepth || 0;
+    var fullSrc = OS_EFFECT_PRELUDE + '\n\n' + userCode.trim() + '\n\n#show os-main\n';
+    var shaBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(userCode.trim()));
+    var sha = toHex(shaBuf).slice(0, 12);
+    statusEl.textContent = 'checking .hypercubical OS program in /cubical.wasm…';
+
+    if (!window.hxView || !window.hxView.evalCubical) {
+      statusEl.textContent = 'cubical.wasm unavailable';
+      return;
+    }
+    try {
+      var r = await window.hxView.evalCubical(fullSrc);
+      if (!r.ok) {
+        statusEl.classList.add('err');
+        if (depth < 1) {
+          statusEl.textContent = '✗ /cubical.wasm rejected OS program → auto-fixing in Supergenius (1/1)…';
+          askOracle(
+            '[/cubical.wasm kernel diagnostic for hypercubical-os]\n' + (r.output || 'type error') +
+            '\nFix the type/syntax error and emit a corrected ```hypercubical-os``` block defining `os-main : OsEffect`.',
+            { isAutoFix: true, retryDepth: depth + 1 }
+          );
+          return;
+        }
+        statusEl.textContent = '✗ REFUSED BY /cubical.wasm (' + r.ms + 'ms): ' + (r.output || 'type error');
+        return;
+      }
+      var ast = parseCubicalNormalForm(r.output);
+      var log = [];
+      projectCheckedEffect(ast, log);
+      statusEl.textContent = '✓ CHECKED IN /cubical.wasm · sha256:' + sha + ' · ' + r.steps + ' steps · ' + r.ms + 'ms → ' + (log.join(' · ') || 'normalized');
+      // Persist checked OS upgrade in user's Personal KG!
+      addHighlight('[OS upgrade sha256:' + sha + '] ' + (log.join(' · ') || 'os-main'), userCode.trim(), '');
+    } catch (err) {
+      statusEl.classList.add('err');
+      statusEl.textContent = '✗ WASM error: ' + String(err.message || err);
+    }
+  }
+
+  // Write module into shared Sovereign hx-cas-v1 IndexedDB (shared live with /ide!)
+  // then verify in real /cubical.wasm — auto-looping diagnostics back to Supergenius on error!
+  async function executeHypercubicalPutBlock(modPath, code, statusEl, cardEl, retryDepth) {
+    var depth = retryDepth || 0;
+    var cleanPath = String(modPath || '').trim().replace(/^\/+/, '');
+    if (!cleanPath) return;
+    if (!window.hxView || !window.hxView.casPut || !window.hxView.verifyModule) {
+      statusEl.classList.add('err');
+      statusEl.textContent = 'hx-cas-v1 / cubical.wasm unavailable';
+      return;
+    }
+    statusEl.textContent = 'writing ' + cleanPath + ' to hx-cas-v1 & elaborating in /cubical.wasm…';
+    try {
+      var rec = await window.hxView.casPut(cleanPath, code);
+      var shaShort = (rec && rec.sha256 ? rec.sha256 : '').slice(0, 12);
+      var r = await window.hxView.verifyModule(cleanPath, function (p) {
+        statusEl.textContent = p;
+      });
+      if (!r || !r.ok) {
+        statusEl.classList.add('err');
+        var diag = (r && r.output) ? r.output.slice(0, 900) : 'type/syntax check failed';
+        if (depth < 2) {
+          statusEl.textContent = '✗ /cubical.wasm rejected ' + cleanPath + ' → auto-fixing (' + (depth + 1) + '/2)…';
+          askOracle(
+            '[/cubical.wasm kernel diagnostic for ' + cleanPath + ']\n' + diag +
+            '\nFix the type/syntax error and emit a corrected ```hypercubical-put path="' + cleanPath + '"``` block (zero postulates, valid .hypercubical).',
+            { isAutoFix: true, retryDepth: depth + 1 }
+          );
+          return;
+        }
+        statusEl.textContent = '✗ /cubical.wasm rejected ' + cleanPath + ' (' + (r ? r.ms : 0) + 'ms): ' + diag;
+        return;
+      }
+
+      statusEl.classList.remove('err');
+      statusEl.textContent =
+        '✓ PUT & CHECKED IN /cubical.wasm · sha256:' + (r.sha256 || shaShort) +
+        ' · ' + r.deps + ' deps · ' + r.steps + ' steps · ' + r.ms + 'ms';
+
+      notifyCasSync('cas-put', cleanPath);
+      recordVerifiedModule(cleanPath);
+      addHighlight('[hx-cas-v1 PUT sha256:' + (r.sha256 || shaShort) + '] ' + cleanPath, code.slice(0, 400), '');
+
+      var actBar = cardEl && cardEl.querySelector('.hx-put-actions');
+      var logEl = cardEl && cardEl.querySelector('.hx-put-log');
+      if (actBar) {
+        actBar.style.display = 'flex';
+        var bInsp = actBar.querySelector('[data-put-act="inspect"]');
+        var bTamp = actBar.querySelector('[data-put-act="tamper"]');
+        var bRew = actBar.querySelector('[data-put-act="rewind"]');
+        if (bInsp) bInsp.onclick = function () {
+          if (window.hxView.set) window.hxView.set({ split: true });
+          window.hxView.inspect(cleanPath, null, null);
+        };
+        if (bTamp) bTamp.onclick = function () {
+          if (!logEl) return;
+          logEl.className = 'hx-put-log show';
+          logEl.textContent = 'mutating 1 bit in ' + cleanPath + ' & checking in isolated /cubical.wasm…';
+          window.hxView.tamperModule(cleanPath).then(function (tr) {
+            logEl.textContent =
+              (tr.rejected ? '✓ 1-BIT TAMPER REJECTED (' : '⚠ UNEXPECTED ACCEPT (') + tr.ms + 'ms)\n' +
+              '  L' + tr.lineNo + ' − ' + tr.before + '\n' +
+              '  L' + tr.lineNo + ' + ' + tr.after + '\n' +
+              (tr.output || '');
+          }).catch(function (e) { logEl.textContent = 'tamper error: ' + String(e.message || e); });
+        };
+        if (bRew) bRew.onclick = function () {
+          window.hxView.casDelete(cleanPath).then(function () {
+            statusEl.textContent = '↺ rewound ' + cleanPath + ' (removed from local hx-cas-v1 overlay)';
+            actBar.style.display = 'none';
+            if (logEl) logEl.className = 'hx-put-log';
+            refreshKGView();
+          });
+        };
+      }
+      refreshKGView();
+    } catch (err) {
+      statusEl.classList.add('err');
+      statusEl.textContent = '✗ kernel PUT error: ' + String(err.message || err);
+    }
+  }
+
+  // ==================== 5. UNIFIED FLOATING OS WINDOW (DRAGGABLE + RESIZABLE) ====================
+  var oracleMessages = [];
+  var oracleSessionId = 'ses_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  var pendingQuote = '';
+  var pendingSection = '';
+
+  function renderRichOracleHTML(md) {
+    // 1. Extract ```hypercubical-put path="..." ... ``` blocks for Sovereign hx-cas-v1 PUT + /cubical.wasm verify
+    var putBlocks = [];
+    var text = String(md || '').replace(/```hypercubical-put\s+path=["']([^"']+)["'][^\n]*\n([\s\S]*?)```/g, function (_, p, code) {
+      var idx = putBlocks.length;
+      putBlocks.push({ path: p.trim(), code: code.trim() });
+      return '@@HXPUT_' + idx + '@@';
+    });
+
+    // 2. Extract ```hypercubical-os ... ``` blocks for REAL /cubical.wasm checking & last-layer projection
+    var cubOsBlocks = [];
+    text = text.replace(/```hypercubical-os\s*\n([\s\S]*?)```/g, function (_, code) {
+      var idx = cubOsBlocks.length;
+      cubOsBlocks.push(code.trim());
+      return '@@HXCUBOS_' + idx + '@@';
+    });
+
+    // 3. Also keep ```hx-lab ... ``` if emitted for general standalone visualizations
+    var blocks = [];
+    text = text.replace(/```hx-lab\s*\n([\s\S]*?)```/g, function (_, code) {
+      var idx = blocks.length;
+      blocks.push(code.trim());
+      return '@@HXLAB_' + idx + '@@';
+    });
+
+    // 4. Safe Markdown -> HTML
+    text = escHtml(text.trim());
+    text = text.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, function (_, lang, body) {
+      return '<pre class="or-pre"><code>' + body + '</code></pre>';
+    });
+    text = text.replace(/`([^`\n]+)`/g, function (_, c) {
+      return '<code class="or-code" data-or-sym="' + c + '">' + c + '</code>';
+    });
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\n\n+/g, '</p><p>');
+    text = '<p>' + text.replace(/\n/g, '<br>') + '</p>';
+
+    putBlocks.forEach(function (item, idx) {
+      var card =
+        '<div class="hx-put-box" data-put-idx="' + idx + '">' +
+          '<div class="hx-put-head"><span>' + escHtml(item.path) + '</span><span class="hx-put-tag">hx-cas-v1 · kernel put</span></div>' +
+          '<div class="hx-os-pill" data-put-status="' + idx + '">writing to hx-cas-v1 &amp; checking in /cubical.wasm…</div>' +
+          '<div class="hx-put-actions" style="display:none">' +
+            '<button type="button" class="hx-put-btn" data-put-act="inspect">inspect</button>' +
+            '<button type="button" class="hx-put-btn" data-put-act="tamper">tamper 1 bit</button>' +
+            '<a class="hx-put-btn" href="/ide" target="_blank" rel="noopener">open /ide →</a>' +
+            '<button type="button" class="hx-put-btn danger" data-put-act="rewind">rewind ×</button>' +
+          '</div>' +
+          '<div class="hx-put-log"></div>' +
+          '<details class="hx-cubos-src"><summary>view .hypercubical source (' + item.code.split('\n').length + ' lines)</summary><pre class="or-pre"><code>' + escHtml(item.code) + '</code></pre></details>' +
+        '</div>';
+      text = text.replace('@@HXPUT_' + idx + '@@', card);
+    });
+
+    cubOsBlocks.forEach(function (code, idx) {
+      var pill =
+        '<div class="hx-cubos-box" data-cubos-idx="' + idx + '">' +
+          '<div class="hx-os-pill" data-cubos-status="' + idx + '">booting /cubical.wasm to check .hypercubical OS effect…</div>' +
+          '<details class="hx-cubos-src"><summary>view checked .hypercubical source</summary><pre class="or-pre"><code>' + escHtml(code) + '</code></pre></details>' +
+        '</div>';
+      text = text.replace('@@HXCUBOS_' + idx + '@@', pill);
+    });
+
+    blocks.forEach(function (code, idx) {
+      var srcdoc = code.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      var labHtml =
+        '<div class="hx-ondemand-lab">' +
+          '<div class="hx-odl-head"><span>INTERACTIVE EXPERIENCE · SANDBOXED HTML5</span>' +
+            '<button type="button" class="hx-odl-pop" data-lab-idx="' + idx + '">expand</button></div>' +
+          '<iframe class="hx-odl-frame" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="' + srcdoc + '"></iframe>' +
+        '</div>';
+      text = text.replace('@@HXLAB_' + idx + '@@', labHtml);
+    });
+
+    return { html: text, cubOsBlocks: cubOsBlocks, putBlocks: putBlocks };
+  }
+
+  var GEOM_KEY = 'hxWinGeom_v1';
+
+  function applySavedGeom(d) {
+    try {
+      var g = JSON.parse(localStorage.getItem(GEOM_KEY) || 'null');
+      if (!g) return;
+      if (g.w) d.style.width = Math.min(window.innerWidth - 20, Math.max(340, g.w)) + 'px';
+      if (g.h) d.style.height = Math.min(window.innerHeight - 64, Math.max(340, g.h)) + 'px';
+      if (typeof g.left === 'number' && typeof g.top === 'number') {
+        var maxL = Math.max(8, window.innerWidth - (g.w || 480) - 8);
+        var maxT = Math.max(52, window.innerHeight - (g.h || 520) - 8);
+        d.style.left = Math.min(maxL, Math.max(8, g.left)) + 'px';
+        d.style.top = Math.min(maxT, Math.max(52, g.top)) + 'px';
+        d.style.right = 'auto';
+        d.style.bottom = 'auto';
+      }
+    } catch (_) {}
+  }
+
+  function saveGeom(d) {
+    var r = d.getBoundingClientRect();
+    try { localStorage.setItem(GEOM_KEY, JSON.stringify({ left: Math.round(r.left), top: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) })); } catch (_) {}
+  }
+
+  function wireWindowDragAndResize(d) {
+    var head = d.querySelector('.hx-hub-head');
+    var resizer = d.querySelector('.hx-win-resize');
+    if (head) {
+      head.addEventListener('pointerdown', function (e) {
+        if (e.target.closest('button')) return;
+        e.preventDefault();
+        var r = d.getBoundingClientRect();
+        var sx = e.clientX, sy = e.clientY, sl = r.left, st = r.top;
+        d.style.left = sl + 'px';
+        d.style.top = st + 'px';
+        d.style.right = 'auto';
+        d.style.bottom = 'auto';
+        d.style.width = r.width + 'px';
+        d.style.height = r.height + 'px';
+        d.classList.add('dragging');
+        function onMove(ev) {
+          var nl = Math.min(window.innerWidth - 120, Math.max(8, sl + (ev.clientX - sx)));
+          var nt = Math.min(window.innerHeight - 80, Math.max(50, st + (ev.clientY - sy)));
+          d.style.left = nl + 'px';
+          d.style.top = nt + 'px';
+        }
+        function onUp() {
+          d.classList.remove('dragging');
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+          saveGeom(d);
+        }
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+      head.addEventListener('dblclick', function (e) {
+        if (e.target.closest('button')) return;
+        d.style.left = ''; d.style.top = ''; d.style.right = ''; d.style.bottom = ''; d.style.width = ''; d.style.height = '';
+        try { localStorage.removeItem(GEOM_KEY); } catch (_) {}
+      });
+    }
+    if (resizer) {
+      resizer.addEventListener('pointerdown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var r = d.getBoundingClientRect();
+        var sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height;
+        d.style.left = r.left + 'px';
+        d.style.top = r.top + 'px';
+        d.style.right = 'auto';
+        d.style.bottom = 'auto';
+        d.classList.add('dragging');
+        function onMove(ev) {
+          var nw = Math.min(window.innerWidth - r.left - 8, Math.max(340, sw + (ev.clientX - sx)));
+          var nh = Math.min(window.innerHeight - r.top - 8, Math.max(340, sh + (ev.clientY - sy)));
+          d.style.width = nw + 'px';
+          d.style.height = nh + 'px';
+        }
+        function onUp() {
+          d.classList.remove('dragging');
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+          saveGeom(d);
+        }
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+    }
+  }
+
+  function ensureHubDrawer() {
+    var d = document.getElementById('hx-hub-drawer');
+    if (d) return d;
+    d = document.createElement('aside');
+    d.id = 'hx-hub-drawer';
+    d.setAttribute('aria-label', 'Hyperactivity Oracle, Forum & Personal KG');
+    d.innerHTML =
+      '<div class="hx-hub-head" title="Drag to move · Double-click to snap back">' +
+        '<div class="hx-hub-tabs">' +
+          '<button type="button" class="hx-htab on" data-htab="oracle"><span class="hx-pulse-orb"></span>Supergenius</button>' +
+          '<button type="button" class="hx-htab" data-htab="forum">Questions</button>' +
+          '<button type="button" class="hx-htab" data-htab="kg">My KG</button>' +
+        '</div>' +
+        '<div class="hx-hub-ctrls">' +
+          '<button type="button" class="hx-os-reset" id="hx-os-reset" style="display:none" title="Revert all live UI edits">reset UI</button>' +
+          '<button type="button" class="hx-hub-x" id="hx-hub-close" title="Close (Esc)">×</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="hx-hub-pane on" id="hx-pane-oracle">' +
+        '<div class="hx-or-bar" id="hx-or-budget">connecting…</div>' +
+        '<div class="hx-or-ctx" id="hx-or-ctx"></div>' +
+        '<div class="hx-or-msgs" id="hx-or-msgs">' +
+          '<div class="hx-or-welcome">' +
+            '<div class="hx-or-wtitle">Supergenius</div>' +
+            'Grounded in the live content-addressed store (all 358+ checked modules &amp; 16,946+ definitions). Highlight any passage to interrogate it, ask anything from first principles, or demand a live interactive simulation.' +
+          '</div>' +
+        '</div>' +
+        '<form class="hx-or-form" id="hx-or-form">' +
+          '<div class="hx-composer">' +
+            '<textarea id="hx-or-input" rows="1" placeholder="Ask Supergenius anything… (⌘↵)"></textarea>' +
+            '<div class="hx-composer-foot">' +
+              '<button type="button" class="hx-ghost-btn" id="hx-or-postq" title="Post as signed public question for root@hyperactivity.ai">→ public forum</button>' +
+              '<button type="submit" class="hx-send-pill" id="hx-or-send">send ✦</button>' +
+            '</div>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+      '<div class="hx-hub-pane" id="hx-pane-forum">' +
+        '<div class="hx-fm-intro">Signed <b>Question Objects</b> anchored to <code>' + escHtml(window.location.pathname || '/') + '</code>. Answered forum-style by <b>root@hyperactivity.ai ✓</b> and peers.</div>' +
+        '<div class="hx-or-ctx" id="hx-fm-ctx"></div>' +
+        '<form class="hx-fm-form" id="hx-fm-form">' +
+          '<textarea id="hx-fm-input" rows="2" placeholder="Pose a cryptographically signed question on this node…"></textarea>' +
+          '<div class="hx-or-actions">' +
+            '<span class="hx-fm-id" id="hx-fm-id">signing key ready</span>' +
+            '<button type="submit" class="hx-wasm-btn primary">sign &amp; post question ?</button>' +
+          '</div>' +
+        '</form>' +
+        '<div class="hx-fm-list" id="hx-fm-list">loading questions…</div>' +
+      '</div>' +
+      '<div class="hx-hub-pane" id="hx-pane-kg">' +
+        '<div id="hx-kg-body"></div>' +
+      '</div>' +
+      '<div class="hx-win-resize" title="Drag to resize"></div>';
+    document.body.appendChild(d);
+    applySavedGeom(d);
+    wireWindowDragAndResize(d);
+    d.querySelector('#hx-os-reset').addEventListener('click', resetAllOsMutations);
+
+    d.querySelector('#hx-hub-close').addEventListener('click', closeHub);
+    d.querySelectorAll('.hx-htab').forEach(function (t) {
+      t.addEventListener('click', function () { switchHubTab(t.getAttribute('data-htab')); });
+    });
+
+    // Oracle submit
+    var orForm = d.querySelector('#hx-or-form');
+    var orInp = d.querySelector('#hx-or-input');
+    orInp.addEventListener('keydown', function (e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); orForm.requestSubmit(); }
+    });
+    orForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var q = orInp.value.trim();
+      if (!q) return;
+      orInp.value = '';
+      askOracle(q);
+    });
+    d.querySelector('#hx-or-postq').addEventListener('click', function () {
+      var q = orInp.value.trim();
+      switchHubTab('forum');
+      if (q) d.querySelector('#hx-fm-input').value = q;
+    });
+
+    // Forum submit
+    var fmForm = d.querySelector('#hx-fm-form');
+    fmForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var inp = d.querySelector('#hx-fm-input');
+      var q = inp.value.trim();
+      if (!q) return;
+      inp.value = '';
+      var payload = {
+        kind: 'question',
+        route: window.location.pathname || '/',
+        sectionId: pendingSection || '',
+        quote: pendingQuote || '',
+        body: q,
+        ts: Date.now(),
+      };
+      var auth = await signPayload(payload);
+      await fetch('/api/forum/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: payload, auth: auth }),
+      });
+      pendingQuote = '';
+      pendingSection = '';
+      renderContextBanners();
+      refreshForum();
+    });
+
+    return d;
+  }
+
+  function renderContextBanners() {
+    var d = document.getElementById('hx-hub-drawer');
+    if (!d) return;
+    var html = pendingQuote
+      ? '<div class="hx-ctx-quote"><span>anchored quote: “' + escHtml(pendingQuote.slice(0, 140)) + (pendingQuote.length > 140 ? '…' : '') + '”</span><button type="button" class="hx-ctx-clear">×</button></div>'
+      : '';
+    ['#hx-or-ctx', '#hx-fm-ctx'].forEach(function (sel) {
+      var el = d.querySelector(sel);
+      if (!el) return;
+      el.innerHTML = html;
+      var cb = el.querySelector('.hx-ctx-clear');
+      if (cb) cb.addEventListener('click', function () { pendingQuote = ''; pendingSection = ''; renderContextBanners(); });
+    });
+  }
+
+  function switchHubTab(tab) {
+    var d = ensureHubDrawer();
+    d.querySelectorAll('.hx-htab').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-htab') === tab); });
+    d.querySelectorAll('.hx-hub-pane').forEach(function (p) { p.classList.toggle('on', p.id === 'hx-pane-' + tab); });
+    if (tab === 'oracle') refreshOracleBudget();
+    if (tab === 'forum') refreshForum();
+    if (tab === 'kg') refreshKGView();
+  }
+
+  function openHub(tab, opts) {
+    var d = ensureHubDrawer();
+    if (opts && opts.quote) { pendingQuote = opts.quote; pendingSection = opts.sectionId || ''; }
+    renderContextBanners();
+    d.classList.add('open');
+    switchHubTab(tab || 'oracle');
+    if (tab === 'oracle') setTimeout(function () { d.querySelector('#hx-or-input').focus(); }, 30);
+    if (tab === 'forum') setTimeout(function () { d.querySelector('#hx-fm-input').focus(); }, 30);
+  }
+
+  function closeHub() {
+    var d = document.getElementById('hx-hub-drawer');
+    if (d) d.classList.remove('open');
+  }
+
+  function refreshOracleBudget() {
+    var el = document.getElementById('hx-or-budget');
+    if (!el) return;
+    if (byokVerified && byokKeyMem) {
+      el.innerHTML =
+        '<span><b style="color:#26d07c">BYOK · ' + escHtml(byokModel) + '</b> · browser-direct streaming SSE</span>' +
+        '<span><button type="button" class="hx-put-btn" id="hx-byok-cfg" style="padding:1px 6px">key ⚙</button></span>';
+      var b0 = el.querySelector('#hx-byok-cfg');
+      if (b0) b0.onclick = function () { switchHubTab('kg'); };
+      return;
+    }
+    fetch('/api/oracle/status').then(function (r) {
+      if (!r.ok) throw new Error('offline');
+      return r.json();
+    }).then(function (s) {
+      el.innerHTML =
+        '<span><b>' + escHtml(s.engine) + '</b> · bank <b>$' + Number(s.bankUsd || 0).toFixed(2) + '</b> · fair/15m <b>$' + Number(s.fair15mUsd || 0).toFixed(2) + '</b></span>' +
+        '<span>month <b>$' + Number(s.monthSpentUsd || 0).toFixed(2) + '/$' + Number(s.monthCapUsd || 3000).toFixed(0) + '</b></span>';
+    }).catch(function () {
+      el.innerHTML =
+        '<span><b>Supergenius</b> · paste a <code>gemini-4-neon</code> / <code>carbon</code> key</span>' +
+        '<span><button type="button" class="hx-put-btn" id="hx-byok-go" style="padding:1px 6px">Connect Key</button></span>';
+      var b1 = el.querySelector('#hx-byok-go');
+      if (b1) b1.onclick = function () { switchHubTab('kg'); };
+    });
+  }
+
+  async function streamByokGemini(question, onDelta) {
+    var contents = [];
+    oracleMessages.slice(-6).forEach(function (m) {
+      contents.push({ role: m.role === 'model' ? 'model' : 'user', parts: [{ text: m.text }] });
+    });
+    var ctxPrefix = '[Route: ' + (window.location.pathname || '/') + ']' +
+      (pendingQuote ? '\n[Selected quote: ' + pendingQuote + ']' : '') + '\n';
+    contents.push({ role: 'user', parts: [{ text: ctxPrefix + question }] });
+
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(byokModel) + ':streamGenerateContent?alt=sse';
+    var res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': byokKeyMem },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: buildByokSystemPrompt() }] },
+        contents: contents,
+      }),
+    });
+    if (!res.ok) {
+      var et = await res.text().catch(function () { return ''; });
+      throw new Error('Gemini ' + byokModel + ' HTTP ' + res.status + ': ' + et.slice(0, 180));
+    }
+    var full = '';
+    if (res.body && res.body.getReader) {
+      var reader = res.body.getReader(), dec = new TextDecoder(), buf = '';
+      while (true) {
+        var rd = await reader.read();
+        if (rd.done) break;
+        buf += dec.decode(rd.value, { stream: true });
+        var lines = buf.split('\n');
+        buf = lines.pop() || '';
+        for (var i = 0; i < lines.length; i++) {
+          var ln = lines[i].trim();
+          if (ln.indexOf('data:') === 0) {
+            var payload = ln.slice(5).trim();
+            if (!payload || payload === '[DONE]') continue;
+            try {
+              var obj = JSON.parse(payload);
+              var parts = obj.candidates && obj.candidates[0] && obj.candidates[0].content && obj.candidates[0].content.parts;
+              if (parts) {
+                parts.forEach(function (p) { if (p.text) { full += p.text; onDelta(full); } });
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    } else {
+      var raw = await res.json();
+      var ps = raw.candidates && raw.candidates[0] && raw.candidates[0].content && raw.candidates[0].content.parts;
+      if (ps) full = ps.map(function (p) { return p.text || ''; }).join('');
+      onDelta(full);
+    }
+    return { answer: full, meta: 'BYOK browser-direct · ' + byokModel + ' · SSE' };
+  }
+
+  async function askOracle(question, opts) {
+    opts = opts || {};
+    var isAutoFix = !!opts.isAutoFix;
+    var retryDepth = opts.retryDepth || 0;
+    var d = ensureHubDrawer();
+    var msgs = d.querySelector('#hx-or-msgs');
+    var sendBtn = d.querySelector('#hx-or-send');
+    var id = await ensureIdentity();
+
+    var userDiv = document.createElement('div');
+    userDiv.className = isAutoFix ? 'hx-or-msg autofix' : 'hx-or-msg user';
+    userDiv.innerHTML = isAutoFix
+      ? ('<b>↺ /cubical.wasm auto-fix (' + retryDepth + '/2)</b><br>' + escHtml(question.slice(0, 260)) + (question.length > 260 ? '…' : ''))
+      : ((pendingQuote ? '<div class="hx-or-qref">“' + escHtml(pendingQuote.slice(0, 140)) + '”</div>' : '') +
+         '<div>' + escHtml(question) + '</div>');
+    msgs.appendChild(userDiv);
+
+    var botDiv = document.createElement('div');
+    botDiv.className = 'hx-or-msg bot';
+    botDiv.innerHTML = '<div class="hx-or-thinking">' + (isAutoFix ? 'self-correcting from /cubical.wasm diagnostic…' : (byokVerified ? ('streaming ' + escHtml(byokModel) + ' browser-direct…') : 'consulting KV-cached store &amp; KG tools…')) + '</div>';
+    msgs.appendChild(botDiv);
+    msgs.scrollTop = msgs.scrollHeight;
+    sendBtn.disabled = true;
+
+    try {
+      var data;
+      if (byokVerified && byokKeyMem) {
+        data = await streamByokGemini(question, function (soFar) {
+          var liveR = renderRichOracleHTML(soFar);
+          botDiv.innerHTML = '<div class="hx-or-body">' + liveR.html + '</div><div class="hx-or-meta">streaming ' + escHtml(byokModel) + '…</div>';
+          msgs.scrollTop = msgs.scrollHeight;
+        });
+      } else {
+        var res = await fetch('/api/oracle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream, application/json' },
+          body: JSON.stringify({
+            question: question,
+            route: window.location.pathname || '/',
+            sectionId: isAutoFix ? '' : pendingSection,
+            quote: isAutoFix ? '' : pendingQuote,
+            did: id.did,
+            sessionId: oracleSessionId,
+            history: oracleMessages.slice(-6),
+            dawState: (window.HX_DAW && window.HX_DAW.getStateSummary) ? window.HX_DAW.getStateSummary() : '',
+          }),
+        });
+        var ct = (res.headers.get('content-type') || '').toLowerCase();
+        if (ct.indexOf('text/event-stream') !== -1 && res.body && res.body.getReader) {
+          var reader = res.body.getReader(), dec = new TextDecoder(), buf = '', acc = '', metaTxt = 'SSE stream';
+          while (true) {
+            var rd = await reader.read();
+            if (rd.done) break;
+            buf += dec.decode(rd.value, { stream: true });
+            var lines = buf.split('\n'); buf = lines.pop() || '';
+            for (var li = 0; li < lines.length; li++) {
+              var ln = lines[li].trim();
+              if (ln.indexOf('data:') === 0) {
+                var p = ln.slice(5).trim();
+                if (!p || p === '[DONE]') continue;
+                try {
+                  var ev = JSON.parse(p);
+                  if (ev.delta) { acc += ev.delta; var lr = renderRichOracleHTML(acc); botDiv.innerHTML = '<div class="hx-or-body">' + lr.html + '</div><div class="hx-or-meta">streaming…</div>'; msgs.scrollTop = msgs.scrollHeight; }
+                  if (ev.answer) acc = ev.answer;
+                  if (ev.meta) metaTxt = ev.meta;
+                } catch (_) {}
+              }
+            }
+          }
+          data = { answer: acc, meta: metaTxt };
+        } else {
+          data = await res.json();
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        }
+      }
+
+      oracleMessages.push({ role: 'user', text: question });
+      oracleMessages.push({ role: 'model', text: data.answer || '' });
+
+      var rendered = renderRichOracleHTML(data.answer || '');
+      botDiv.innerHTML =
+        '<div class="hx-or-body">' + rendered.html + '</div>' +
+        '<div class="hx-or-meta">' + escHtml(data.meta || '') + '</div>';
+
+      // 1. Write & verify every hypercubical-put module into shared hx-cas-v1 first
+      //    so any subsequent hypercubical-os block (e.g. eff-inspect) sees it immediately!
+      for (var pi = 0; pi < (rendered.putBlocks || []).length; pi++) {
+        var pb = rendered.putBlocks[pi];
+        var pCard = botDiv.querySelector('[data-put-idx="' + pi + '"]');
+        var pSt = botDiv.querySelector('[data-put-status="' + pi + '"]');
+        if (pSt) await executeHypercubicalPutBlock(pb.path, pb.code, pSt, pCard, retryDepth);
+      }
+
+      // 2. Execute every emitted .hypercubical OS block through REAL /cubical.wasm -> Last-Layer Projector!
+      for (var ci = 0; ci < (rendered.cubOsBlocks || []).length; ci++) {
+        var stEl = botDiv.querySelector('[data-cubos-status="' + ci + '"]');
+        if (stEl) await executeHypercubicalOsBlock(rendered.cubOsBlocks[ci], stEl, retryDepth);
+      }
+
+      // Wire clickable module/symbol codes inside Oracle answer straight into HX-LENS Source Drawer!
+      botDiv.querySelectorAll('code[data-or-sym]').forEach(function (c) {
+        var sym = c.getAttribute('data-or-sym');
+        if (sym && (sym.indexOf('.hypercubical') !== -1 || sym.indexOf('/') !== -1)) {
+          c.classList.add('hx-sym-link');
+          c.addEventListener('click', function () {
+            if (window.hxView && window.hxView.inspect) window.hxView.inspect(sym, null, null);
+          });
+        }
+      });
+
+      // Wire expand button on sandboxed hx-lab iframes
+      botDiv.querySelectorAll('.hx-odl-pop').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var fr = b.closest('.hx-ondemand-lab').querySelector('iframe');
+          fr.classList.toggle('tall');
+          b.textContent = fr.classList.contains('tall') ? 'compact' : 'expand';
+        });
+      });
+
+      if (typeof window.renderMathInElement === 'function') {
+        try {
+          window.renderMathInElement(botDiv, {
+            delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }],
+            throwOnError: false,
+          });
+        } catch (_) {}
+      }
+
+      if (!isAutoFix) {
+        pendingQuote = '';
+        pendingSection = '';
+        renderContextBanners();
+      }
+      refreshOracleBudget();
+    } catch (err) {
+      botDiv.innerHTML = '<div class="hx-or-err">Supergenius error: ' + escHtml(err.message || err) + '</div>';
+    } finally {
+      sendBtn.disabled = false;
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+  }
+
+  async function refreshForum() {
+    var d = ensureHubDrawer();
+    var id = await ensureIdentity();
+    var idEl = d.querySelector('#hx-fm-id');
+    if (idEl) {
+      idEl.innerHTML = id.isRootLocal
+        ? '<b style="color:#ff0a94">root@hyperactivity.ai ✓</b>'
+        : ('signing as <code>' + escHtml(id.handle || id.did) + '</code>');
+    }
+
+    var list = d.querySelector('#hx-fm-list');
+    try {
+      var res = await fetch('/api/forum/questions?route=' + encodeURIComponent(window.location.pathname || '/'));
+      var data = await res.json();
+      var qs = data.questions || [];
+      if (!qs.length) {
+        list.innerHTML = '<div class="hx-fm-empty">No signed questions on this page yet. Highlight any passage or ask above—every question is cryptographically signed by your key and answerable by <b>root@hyperactivity.ai</b>.</div>';
+        return;
+      }
+      list.innerHTML = qs.map(function (q) {
+        var ansHtml = (q.answers || []).map(function (a) {
+          var badge = a.isRoot ? '<span class="hx-root-badge">root@hyperactivity.ai ✓</span>' : ('<code>' + escHtml(a.handle || a.did) + '</code>');
+          return '<div class="hx-fm-ans' + (a.isRoot ? ' root' : '') + '">' +
+            '<div class="hx-fm-meta">' + badge + ' · sig:' + escHtml((a.sig || '').slice(0, 10)) + '</div>' +
+            '<div class="hx-fm-text">' + escHtml(a.body) + '</div></div>';
+        }).join('');
+        return '<div class="hx-fm-card" data-qid="' + escHtml(q.id) + '">' +
+          '<div class="hx-fm-meta"><code>' + escHtml(q.handle || q.did) + '</code> · sig:' + escHtml((q.sig || '').slice(0, 10)) + ' · ' + escHtml(q.route) + '</div>' +
+          (q.quote ? '<div class="hx-or-qref">“' + escHtml(q.quote.slice(0, 160)) + '”</div>' : '') +
+          '<div class="hx-fm-qbody">' + escHtml(q.body) + '</div>' +
+          ansHtml +
+          '<form class="hx-fm-reply"><input type="text" placeholder="Reply (signed with your key)…"><button type="submit">reply</button></form>' +
+        '</div>';
+      }).join('');
+
+      list.querySelectorAll('.hx-fm-reply').forEach(function (f) {
+        f.addEventListener('submit', async function (e) {
+          e.preventDefault();
+          var inp = f.querySelector('input');
+          var body = inp.value.trim();
+          if (!body) return;
+          var qid = f.closest('.hx-fm-card').getAttribute('data-qid');
+          var payload = { kind: 'answer', qid: qid, body: body, ts: Date.now() };
+          var auth = await signPayload(payload);
+          await fetch('/api/forum/answer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payload: payload, auth: auth }),
+          });
+          refreshForum();
+        });
+      });
+    } catch (err) {
+      list.innerHTML = '<div class="hx-fm-empty">Could not load forum: ' + escHtml(err.message) + '</div>';
+    }
+  }
+
+  async function refreshKGView() {
+    var d = ensureHubDrawer();
+    var body = d.querySelector('#hx-kg-body');
+    var id = await ensureIdentity();
+    var pkg = loadPKG();
+    var visitedList = Object.keys(pkg.visited || {});
+    var overlayMods = (window.hxView && window.hxView.casList) ? (await window.hxView.casList()) : [];
+    overlayMods.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+
+    var ovHtml = overlayMods.length
+      ? overlayMods.map(function (m) {
+          return '<div class="hx-kg-ov-item">' +
+            '<div><div class="hx-kg-ov-path">' + escHtml(m.path) + '</div>' +
+            '<div class="hx-kg-ov-sha">sha256:' + escHtml((m.sha256 || '').slice(0, 12)) + ' · ' + (m.text || '').split('\n').length + ' lines</div></div>' +
+            '<div class="hx-kg-ov-btns">' +
+              '<button type="button" class="hx-put-btn" data-ov-insp="' + escHtml(m.path) + '">inspect</button>' +
+              '<a class="hx-put-btn" href="/ide" target="_blank" rel="noopener">/ide</a>' +
+              '<button type="button" class="hx-put-btn danger" data-ov-del="' + escHtml(m.path) + '">×</button>' +
+            '</div>' +
+          '</div>';
+        }).join('')
+      : '<div class="hx-fm-empty">No local overlay modules yet. Ask Supergenius to prove or write a new <code>.hypercubical</code> module—it lands here &amp; in <code>/ide</code> live.</div>';
+
+    var hlHtml = pkg.highlights.length
+      ? pkg.highlights.map(function (h) {
+          return '<div class="hx-kg-item" data-hl="' + escHtml(h.id) + '">' +
+            '<div class="hx-kg-imeta"><a href="' + escHtml(h.route) + (h.sectionId ? '#' + escHtml(h.sectionId) : '') + '">' + escHtml(h.route) + (h.sectionId ? '#' + escHtml(h.sectionId) : '') + '</a>' +
+              '<button type="button" class="hx-kg-del" data-del="' + escHtml(h.id) + '">×</button></div>' +
+            '<div class="hx-kg-quote">“' + escHtml(h.quote) + '”</div>' +
+            '<textarea class="hx-kg-note" data-note="' + escHtml(h.id) + '" rows="2" placeholder="Add personal note…">' + escHtml(h.note || '') + '</textarea>' +
+          '</div>';
+        }).join('')
+      : '<div class="hx-fm-empty">Select any text on any page to highlight, attach a note, ask Supergenius, or post a signed question.</div>';
+
+    body.innerHTML =
+      '<div class="hx-kg-card">' +
+        '<div class="hx-kg-h">00 · BYOK Gemini (Browser-Direct · Neon / Carbon Only)</div>' +
+        '<div style="font-size:11px;opacity:.78;margin-bottom:6px">Key stays strictly in your browser (never sent to hyperactivity.ai). Gated to <code>gemini-4-neon</code> &amp; <code>gemini-4-carbon</code> only.</div>' +
+        '<div class="hx-kg-row">' +
+          '<input id="hx-byok-key" type="password" autocomplete="off" placeholder="AIza… Gemini API key" value="' + escHtml(byokKeyMem) + '">' +
+          '<select id="hx-byok-model" style="background:inherit;color:inherit;border:1px solid currentColor;padding:3px 6px;font:11px ui-monospace,monospace">' +
+            '<option value="gemini-4-neon"' + (byokModel === 'gemini-4-neon' ? ' selected' : '') + '>gemini-4-neon</option>' +
+            '<option value="gemini-4-carbon"' + (byokModel === 'gemini-4-carbon' ? ' selected' : '') + '>gemini-4-carbon</option>' +
+          '</select>' +
+          '<button type="button" class="hx-wasm-btn" id="hx-byok-verify">verify &amp; connect</button>' +
+          (byokVerified ? '<button type="button" class="hx-put-btn danger" id="hx-byok-clear">clear</button>' : '') +
+        '</div>' +
+        '<label class="hx-root-toggle" style="margin-top:6px"><input type="checkbox" id="hx-byok-sess"> remember for this browser tab session only</label>' +
+        '<div id="hx-byok-stat" style="font:11px ui-monospace,monospace;margin-top:4px;color:' + (byokVerified ? '#26d07c' : 'inherit') + '">' + escHtml(byokStatusMsg || 'Not connected (uses server oracle if online)') + '</div>' +
+      '</div>' +
+      '<div class="hx-kg-card">' +
+        '<div class="hx-kg-h">01 · Sovereign Identity (WebCrypto ECDSA P-256)</div>' +
+        '<div class="hx-kg-did"><code>' + escHtml(id.did) + '</code>' + (id.isRootLocal ? ' <span class="hx-root-badge">root@hyperactivity.ai ✓</span>' : '') + '</div>' +
+        '<div class="hx-kg-row">' +
+          '<input id="hx-id-handle" type="text" placeholder="Display handle (optional)" value="' + escHtml(id.handle || '') + '">' +
+          '<button type="button" class="hx-wasm-btn" id="hx-id-save">save</button>' +
+          '<button type="button" class="hx-wasm-btn" id="hx-id-export">export key</button>' +
+        '</div>' +
+        '<label class="hx-root-toggle"><input type="checkbox" id="hx-root-chk"' + (id.isRootLocal ? ' checked' : '') + '> preview local <b>root@hyperactivity.ai</b> signing mode</label>' +
+      '</div>' +
+      '<div class="hx-kg-card">' +
+        '<div class="hx-kg-h">02 · Sovereign hx-cas-v1 Overlay (root_you · ' + overlayMods.length + ')</div>' +
+        ovHtml +
+        (overlayMods.length ? '<div class="hx-kg-row" style="margin-top:8px"><button type="button" class="hx-wasm-btn" id="hx-ov-rewind-all">rewind all → root_public</button></div>' : '') +
+      '</div>' +
+      '<div class="hx-kg-card">' +
+        '<div class="hx-kg-h">03 · Learning Engagement Graph</div>' +
+        '<div class="hx-kg-stats">' +
+          '<span><b>' + visitedList.length + '</b> nodes visited</span>' +
+          '<span><b>' + pkg.highlights.length + '</b> highlights &amp; notes</span>' +
+          '<span><b>' + pkg.verified.length + '</b> modules verified in wasm</span>' +
+        '</div>' +
+        '<div class="hx-kg-row" style="margin-top:8px">' +
+          '<button type="button" class="hx-wasm-btn" id="hx-pkg-export">export personal KG (JSON)</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="hx-kg-h" style="margin:14px 0 8px">04 · Highlights &amp; Margin Notes (' + pkg.highlights.length + ')</div>' +
+      hlHtml;
+
+    var byokVerifyBtn = body.querySelector('#hx-byok-verify');
+    if (byokVerifyBtn) {
+      byokVerifyBtn.addEventListener('click', async function () {
+        var st = body.querySelector('#hx-byok-stat');
+        st.style.color = ''; st.textContent = 'verifying model access (gemini-4-neon / carbon only)…';
+        try {
+          var res = await verifyAndEnableByok(
+            body.querySelector('#hx-byok-key').value,
+            body.querySelector('#hx-byok-model').value,
+            !!body.querySelector('#hx-byok-sess').checked
+          );
+          st.style.color = '#26d07c'; st.textContent = '✓ Connected browser-direct: ' + res.model;
+          refreshKGView();
+        } catch (err) {
+          st.style.color = '#ff4d6d'; st.textContent = '✗ ' + String(err.message || err);
+        }
+      });
+    }
+    var byokClr = body.querySelector('#hx-byok-clear');
+    if (byokClr) byokClr.addEventListener('click', function () { clearByokKey(); refreshKGView(); });
+    body.querySelector('#hx-id-save').addEventListener('click', function () {
+      updateIdentityMeta({ handle: body.querySelector('#hx-id-handle').value }).then(function () { refreshKGView(); });
+    });
+    body.querySelector('#hx-root-chk').addEventListener('change', function (e) {
+      updateIdentityMeta({ isRootLocal: !!e.target.checked }).then(function () { refreshKGView(); });
+    });
+    body.querySelector('#hx-id-export').addEventListener('click', function () {
+      var raw = localStorage.getItem(ID_KEY) || '{}';
+      if (navigator.clipboard) navigator.clipboard.writeText(raw).catch(function () {});
+      window.alert('Your sovereign keypair JWK has been copied to clipboard. Store it safely to sign from any device.');
+    });
+    body.querySelectorAll('[data-ov-insp]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (window.hxView && window.hxView.inspect) window.hxView.inspect(b.getAttribute('data-ov-insp'), null, null);
+      });
+    });
+    body.querySelectorAll('[data-ov-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (window.hxView && window.hxView.casDelete) {
+          var delP = b.getAttribute('data-ov-del');
+          window.hxView.casDelete(delP).then(function () { notifyCasSync('cas-del', delP); refreshKGView(); });
+        }
+      });
+    });
+    var rewAll = body.querySelector('#hx-ov-rewind-all');
+    if (rewAll) {
+      rewAll.addEventListener('click', function () {
+        Promise.all(overlayMods.map(function (m) { return window.hxView.casDelete(m.path); })).then(function () { refreshKGView(); });
+      });
+    }
+    body.querySelector('#hx-pkg-export').addEventListener('click', function () {
+      var blob = new Blob([JSON.stringify({ did: id.did, exportedAt: new Date().toISOString(), graph: pkg, overlay: overlayMods }, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'hyperactivity-personal-kg.json';
+      a.click();
+    });
+    body.querySelectorAll('[data-del]').forEach(function (b) {
+      b.addEventListener('click', function () { deleteHighlight(b.getAttribute('data-del')); refreshKGView(); });
+    });
+    body.querySelectorAll('[data-note]').forEach(function (ta) {
+      ta.addEventListener('change', function () { updateHighlightNote(ta.getAttribute('data-note'), ta.value); });
+    });
+  }
+
+  // ==================== 5. MOUNT NAV TRIGGERS & HOOK VERIFY TRACKING ====================
+  function mount() {
+    recordVisit();
+    applySavedHighlightsOnPage();
+    wireSelectionPopover();
+
+    // Wrap window.hxView.verifyModule to record engagement mastery automatically
+    if (window.hxView && typeof window.hxView.verifyModule === 'function') {
+      var origVerify = window.hxView.verifyModule;
+      window.hxView.verifyModule = function (modPath, onProg) {
+        return origVerify(modPath, onProg).then(function (r) {
+          if (r && r.ok) recordVerifiedModule(modPath);
+          return r;
+        });
+      };
+    }
+
+    var navLinks = document.querySelector('nav .links');
+    if (navLinks && !document.getElementById('hx-oracle-btn')) {
+      var orBtn = document.createElement('button');
+      orBtn.id = 'hx-oracle-btn';
+      orBtn.type = 'button';
+      orBtn.innerHTML = '<span class="hx-pulse-orb"></span>Supergenius';
+      orBtn.title = 'Ask Supergenius & Signed Forum (o)';
+      orBtn.addEventListener('click', function (e) { e.stopPropagation(); openHub('oracle'); });
+
+      var kgBtn = document.createElement('button');
+      kgBtn.id = 'hx-kg-btn';
+      kgBtn.type = 'button';
+      kgBtn.textContent = 'My KG';
+      kgBtn.title = 'Your Sovereign Identity, Highlights & Notes (k)';
+      kgBtn.addEventListener('click', function (e) { e.stopPropagation(); openHub('kg'); });
+
+      var anchor = navLinks.querySelector('#hx-cmd-trigger') || navLinks.querySelector('.tbtn');
+      if (anchor) {
+        navLinks.insertBefore(orBtn, anchor);
+        navLinks.insertBefore(kgBtn, anchor);
+      } else {
+        navLinks.appendChild(orBtn);
+        navLinks.appendChild(kgBtn);
+      }
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      var tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable)) return;
+      if (e.key === 'Escape') { closeHub(); return; }
+      var p = window.location.pathname || '';
+      if (p === '/daw' || p === '/sound') return; // preserve QWERTY piano keys on /daw
+      if (e.key === 'o' || e.key === 'O') { e.preventDefault(); openHub('oracle'); return; }
+      if (e.key === 'k' || e.key === 'K') { e.preventDefault(); openHub('kg'); return; }
+    });
+
+    window.hxKG = {
+      openOracle: function (q) { openHub('oracle'); if (q) askOracle(q); },
+      openForum: function () { openHub('forum'); },
+      openMyKG: function () { openHub('kg'); },
+      projectEffect: function (ast) { var log = []; projectCheckedEffect(ast, log); return log; },
+      parseCubical: parseCubicalNormalForm,
+      identity: ensureIdentity,
+      graph: loadPKG,
+    };
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
+  else mount();
+})();

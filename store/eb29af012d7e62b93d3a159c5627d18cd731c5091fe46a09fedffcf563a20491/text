@@ -1,0 +1,7 @@
+-- Overflow-safe 14-bit hash into 16384-slot OE hash table (all mul operands < 2^32!)
+hd-hash : Word → Word → Word
+hd-hash s0 s1 =
+  let a = %wxor (%wand s0 hd-m32) (%wshr s0 #32)
+      b = %wxor (%wand s1 hd-m32) (%wshr s1 #32)
+      h = %wadd (%wmul (%wand a #65535) #40503) (%wadd (%wmul (%wshr a #16) #65521) (%wmul (%wand b #65535) #2654435761))
+  in %wand (%wxor (%wshr h #3) (%wshr b #16)) #16383

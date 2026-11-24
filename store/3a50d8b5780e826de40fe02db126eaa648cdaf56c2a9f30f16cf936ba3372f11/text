@@ -1,0 +1,8 @@
+-- Layout of flat RAM arena `mem` (512 KB):
+--   [0 .. 131071]      : HT[16384] uint64_t (0=empty, else idx+1)
+--   [131072 .. 262143] : E[4096] x 4 uint64_t (32B each): [0]=sig0, [8]=sig1, [16]=meta(op|l<<8|r<<20|cost<<32), [24]=unused
+--   [262144 .. 262271] : State header ST[16] uint64_t:
+--       ST[0]=N_classes, ST[1]=N_laws, ST[2]=avg_idx+1, ST[3]=clb_idx+1, ST[4]=ilb_idx+1, ST[5]=cavg_idx+1, ST[6]=evals
+--   [262272 .. 266367] : Laws[256] x 2 uint64_t (16B each): [0]=lhs_meta, [8]=rhs_idx
+hd-ht-at : Word → Word → Word
+hd-ht-at mem slot = %wadd mem (%wshl slot #3)

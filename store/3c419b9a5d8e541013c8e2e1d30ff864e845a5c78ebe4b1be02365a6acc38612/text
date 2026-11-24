@@ -1,0 +1,18 @@
+-- Route dispatcher hyperfactored into bounded-depth sub-tables (each <= 11 branches) so cold checking stays O(1) in stack/memory
+s-answer-assets : List Word → Proc W (List Word) → Proc W (List Word)
+s-answer-assets p next =
+  if h-eq p "/healthz" then ret {lzero} {W} (s-response "text/plain; charset=utf-8" "ok") else
+  if h-eq p "/og.png" then bind (h-document "docs/og.png.hex") (λ t → ret (s-response "image/png" (h-unhex (s-or nil t)))) else
+  if h-eq p "/favicon.svg" then bind (h-document "docs/favicon.svg") (λ t → ret (s-response "image/svg+xml" (s-or nil t))) else
+  if h-eq p "/favicon.ico" then bind (h-document "docs/favicon.ico.hex") (λ t → ret (s-response "image/x-icon" (h-unhex (s-or nil t)))) else
+  if h-eq p "/favicon-32.png" then bind (h-document "docs/favicon-32.png.hex") (λ t → ret (s-response "image/png" (h-unhex (s-or nil t)))) else
+  if h-eq p "/apple-touch-icon.png" then bind (h-document "docs/apple-touch-icon.png.hex") (λ t → ret (s-response "image/png" (h-unhex (s-or nil t)))) else
+  if h-eq p "/robots.txt" then ret {lzero} {W} (s-response "text/plain; charset=utf-8" s-robots-txt) else
+  if h-eq p "/sitemap.xml" then ret {lzero} {W} (s-response "application/xml; charset=utf-8" s-sitemap-xml) else
+  if h-eq p "/privacy" then ret {lzero} {W} (s-response s-html s-privacy-page) else
+  if h-eq p "/hx/x.js" then um-script else
+  if h-eq p "/hx/math.js" then bind (h-document "docs/math.js") (λ t → ret (s-response "application/javascript; charset=utf-8" (s-or nil t))) else
+  if h-eq p "/hx/lens.css" then bind (h-document "docs/hx-lens.css") (λ t → ret (s-response "text/css; charset=utf-8" (s-or nil t))) else
+  if h-eq p "/hx/lens.js" then bind (h-document "docs/hx-lens.js") (λ t → ret (s-response "application/javascript; charset=utf-8" (s-or nil t))) else
+  if h-eq p "/hx/oracle.js" then bind (h-document "docs/hx-oracle.js") (λ t → ret (s-response "application/javascript; charset=utf-8" (s-or nil t))) else
+  next
