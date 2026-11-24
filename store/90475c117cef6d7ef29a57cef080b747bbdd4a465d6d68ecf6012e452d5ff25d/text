@@ -1,0 +1,9 @@
+-- THEOREM 2: UNBOUNDED COINDUCTIVE KNOWLEDGE MONOTONICITY OVER ALL WAVES t : Nat!
+-- As the coinductive daemon runs forever (t = 0, 1, 2, ...), the atlas of proven identities NEVER shrinks!
+bst-thm-atlas-monotone : (traj : Nat → AtlasState) →
+  ((t : Nat) → hm-le (bst-ids (traj t)) (bst-ids (traj (suc t))) ≡ true) →
+  (t : Nat) → hm-le (bst-ids (traj zero)) (bst-ids (traj t)) ≡ true
+bst-thm-atlas-monotone traj _    zero    = hm-le-refl (bst-ids (traj zero))
+bst-thm-atlas-monotone traj step (suc t) =
+  hm-le-trans (bst-ids (traj zero)) (bst-ids (traj t)) (bst-ids (traj (suc t)))
+    (bst-thm-atlas-monotone traj step t) (step t)
