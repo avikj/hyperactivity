@@ -1,0 +1,17 @@
+-- One Lamb-Oseen vortex contribution at byte offsets (ox, oy, og):
+--   dx = px - mem[ox]; dy = py - mem[oy];
+--   fac = mem[og] / (dx*dx + dy*dy + 220.0);
+--   vx += (-dy) * fac; vy += dx * fac;
+-- Locals: 0=px, 1=py, 2=dt, 3=vx, 4=vy, 5=dx, 6=dy, 7=fac
+bw-vortex : Word → Word → Word → List Word
+bw-vortex ox oy og =
+  let c220  = the (List Word) (cons #67 (cons #0 (cons #0 (cons #92 (cons #67 nil)))))
+      setDx = b-app (bw-bin #147 (bw-get #0) (bw-ld ox)) (bw-set #5)
+      setDy = b-app (bw-bin #147 (bw-get #1) (bw-ld oy)) (bw-set #6)
+      r2    = bw-bin #146 (bw-bin #146 (bw-bin #148 (bw-get #5) (bw-get #5))
+                                       (bw-bin #148 (bw-get #6) (bw-get #6))) c220
+      setF  = b-app (bw-bin #149 (bw-ld og) r2) (bw-set #7)
+      negDy = b-app (bw-get #6) (cons #140 nil)
+      updVx = b-app (bw-bin #146 (bw-get #3) (bw-bin #148 negDy (bw-get #7))) (bw-set #3)
+      updVy = b-app (bw-bin #146 (bw-get #4) (bw-bin #148 (bw-get #5) (bw-get #7))) (bw-set #4)
+  in b-concat (cons setDx (cons setDy (cons setF (cons updVx (cons updVy nil)))))

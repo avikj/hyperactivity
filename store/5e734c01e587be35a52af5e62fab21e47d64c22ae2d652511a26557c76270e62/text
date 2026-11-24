@@ -1,0 +1,37 @@
+being-field-wasm : List Word
+being-field-wasm =
+  let hdr     = the (List Word) (cons #0 (cons #97 (cons #115 (cons #109 (cons #1 (cons #0 (cons #0 (cons #0 nil))))))))
+      -- 1 func type: (f32, f32, f32) -> f32
+      secType = the (List Word) (cons #1 (cons #8 (cons #1 (cons #96 (cons #3 (cons #125 (cons #125 (cons #125 (cons #1 (cons #125 nil))))))))))
+      secFunc = the (List Word) (cons #3 (cons #2 (cons #1 (cons #0 nil))))
+      secMem  = the (List Word) (cons #5 (cons #3 (cons #1 (cons #0 (cons #1 nil)))))
+      secExp  = the (List Word) (cons #7 (cons #14 (cons #2
+                  (cons #4 (cons #115 (cons #116 (cons #101 (cons #112 (cons #0 (cons #0
+                  (cons #3 (cons #109 (cons #101 (cons #109 (cons #2 (cons #0 nil))))))))))))))))
+      -- 5 f32 locals: 3=vx, 4=vy, 5=dx, 6=dy, 7=fac
+      bLoc    = the (List Word) (cons #1 (cons #5 (cons #125 nil)))
+      cZero   = the (List Word) (cons #67 (cons #0 (cons #0 (cons #0 (cons #0 nil)))))
+      -- 0.0234375f = 3/128 (IEEE-754 0x3cc00000 -> LE 0, 0, 192, 60)
+      cPull   = the (List Word) (cons #67 (cons #0 (cons #0 (cons #192 (cons #60 nil)))))
+      bInit   = b-concat (cons (b-app cZero (bw-set #3)) (cons (b-app cZero (bw-set #4)) nil))
+      -- Sum all 4 Lamb-Oseen vortex dipoles (byte offsets 20..64)
+      bVort   = b-concat (cons (bw-vortex #20 #24 #28)
+                         (cons (bw-vortex #32 #36 #40)
+                         (cons (bw-vortex #44 #48 #52)
+                         (cons (bw-vortex #56 #60 #64) nil))))
+      -- Harmonic confinement toward (cx=mem[0], cy=mem[4]) + landmark flux shear (mem[8], mem[12])
+      pullX   = bw-bin #148 (bw-bin #147 (bw-get #0) (bw-ld #0)) cPull
+      pullY   = bw-bin #148 (bw-bin #147 (bw-get #1) (bw-ld #4)) cPull
+      bConf   = b-concat (cons (b-app (bw-bin #146 (bw-bin #147 (bw-get #3) pullX) (bw-ld #8)) (bw-set #3))
+                         (cons (b-app (bw-bin #146 (bw-bin #147 (bw-get #4) pullY) (bw-ld #12)) (bw-set #4)) nil))
+      -- Advect position: mem[68] = px + vx*dt; mem[72] = py + vy*dt; return vx*vx + vy*vy
+      nxExpr  = bw-bin #146 (bw-get #0) (bw-bin #148 (bw-get #3) (bw-get #2))
+      nyExpr  = bw-bin #146 (bw-get #1) (bw-bin #148 (bw-get #4) (bw-get #2))
+      stNx    = b-concat (cons (cons #65 (cons #0 nil)) (cons nxExpr (cons (cons #56 (cons #2 (cons #68 nil))) nil)))
+      stNy    = b-concat (cons (cons #65 (cons #0 nil)) (cons nyExpr (cons (cons #56 (cons #2 (cons #72 nil))) nil)))
+      retSpd  = b-app (bw-bin #146 (bw-bin #148 (bw-get #3) (bw-get #3))
+                                   (bw-bin #148 (bw-get #4) (bw-get #4))) (cons #11 nil)
+      body    = b-concat (cons bLoc (cons bInit (cons bVort (cons bConf (cons stNx (cons stNy (cons retSpd nil)))))))
+      cPay    = cons #1 (b-app (b-uleb (b-len body)) body)
+      secCode = cons #10 (b-app (b-uleb (b-len cPay)) cPay)
+  in b-concat (cons hdr (cons secType (cons secFunc (cons secMem (cons secExp (cons secCode nil))))))
