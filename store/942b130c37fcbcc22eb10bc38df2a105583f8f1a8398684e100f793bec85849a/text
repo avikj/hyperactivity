@@ -1,0 +1,9 @@
+-- Exhaustive 65,536-pattern BF16 bit-exact round-trip checker (0x0000 .. 0xFFFF)
+-- Tests BOTH palette-hit path (idx = exp & 7 < 15, pal_exp = exp) AND escape path (idx = 15, esc_exp = exp)!
+psc-check-bf16-one : Word → Bool
+psc-check-bf16-one w =
+  let sm  = psc-bf16-sm w
+      e   = psc-bf16-exp w
+      u1  = psc-bf16-unpack sm (%wand e #7) e #0
+      u2  = psc-bf16-unpack sm #15 #0 e
+  in if %weq u1 w then %weq u2 w else false

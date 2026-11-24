@@ -1,0 +1,18 @@
+psc-main : List (List Word) → Step W Word
+psc-main args =
+  let out = psc-out-path args
+  in scmd w-now (λ t0 →
+     let ok_bf16 = psc-check-bf16-bits psc-nat16 #0
+         ok_alu  = %weq (cir-alu32 #0 #123456789 #987654321) #1111111110
+         all_ok  = if ok_bf16 then ok_alu else false
+     in scmd (w-file-write-named out psc-soc-sv) (λ nb →
+        scmd w-now (λ t1 →
+        cli-say
+          (list-append "PSC-1 PERSONAL SUPERCOMPUTER SOC | 65536/65536 BF16 bit-exact="
+          (list-append (if ok_bf16 then "1" else "0")
+          (list-append " | RV32I-9NAND2="
+          (list-append (if ok_alu then "1" else "0")
+          (list-append " | sv_bytes="
+          (list-append (ce-dec nb)
+          (list-append " (" (list-append (ce-dec (%wdiv (%wsub t1 t0) #1000)) " us)"))))))))
+          (sdone (if all_ok then #0 else #1)))))

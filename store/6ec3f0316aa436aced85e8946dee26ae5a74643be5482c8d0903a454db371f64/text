@@ -1,0 +1,7 @@
+-- Hardware 1-cycle unpacker: given (sm: 8b, idx: 4b, pal_exp: 8b, esc_exp: 8b) -> exact 16-bit BF16!
+psc-bf16-unpack : Word → Word → Word → Word → Word
+psc-bf16-unpack sm idx pal_exp esc_exp =
+  let s = %wand (%wshr sm #7) #1
+      m = %wand sm #127
+      e = if %weq (%wand idx #15) #15 then (%wand esc_exp #255) else (%wand pal_exp #255)
+  in psc-bf16-compose s e m

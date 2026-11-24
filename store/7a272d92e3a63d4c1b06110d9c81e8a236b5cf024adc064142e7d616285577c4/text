@@ -1,0 +1,7 @@
+-- Structural binary recursion on Nat: depth 16 covers ALL 2^16 = 65,536 BF16 bit patterns!
+psc-check-bf16-bits : Nat → Word → Bool
+psc-check-bf16-bits zero w = psc-check-bf16-one w
+psc-check-bf16-bits (suc n) w =
+  if psc-check-bf16-bits n (%wshl w #1)
+  then psc-check-bf16-bits n (%wor (%wshl w #1) #1)
+  else false

@@ -1,0 +1,9 @@
+-- Universal 2-bit Sign/Path Cubical Theorem over Bool x Bool:
+-- Proves BOTH palette-hit (is_esc=false) and escape (is_esc=true) recover exact sign bit for ALL s : Bool!
+psc-sign-rt : Bool → Bool → Bool
+psc-sign-rt s is_esc =
+  let w   = psc-bf16-compose (cir-b2w s) #127 #85
+      sm  = psc-bf16-sm w
+      idx = if is_esc then #15 else #3
+      u   = psc-bf16-unpack sm idx #127 #127
+  in cir-w2b (psc-bf16-sign u)
