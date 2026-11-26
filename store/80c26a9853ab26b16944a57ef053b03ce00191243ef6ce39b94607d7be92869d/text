@@ -1,0 +1,16 @@
+ge-lem-and-guard : (env : Nat → Bool) → (a b : GuardExpr) →
+  ge-eval env (if ge-eq b (ge-not a) then ge-k false else if ge-eq a (ge-not b) then ge-k false else ge-and a b)
+  ≡ bfm-andB (ge-eval env a) (ge-eval env b)
+ge-lem-and-guard env a b =
+  let e1 = ge-eq b (ge-not a)
+      e2 = ge-eq a (ge-not b)
+  in (case e1 return (λ z → (ge-eq b (ge-not a) ≡ z) →
+        ge-eval env (if z then ge-k false else if e2 then ge-k false else ge-and a b) ≡ bfm-andB (ge-eval env a) (ge-eval env b)) of
+        true  → λ h1 → bfm-trans (bfm-sym (bfm-lem-and-compl (ge-eval env a)))
+                         (λ i → bfm-andB (ge-eval env a) (ge-eval env (ge-eq-sound b (ge-not a) h1 (~ i))))
+        false → λ h1 →
+          (case e2 return (λ w → (ge-eq a (ge-not b) ≡ w) →
+             ge-eval env (if w then ge-k false else ge-and a b) ≡ bfm-andB (ge-eval env a) (ge-eval env b)) of
+             true  → λ h2 → bfm-trans (bfm-sym (bfm-lem-and-compl-l (ge-eval env b)))
+                              (λ i → bfm-andB (ge-eval env (ge-eq-sound a (ge-not b) h2 (~ i))) (ge-eval env b))
+             false → λ h2 → refl) refl) refl

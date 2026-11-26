@@ -1,0 +1,8 @@
+ge-lem-ite-guard : (env : Nat → Bool) → (c t f : GuardExpr) →
+  ge-eval env (if ge-eq t f then t else ge-ite c t f) ≡ bfm-iteB (ge-eval env c) (ge-eval env t) (ge-eval env f)
+ge-lem-ite-guard env c t f =
+  (case ge-eq t f return (λ z → (ge-eq t f ≡ z) →
+     ge-eval env (if z then t else ge-ite c t f) ≡ bfm-iteB (ge-eval env c) (ge-eval env t) (ge-eval env f)) of
+     true  → λ h → bfm-trans (bfm-sym (bfm-lem-ite-same (ge-eval env c) (ge-eval env t)))
+                     (λ i → bfm-iteB (ge-eval env c) (ge-eval env t) (ge-eval env (ge-eq-sound t f h i)))
+     false → λ h → refl) refl

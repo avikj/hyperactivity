@@ -1,0 +1,9 @@
+bfm-thm-hypercrack-finds-lock-and-strlen-exploits :
+  let safeRes   = ge-hypercrack bfm-vault-guarded-bad
+      crackLock = ge-hypercrack bfm-vault-missing-lock-bad
+      crackJson = ge-hypercrack bfm-parser-unbounded-strlen-bad
+      okSafe    = case safeRes   of inl u → true ; inr w → false
+      okLock    = case crackLock of inl u → false ; inr w → andB (%weq w #3) (ge-eval (bfm-env4 w) bfm-vault-missing-lock-bad)
+      okJson    = case crackJson of inl u → false ; inr w → andB (%weq w #9) (ge-eval (bfm-env4 w) bfm-parser-unbounded-strlen-bad)
+  in andB okSafe (andB okLock okJson) ≡ true
+bfm-thm-hypercrack-finds-lock-and-strlen-exploits = refl

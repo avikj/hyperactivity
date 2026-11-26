@@ -1,0 +1,34 @@
+ge-eq-sound : (a b : GuardExpr) → ge-eq a b ≡ true → a ≡ b
+ge-eq-sound (ge-k a)   (ge-k b)   h = λ i → ge-k (bfm-eqB-sound a b h i)
+ge-eq-sound (ge-k a)   (ge-v j)   h = bfm-false-absurd h
+ge-eq-sound (ge-k a)   (ge-not b) h = bfm-false-absurd h
+ge-eq-sound (ge-k a)   (ge-and b1 b2) h = bfm-false-absurd h
+ge-eq-sound (ge-k a)   (ge-ite c2 t2 f2) h = bfm-false-absurd h
+ge-eq-sound (ge-v i)   (ge-k b)   h = bfm-false-absurd h
+ge-eq-sound (ge-v i)   (ge-v j)   h = λ k → ge-v (bfm-eq-nat-sound i j h k)
+ge-eq-sound (ge-v i)   (ge-not b) h = bfm-false-absurd h
+ge-eq-sound (ge-v i)   (ge-and b1 b2) h = bfm-false-absurd h
+ge-eq-sound (ge-v i)   (ge-ite c2 t2 f2) h = bfm-false-absurd h
+ge-eq-sound (ge-not a) (ge-k b)   h = bfm-false-absurd h
+ge-eq-sound (ge-not a) (ge-v j)   h = bfm-false-absurd h
+ge-eq-sound (ge-not a) (ge-not b) h = λ i → ge-not (ge-eq-sound a b h i)
+ge-eq-sound (ge-not a) (ge-and b1 b2) h = bfm-false-absurd h
+ge-eq-sound (ge-not a) (ge-ite c2 t2 f2) h = bfm-false-absurd h
+ge-eq-sound (ge-and a1 a2) (ge-k b)   h = bfm-false-absurd h
+ge-eq-sound (ge-and a1 a2) (ge-v j)   h = bfm-false-absurd h
+ge-eq-sound (ge-and a1 a2) (ge-not b) h = bfm-false-absurd h
+ge-eq-sound (ge-and a1 a2) (ge-and b1 b2) h =
+  let p1 = ge-eq-sound a1 b1 (bfm-and-true-l (ge-eq a1 b1) (ge-eq a2 b2) h)
+      p2 = ge-eq-sound a2 b2 (bfm-and-true-r (ge-eq a1 b1) (ge-eq a2 b2) h)
+  in λ i → ge-and (p1 i) (p2 i)
+ge-eq-sound (ge-and a1 a2) (ge-ite c2 t2 f2) h = bfm-false-absurd h
+ge-eq-sound (ge-ite c1 t1 f1) (ge-k b)   h = bfm-false-absurd h
+ge-eq-sound (ge-ite c1 t1 f1) (ge-v j)   h = bfm-false-absurd h
+ge-eq-sound (ge-ite c1 t1 f1) (ge-not b) h = bfm-false-absurd h
+ge-eq-sound (ge-ite c1 t1 f1) (ge-and b1 b2) h = bfm-false-absurd h
+ge-eq-sound (ge-ite c1 t1 f1) (ge-ite c2 t2 f2) h =
+  let rest = bfm-and-true-r (ge-eq c1 c2) (bfm-andB (ge-eq t1 t2) (ge-eq f1 f2)) h
+      pc   = ge-eq-sound c1 c2 (bfm-and-true-l (ge-eq c1 c2) (bfm-andB (ge-eq t1 t2) (ge-eq f1 f2)) h)
+      pt   = ge-eq-sound t1 t2 (bfm-and-true-l (ge-eq t1 t2) (ge-eq f1 f2) rest)
+      pf   = ge-eq-sound f1 f2 (bfm-and-true-r (ge-eq t1 t2) (ge-eq f1 f2) rest)
+  in λ i → ge-ite (pc i) (pt i) (pf i)
