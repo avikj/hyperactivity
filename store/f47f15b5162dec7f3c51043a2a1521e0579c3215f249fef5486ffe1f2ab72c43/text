@@ -1,0 +1,12 @@
+py-parse-ret-type : List PyTok → Code
+py-parse-ret-type nil = code Word
+py-parse-ret-type (cons t r) =
+  case t of
+    tk-arrow →
+      (case r of
+        nil → code Word
+        cons t2 _ →
+          case t2 of
+            tk-id ty → py-type-code ty
+            _        → code Word)
+    _ → code Word

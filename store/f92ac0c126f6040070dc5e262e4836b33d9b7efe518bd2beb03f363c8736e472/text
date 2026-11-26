@@ -1,0 +1,17 @@
+-- THEOREM 1: UNIVERSAL RELATIONAL SIMULATION SOUNDNESS OVER ALL TRACES!
+-- Regardless of whether S1 and S2 are finite, infinite, encoded, or retimed,
+-- a step-preserving simulation relation R guarantees identical observable output streams
+-- across ALL finite-horizon traces `tr : List I`!
+vx-thm-sim-exec : {S1 S2 I O : Type} →
+  (stp1 : S1 → I → O × S1) →
+  (stp2 : S2 → I → O × S2) →
+  (R : S1 → S2 → Type) →
+  ((s1 : S1) → (s2 : S2) → (x : I) → R s1 s2 →
+    (fst (stp1 s1 x) ≡ fst (stp2 s2 x)) × R (snd (stp1 s1 x)) (snd (stp2 s2 x))) →
+  (s1 : S1) → (s2 : S2) → R s1 s2 → (tr : List I) →
+  vx-exec stp1 s1 tr ≡ vx-exec stp2 s2 tr
+vx-thm-sim-exec stp1 stp2 R hstep s1 s2 hr nil = refl
+vx-thm-sim-exec stp1 stp2 R hstep s1 s2 hr (cons x xs) =
+  let stepCert = hstep s1 s2 x hr
+  in vx-cong2 cons (fst stepCert)
+       (vx-thm-sim-exec stp1 stp2 R hstep (snd (stp1 s1 x)) (snd (stp2 s2 x)) (snd stepCert) xs)

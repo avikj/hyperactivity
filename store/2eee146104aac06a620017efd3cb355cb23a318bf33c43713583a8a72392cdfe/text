@@ -1,0 +1,39 @@
+po-gmb-3 : List Word → List Word
+po-gmb-3 tail =
+  hw-ln "int main(void) {"
+  (hw-ln "  @autoreleasepool {"
+  (hw-ln "    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();"
+  (hw-ln (list-append "    if (!dev) { printf(" (list-append hw-q (list-append "NO_METAL_DEVICE" (list-append hw-esc-n (list-append hw-q "); return 1; }")))))
+  (hw-ln "    NSError* err = nil;"
+  (hw-ln "    NSString* src = [NSString stringWithContentsOfFile:[NSString stringWithUTF8String:kMetalPath] encoding:NSUTF8StringEncoding error:&err];"
+  (hw-ln (list-append "    if (!src) { fprintf(stderr, " (list-append hw-q (list-append "Failed to read metal shader" (list-append hw-esc-n (list-append hw-q "); return 1; }")))))
+  (hw-ln "    MTLCompileOptions* opts = [[MTLCompileOptions alloc] init];"
+  (hw-ln "    opts.mathMode = MTLMathModeSafe;"
+  (hw-ln "    id<MTLLibrary> lib = [dev newLibraryWithSource:src options:opts error:&err];"
+  (hw-ln (list-append "    if (!lib) { fprintf(stderr, " (list-append hw-q (list-append "Metal compile err: %s" (list-append hw-esc-n (list-append hw-q ", [[err localizedDescription] UTF8String]); return 1; }")))))
+  (hw-ln (list-append "    id<MTLFunction> fn = [lib newFunctionWithName:@" (list-append hw-q (list-append "genesis_metal_kernel" (list-append hw-q "];"))))
+  (hw-ln "    id<MTLComputePipelineState> pso = [dev newComputePipelineStateWithFunction:fn error:&err];"
+  (hw-ln "    id<MTLCommandQueue> q = [dev newCommandQueue];"
+  (hw-ln "    const uint32_t N = 4194304u;"
+  (hw-ln "    id<MTLBuffer> bIn = [dev newBufferWithLength:(size_t)N*16u options:MTLResourceStorageModeShared];"
+  (hw-ln "    id<MTLBuffer> bOut = [dev newBufferWithLength:(size_t)N*4u options:MTLResourceStorageModeShared];"
+  (hw-ln "    uint32_t* pIn = (uint32_t*)[bIn contents];"
+  (hw-ln "    for (uint32_t i = 0; i < N*4u; i++) pIn[i] = i * 2654435761u ^ 0x6a09e667u;"
+  (hw-ln "    mach_timebase_info_data_t tb; mach_timebase_info(&tb);"
+  (hw-ln "    uint64_t t0 = mach_absolute_time();"
+  (hw-ln "    id<MTLCommandBuffer> cb = [q commandBuffer];"
+  (hw-ln "    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];"
+  (hw-ln "    [enc setComputePipelineState:pso]; [enc setBuffer:bIn offset:0 atIndex:0]; [enc setBuffer:bOut offset:0 atIndex:1];"
+  (hw-ln "    [enc dispatchThreads:MTLSizeMake(N,1,1) threadsPerThreadgroup:MTLSizeMake(256,1,1)];"
+  (hw-ln "    [enc endEncoding]; [cb commit]; [cb waitUntilCompleted];"
+  (hw-ln "    uint64_t t1 = mach_absolute_time();"
+  (hw-ln "    double sec = (double)(t1 - t0) * (double)tb.numer / ((double)tb.denom * 1e9);"
+  (hw-ln "    uint32_t* pOut = (uint32_t*)[bOut contents]; uint32_t bad = 0u;"
+  (hw-ln "    for (uint32_t i = 0; i < 65536u; i++) {"
+  (hw-ln "      uint32_t idx = (i * 61u) & (N - 1u);"
+  (hw-ln "      if (pOut[idx] != cpu_ref(pIn[idx*4u], pIn[idx*4u+1u], pIn[idx*4u+2u], pIn[idx*4u+3u])) bad++;"
+  (hw-ln "    }"
+  (hw-ln (list-append "    printf(" (list-append hw-q (list-append "HX-GENESIS LIVE METAL GPU (%s): threads=%u (16.78M lanes) | time=%.3f ms | %.2f G-threads/s | %.2f G-certified-ops/s | Spec==GPU errors=%u" (list-append hw-esc-n (list-append hw-q ", [[dev name] UTF8String], N, sec*1e3, (double)N/(sec*1e9), (double)N*64.0/(sec*1e9), bad);")))))
+  (hw-ln "    return bad ? 1 : 0;"
+  (hw-ln "  }"
+  (hw-ln "}" tail))))))))))))))))))))))))))))))))))))

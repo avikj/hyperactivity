@@ -1,0 +1,23 @@
+tir-m1 : List Word → List Word
+tir-m1 tl =
+  tir-ln "#include <metal_stdlib>"
+  (tir-ln "using namespace metal;"
+  (tir-ln "struct U128 { ulong hi; ulong lo; };"
+  (tir-ln "struct U256 { ulong w0; ulong w1; ulong w2; ulong w3; };"
+  (tir-ln "inline U128 u128_add(U128 a, U128 b){ ulong lo = a.lo + b.lo; return (U128){ a.hi + b.hi + (lo < a.lo ? 1ul : 0ul), lo }; }"
+  (tir-ln "inline U128 u128_sub(U128 a, U128 b){ ulong lo = a.lo - b.lo; return (U128){ a.hi - b.hi - (a.lo < b.lo ? 1ul : 0ul), lo }; }"
+  (tir-ln "inline bool u128_lt(U128 a, U128 b){ return (a.hi < b.hi) || (a.hi == b.hi && a.lo < b.lo); }"
+  (tir-ln "inline U128 u128_mul_u64(U128 a, ulong k){"
+  (tir-ln "  ulong lo = a.lo * k;"
+  (tir-ln "  ulong hi = mulhi(a.lo, k) + a.hi * k;"
+  (tir-ln "  return (U128){ hi, lo };"
+  (tir-ln "}"
+  (tir-ln "inline U256 u256_mul128(U128 a, U128 b){"
+  (tir-ln "  ulong p00_lo = a.lo * b.lo, p00_hi = mulhi(a.lo, b.lo);"
+  (tir-ln "  ulong p01_lo = a.lo * b.hi, p01_hi = mulhi(a.lo, b.hi);"
+  (tir-ln "  ulong p10_lo = a.hi * b.lo, p10_hi = mulhi(a.hi, b.lo);"
+  (tir-ln "  ulong p11_lo = a.hi * b.hi, p11_hi = mulhi(a.hi, b.hi);"
+  (tir-ln "  U128 mid = u128_add(u128_add((U128){0ul, p00_hi}, (U128){0ul, p01_lo}), (U128){0ul, p10_lo});"
+  (tir-ln "  U128 hi  = u128_add(u128_add((U128){p11_hi, p11_lo}, (U128){0ul, p01_hi}), u128_add((U128){0ul, p10_hi}, (U128){0ul, mid.hi}));"
+  (tir-ln "  return (U256){ p00_lo, mid.lo, hi.lo, hi.hi };"
+  (tir-ln "}" tl))))))))))))))))))))

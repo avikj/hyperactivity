@@ -1,0 +1,12 @@
+-- THEOREM 4: UNIVERSAL 2-STEP RELATIONAL k-INDUCTION OVER INFINITE TRAJECTORIES!
+-- When 1-step invariants are not inductive (e.g. 2-stage forwarding pipelines, retimed loops),
+-- proving Base(0), Base(1), and Inv(t) & Inv(t+1) => Inv(t+2) establishes Inv(t) for ALL t : Nat!
+vx-kind2-pair : (Inv : Nat → Type) →
+  Inv zero →
+  Inv (suc zero) →
+  ((t : Nat) → Inv t → Inv (suc t) → Inv (suc (suc t))) →
+  (t : Nat) → Inv t × Inv (suc t)
+vx-kind2-pair Inv b0 b1 ind zero = (b0 , b1)
+vx-kind2-pair Inv b0 b1 ind (suc t) =
+  let ih = vx-kind2-pair Inv b0 b1 ind t
+  in (snd ih , ind t (fst ih) (snd ih))

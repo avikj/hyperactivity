@@ -1,0 +1,12 @@
+py-read-param-type : List PyTok → (Code × List PyTok)
+py-read-param-type nil = (code Word , nil)
+py-read-param-type (cons t r) =
+  case t of
+    tk-colon →
+      (case r of
+        nil → (code Word , nil)
+        cons t2 r2 →
+          case t2 of
+            tk-id ty → (py-type-code ty , r2)
+            _        → (code Word , r))
+    _ → (code Word , cons t r)

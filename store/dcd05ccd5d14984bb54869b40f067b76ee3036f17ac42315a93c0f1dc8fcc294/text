@@ -1,0 +1,10 @@
+hxz-dec-loop : Nat → Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+hxz-dec-loop zero _ _ _ opos k = k opos
+hxz-dec-loop (suc nb) inb outb ipos opos k =
+  hxz-rewind (λ _ →
+    hxz-get24b inb ipos (λ bl →
+    hxz-get24b inb (%wadd ipos #3) (λ s0 →
+    hxz-get24b inb (%wadd ipos #6) (λ pl →
+    cli-peek (%wadd inb (%wadd ipos #9)) pl (λ pay →
+    cli-poke (%wadd outb opos) (hxz-blk-dec (toNat bl) cfs-sample-init-ctx (s0 , pay)) (λ a →
+    hxz-dec-loop nb inb outb (%wadd ipos (%wadd #9 pl)) (%wsub a outb) k))))))

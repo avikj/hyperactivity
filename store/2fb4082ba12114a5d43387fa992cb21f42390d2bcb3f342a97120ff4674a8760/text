@@ -1,0 +1,14 @@
+hxz-main : List (List Word) → Step W Word
+hxz-main (cons cmd (cons inp rest)) =
+  let out = hxz-arg3 rest
+  in if cli-eq cmd "c" then hxz-enc-file inp out
+     else if cli-eq cmd "d" then hxz-dec-file inp out
+     else
+     scmd w-now (λ t0 →
+     scmd (w-file-read-named inp) (λ rd →
+         let enc = hxz-enc (snd rd)
+             dec = hxz-dec enc
+             ok  = cli-eq (snd rd) dec
+         in scmd w-now (λ t1 →
+              cli-say (list-append (if ok then "HXZ OK " else "HXZ FAIL ") (list-append (ce-dec (hxz-wlen #0 (snd rd))) (list-append " -> " (list-append (ce-dec (hxz-wlen #0 enc)) (list-append " bytes (" (list-append (ce-dec (%wdiv (%wsub t1 t0) #1000000)) " ms)")))))) (sdone (if ok then #0 else #1)))))
+hxz-main _ = cli-say "usage: hxz [c|d|t] IN [OUT]" (sdone #2)

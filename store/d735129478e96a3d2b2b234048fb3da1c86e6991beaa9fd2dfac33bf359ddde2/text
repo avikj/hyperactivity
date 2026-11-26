@@ -1,0 +1,25 @@
+gn-wasm-bytes : List Word
+gn-wasm-bytes =
+  let hdr  = the (List Word) (cons #0 (cons #97 (cons #115 (cons #109 (cons #1 (cons #0 (cons #0 (cons #0 nil))))))))
+      tSec = pw-sec #1 (the (List Word)
+               (cons #3
+               (cons #96 (cons #8 (cons #127 (cons #127 (cons #127 (cons #127 (cons #127 (cons #127 (cons #127 (cons #127 (cons #1 (cons #127
+               (cons #96 (cons #4 (cons #127 (cons #127 (cons #127 (cons #127 (cons #1 (cons #127
+               (cons #96 (cons #3 (cons #127 (cons #127 (cons #127 (cons #1 (cons #127 nil)))))))))))))))))))))))))))))
+      fSec = pw-sec #3 (the (List Word)
+               (cons #6 (cons #0 (cons #0 (cons #1 (cons #1 (cons #2 (cons #2 nil))))))))
+      eSec = pw-sec #7 (cons #6 (pw-cat
+               (cons (pw-exp "howell8_q0" #0)
+               (cons (pw-exp "howell8_q1" #1)
+               (cons (pw-exp "adelic_h0"  #2)
+               (cons (pw-exp "adelic_h1"  #3)
+               (cons (pw-exp "fredkin_a"  #4)
+               (cons (pw-exp "fredkin_b"  #5) nil))))))))
+      cSec = pw-sec #10 (cons #6 (pw-cat
+               (cons (po-wasm-ring-fn #0 gn-cert-howell8-quat)
+               (cons (po-wasm-ring-fn #1 gn-cert-howell8-quat)
+               (cons (po-wasm-ring-fn #0 gn-cert-adelic-hadamard)
+               (cons (po-wasm-ring-fn #1 gn-cert-adelic-hadamard)
+               (cons (po-wasm-f2-fn   #1 gn-cert-fredkin-1and)
+               (cons (po-wasm-f2-fn   #2 gn-cert-fredkin-1and) nil))))))))
+  in pw-cat (cons hdr (cons tSec (cons fSec (cons eSec (cons cSec nil)))))

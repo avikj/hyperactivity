@@ -1,0 +1,10 @@
+-- blocks of 4096 bytes, the last shorter; each written as hxz-emit-blk writes it
+hxz-enc-loop : Nat → Word → Word → Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+hxz-enc-loop zero _ _ _ _ _ opos k = k opos
+hxz-enc-loop (suc nb) inb n outb cap pos opos k =
+  hxz-rewind (λ _ →
+    let m = hxz-min #4096 (%wsub n pos)
+    in cli-peek (%wadd inb pos) m (λ blk →
+       let e = hxz-emit-blk blk nil
+       in if %wlt cap (%wadd opos (hxz-wlen #0 e)) then cli-say "HXZ enc: output exceeds its buffer" (sdone #1)
+          else cli-poke (%wadd outb opos) e (λ a → hxz-enc-loop nb inb n outb cap (%wadd pos m) (%wsub a outb) k)))

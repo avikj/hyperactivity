@@ -1,0 +1,84 @@
+-- Single non-mutual recursive-descent parser with explicit phase tag:
+--   0 = ternary (`a if c else b`), 1 = compare (`<`, `==`),
+--   2 = add/sub/or/xor, 3 = mul/div/and, 4 = atom,
+--   5 = mul-tail (with acc), 6 = add-tail (with acc)
+py-parse : Nat → Word → Code → List (List Word) → List PyTok → (Code × List PyTok)
+py-parse zero _ acc _ ts = (acc , ts)
+py-parse (suc fuel) phase acc env ts =
+  if weq phase #4 then
+    (case ts of
+      nil → (cwlit #0 , nil)
+      cons t rest →
+        case t of
+          tk-num n → (cwlit n , rest)
+          tk-id nm →
+            if py-eq nm "True" then (py-code-true , rest)
+            else if py-eq nm "False" then (py-code-false , rest)
+            else (case py-lookup nm env of
+                    some idx → (cvar idx , rest)
+                    none     → (cwlit #0 , rest))
+          tk-lp →
+            let p1 = py-parse fuel #0 (cwlit #0) env rest
+            in (fst p1 , py-drop-rp (snd p1))
+          _ → (cwlit #0 , rest))
+  else if weq phase #5 then
+    (case ts of
+      nil → (acc , nil)
+      cons t r1 →
+        case t of
+          tk-star →
+            let p2 = py-parse fuel #4 (cwlit #0) env r1
+            in py-parse fuel #5 (py-app2 py-code-mul acc (fst p2)) env (snd p2)
+          tk-slash →
+            let p2 = py-parse fuel #4 (cwlit #0) env r1
+            in py-parse fuel #5 (py-app2 py-code-div acc (fst p2)) env (snd p2)
+          tk-amp →
+            let p2 = py-parse fuel #4 (cwlit #0) env r1
+            in py-parse fuel #5 (py-app2 py-code-and acc (fst p2)) env (snd p2)
+          _ → (acc , cons t r1))
+  else if weq phase #3 then
+    let p1 = py-parse fuel #4 (cwlit #0) env ts
+    in py-parse fuel #5 (fst p1) env (snd p1)
+  else if weq phase #6 then
+    (case ts of
+      nil → (acc , nil)
+      cons t r1 →
+        case t of
+          tk-plus →
+            let p2 = py-parse fuel #3 (cwlit #0) env r1
+            in py-parse fuel #6 (py-app2 py-code-add acc (fst p2)) env (snd p2)
+          tk-minus →
+            let p2 = py-parse fuel #3 (cwlit #0) env r1
+            in py-parse fuel #6 (py-app2 py-code-sub acc (fst p2)) env (snd p2)
+          tk-bar →
+            let p2 = py-parse fuel #3 (cwlit #0) env r1
+            in py-parse fuel #6 (py-app2 py-code-or acc (fst p2)) env (snd p2)
+          tk-caret →
+            let p2 = py-parse fuel #3 (cwlit #0) env r1
+            in py-parse fuel #6 (py-app2 py-code-xor acc (fst p2)) env (snd p2)
+          _ → (acc , cons t r1))
+  else if weq phase #2 then
+    let p1 = py-parse fuel #3 (cwlit #0) env ts
+    in py-parse fuel #6 (fst p1) env (snd p1)
+  else if weq phase #1 then
+    let p1 = py-parse fuel #2 (cwlit #0) env ts
+    in case snd p1 of
+         nil → (fst p1 , nil)
+         cons t r1 →
+           case t of
+             tk-lt →
+               let p2 = py-parse fuel #2 (cwlit #0) env r1
+               in (py-app2 py-code-lt (fst p1) (fst p2) , snd p2)
+             tk-eqeq →
+               let p2 = py-parse fuel #2 (cwlit #0) env r1
+               in (py-app2 py-code-eq (fst p1) (fst p2) , snd p2)
+             _ → (fst p1 , cons t r1)
+  else
+    let p1 = py-parse fuel #1 (cwlit #0) env ts
+    in if py-is-kw "if" (snd p1) then
+         let pc = py-parse fuel #1 (cwlit #0) env (py-tail-tok (snd p1))
+         in if py-is-kw "else" (snd pc) then
+              let p2 = py-parse fuel #0 (cwlit #0) env (py-tail-tok (snd pc))
+              in (py-app3 py-code-ifw (fst pc) (fst p1) (fst p2) , snd p2)
+            else p1
+       else p1

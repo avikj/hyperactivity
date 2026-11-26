@@ -1,0 +1,11 @@
+vx-thm-unroll2-sound : {S I : Type} →
+  (stp : S → I → S) →
+  (fast : S → I → I → S) →
+  ((s : S) → (x0 x1 : I) → fast s x0 x1 ≡ stp (stp s x0) x1) →
+  (s : S) → (ps : List (I × I)) →
+  vx-fold2-macro fast s ps ≡ vx-fold1-pairs stp s ps
+vx-thm-unroll2-sound stp fast h s nil = refl
+vx-thm-unroll2-sound stp fast h s (cons p ps) =
+  vx-trans
+    (vx-cong (λ q → vx-fold2-macro fast q ps) (h s (fst p) (snd p)))
+    (vx-thm-unroll2-sound stp fast h (stp (stp s (fst p)) (snd p)) ps)

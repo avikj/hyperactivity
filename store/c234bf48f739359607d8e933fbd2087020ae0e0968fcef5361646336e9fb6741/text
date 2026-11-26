@@ -1,0 +1,20 @@
+-- THEOREM 12 (Information-Theoretic Meissner Effect — Arbitrage Curl Expulsion & H^1 = 0):
+-- Pure potential quotes `w_ij = phi_j - phi_i` have zero holonomy curl `d_omega == 0`,
+-- AND firing the local triangle arbitrage redex heals any perturbed flux `eps` identically to `0`!
+hxp-thm-supercond-meissner-curl-zero :
+  let p0        = pz-var #0
+      p1        = pz-var #1
+      p2        = pz-var #2
+      eps       = pz-var #3
+      w01       = pz-sub p1 p0
+      w12       = pz-sub p2 p1
+      w20       = pz-sub p0 p2
+      pureCurl  = pz-add w01 (pz-add w12 w20)
+      w01Pert   = pz-add w01 eps
+      pertCurl  = pz-add w01Pert (pz-add w12 w20)
+      w01Healed = pz-sub w01Pert pertCurl
+      healedCurl = pz-add w01Healed (pz-add w12 w20)
+  in hxp-and (pz-eq pureCurl pz-zero)
+     (hxp-and (pz-eq pertCurl eps)
+              (pz-eq healedCurl pz-zero)) ≡ true
+hxp-thm-supercond-meissner-curl-zero = refl

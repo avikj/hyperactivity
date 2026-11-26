@@ -1,0 +1,16 @@
+py-compile-def-after : List Word → List PyTok → List (List Word) → Opt Meaning
+py-compile-def-after fname r1 bodyLines =
+  case r1 of
+    nil → none
+    cons t r2 →
+      case t of
+        tk-lp →
+          let pr     = py-parse-params-go (toNat #32) r2
+              params = fst pr
+              retTy  = py-parse-ret-type (snd pr)
+              env    = py-push-params params nil
+              body   = py-compile-body env bodyLines
+              fullTy = py-wrap-pi params retTy
+              fullVl = py-wrap-lam params body
+          in some (means fname fullTy fullVl)
+        _ → none

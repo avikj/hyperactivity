@@ -1,0 +1,19 @@
+geo-excl-step :
+  (x : Word) → (excl : List Word) → (e : Word × Word) → (r : FTbl) →
+  cm-wmem x excl ≡ true →
+  geo-freq x (ftbl-exclude excl r) ≡ #0 →
+  geo-freq x (if cm-wmem (fst e) excl then ftbl-exclude excl r else cons e (ftbl-exclude excl r)) ≡ #0
+geo-excl-step x excl e r hmem ih =
+  ifP {λ b → geo-freq x (if b then ftbl-exclude excl r else cons e (ftbl-exclude excl r)) ≡ #0}
+      {cm-wmem (fst e) excl}
+    (λ htrue → ih)
+    (λ hfalse →
+       ifP {λ eqb → (if eqb then snd e else geo-freq x (ftbl-exclude excl r)) ≡ #0}
+           {weq x (fst e)}
+         (λ heq →
+            let pxe : x ≡ fst e
+                pxe = cm-weq-sound x (fst e) heq
+                contrad : true ≡ false
+                contrad = cm-catb (cm-symb hmem) (cm-catb (cm-congb (λ z → cm-wmem z excl) pxe) hfalse)
+            in cm-tf-absurd contrad)
+         (λ hneq → ih))

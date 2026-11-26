@@ -1,0 +1,51 @@
+gir-mh2 : List Word → List Word
+gir-mh2 tl =
+  gir-lines
+    (list-append
+      (gir-l8
+        "    const uint32_t P = 2048u;"
+        "    id<MTLBuffer> bPool = [dev newBufferWithLength:P*sizeof(uint64_t) options:MTLResourceStorageModeShared];"
+        "    id<MTLBuffer> bGate = [dev newBufferWithLength:P*sizeof(uint8_t)  options:MTLResourceStorageModeShared];"
+        "    id<MTLBuffer> bTgt  = [dev newBufferWithLength:12*sizeof(uint64_t) options:MTLResourceStorageModeShared];"
+        "    id<MTLBuffer> bBest = [dev newBufferWithLength:12*sizeof(uint32_t) options:MTLResourceStorageModeShared];"
+        "    uint64_t* pt = (uint64_t*)[bPool contents]; uint8_t* pg = (uint8_t*)[bGate contents];"
+        "    const uint64_t vp[6] = {0xAAAAAAAAAAAAAAAAull,0xCCCCCCCCCCCCCCCCull,0xF0F0F0F0F0F0F0F0ull,0xFF00FF00FF00FF00ull,0xFFFF0000FFFF0000ull,0xFFFFFFFF00000000ull};"
+        "    uint32_t sz = 0; for (int i = 0; i < 6; i++) { pt[sz] = perm_enc64(vp[i], perm, mask); pg[sz] = 0; sz++; }")
+      (gir-l8
+        "    for (uint32_t i = 0; i < sz && sz < P; i++) {"
+        "      for (uint32_t j = 0; j <= i && sz < P; j++) {"
+        "        uint8_t ng = (uint8_t)(pg[i] + pg[j] + 1u); if (ng > 3u) continue;"
+        "        uint64_t cand[3] = { ~(pt[i] ^ pt[j]), pt[i] | pt[j], (~pt[i]) | pt[j] };"
+        "        for (int k = 0; k < 3 && sz < P; k++) {"
+        "          int dup = 0; for (uint32_t u = 0; u < sz; u++) if (pt[u] == cand[k]) { dup = 1; break; }"
+        "          if (!dup) { pt[sz] = cand[k]; pg[sz] = ng; sz++; } } } }"
+        "    while (sz < P) { pt[sz] = pt[sz % 6]; pg[sz] = 0; sz++; }"))
+    (gir-lines
+      (list-append
+        (gir-l8
+          "    uint64_t* tt = (uint64_t*)[bTgt contents]; uint32_t* bo = (uint32_t*)[bBest contents];"
+          "    uint64_t raw[4];"
+          "    raw[0] = vp[0]^vp[1]^vp[2]^vp[3]^vp[4]^vp[5];"
+          "    raw[1] = ((vp[0]&vp[1]) ^ ((~vp[0])&vp[2])) ^ ((vp[3]&vp[4]) ^ (vp[3]&vp[5]) ^ (vp[4]&vp[5]));"
+          "    raw[2] = 0ull;"
+          "    raw[2] = (vp[0] ^ ((~vp[1]) & vp[2])) ^ (vp[3] ^ ((~vp[4]) & vp[5]));"
+          "    raw[3] = (vp[0] & vp[1]) ^ (vp[2] & vp[3]) ^ (vp[4] & vp[5]);"
+          "    for (int t = 0; t < 4; t++) tt[t] = perm_enc64(raw[t], perm, mask);")
+        (gir-l8
+          "    for (int t = 4; t < 12; t++) tt[t] = perm_enc64(raw[t & 3] ^ vp[t % 6], perm, mask);"
+          "    for (int t = 0; t < 12; t++) bo[t] = 99u;"
+          "    double t0 = now_ms();"
+          "    id<MTLCommandBuffer> cb = [q commandBuffer]; id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];"
+          "    [enc setComputePipelineState:pso];"
+          "    [enc setBuffer:bPool offset:0 atIndex:0]; [enc setBuffer:bGate offset:0 atIndex:1];"
+          "    [enc setBuffer:bTgt  offset:0 atIndex:2]; [enc setBuffer:bBest offset:0 atIndex:3];"
+          "    [enc setBytes:&P length:sizeof(uint32_t) atIndex:4]; [enc setBytes:&pol length:sizeof(uint32_t) atIndex:5];"))
+      (gir-lines
+        (gir-l6
+          "    NSUInteger grid = (NSUInteger)P * (NSUInteger)P; NSUInteger tg = pso.maxTotalThreadsPerThreadgroup; if (tg > 256) tg = 256;"
+          "    [enc dispatchThreads:MTLSizeMake(grid, 1, 1) threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];"
+          "    [enc endEncoding]; [cb commit]; [cb waitUntilCompleted]; double dt_ms = now_ms() - t0;"
+          "    double gevals_s = (0.5 * (double)P * (double)(P + 1u) * 5.0 * 12.0) / (dt_ms * 1e6);"
+          (gir-cstmt "    printf(" "HX_CRYPTIC_GEODESIC_METAL_OK device=%s cryptic_gauge=S64xZ2 threads=%lu pool=%u dt_ms=%.3f G_cryptic_checks_s=%.2f best_PAR6=%u best_SHA_CM=%u best_CHI6=%u best_BENT6=%u" ", [[dev name] UTF8String], (unsigned long)grid, P, dt_ms, gevals_s, bo[0], bo[1], bo[2], bo[3]);")
+          "  } return 0; }")
+        tl))

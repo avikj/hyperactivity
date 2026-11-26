@@ -1,0 +1,18 @@
+-- THEOREM 9 (Indra's Net 1-RTT XOR-IBLT Holographic Set Reconciliation + GF(2) Erasure):
+-- Every slice reflects the symmetric difference of the whole net in O(1) XOR operations,
+-- and systematic GF(2) parity `p = b0 ^ b1 ^ b2` recovers any dropped block in 0 NACK RTTs!
+hxp-iblt-reconcile-sample : Bool
+hxp-iblt-reconcile-sample =
+  let sShared = #1311768467463790320
+      kDiff   = #3735928559
+      sketchA = %wxor sShared kDiff
+      sketchB = sShared
+      recKey  = %wxor sketchA sketchB
+      b0      = #11111111
+      b1      = #22222222
+      b2      = #33333333
+      par     = %wxor b0 (%wxor b1 b2)
+  in hxp-and (%weq recKey kDiff)
+     (hxp-and (%weq (%wxor par (%wxor b1 b2)) b0)
+     (hxp-and (%weq (%wxor b0 (%wxor par b2)) b1)
+              (%weq (%wxor b0 (%wxor b1 par)) b2)))

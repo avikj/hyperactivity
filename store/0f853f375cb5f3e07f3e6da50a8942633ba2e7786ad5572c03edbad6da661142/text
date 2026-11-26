@@ -1,0 +1,8 @@
+-- Continuous pure-Hypercubical swarm sync loop (`w-sleep` + live bus read/write, zero Python daemons!)
+ag-loop-go : Nat → Word → Step W Word
+ag-loop-go zero _ = cli-say "[hx agent loop] completed pure-.hypercubical sync rounds." (sdone #0)
+ag-loop-go (suc k) sleepNs =
+  scmd w-now (λ t →
+  scmd (w-file-read-named "/tmp/hx_agent_bus/peers.json") (λ peers →
+  cli-say (list-append "[hx agent loop t=" (list-append (ce-dec t) (list-append "] peers_bytes=" (ce-dec (ag-len (snd peers))))))
+    (scmd (w-sleep sleepNs) (λ _ → ag-loop-go k sleepNs))))

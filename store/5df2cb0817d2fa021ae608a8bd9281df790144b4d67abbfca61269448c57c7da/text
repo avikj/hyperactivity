@@ -1,0 +1,43 @@
+gir-c5 : List Word → List Word
+gir-c5 tl =
+  gir-lines
+    (list-append
+      (gir-l8
+        "// === STAGE C: BOUNDED 16 MiB CRYPTIC QUOTIENT TABLE + DAG-CSE WAVEFRONT ==="
+        "#define QT_BITS 20"
+        "#define QT_SIZE (1u << QT_BITS)"
+        "#define QT_MASK (QT_SIZE - 1u)"
+        "static uint64_t qt_cry_tt[QT_SIZE];"
+        "static uint8_t  qt_cost[QT_SIZE], qt_refs[QT_SIZE];"
+        "static uint32_t qt_used = 0;"
+        "#define POOL_CAP 32768")
+      (gir-l8
+        "typedef struct { uint64_t cry_tt; uint16_t pa; uint16_t pb; uint8_t op; uint8_t gates; } GeoNode;"
+        "static GeoNode  g_pool[POOL_CAP];"
+        "static uint32_t g_pool_sz = 0, g_depth_cnt[16], g_epoch = 1u, g_mark[POOL_CAP];"
+        "static uint8_t exact_dag_cone(uint16_t idx) { if (idx < 6u || g_mark[idx] == g_epoch) return 0u; g_mark[idx] = g_epoch; return (uint8_t)(1u + exact_dag_cone(g_pool[idx].pa) + exact_dag_cone(g_pool[idx].pb)); }"
+        "static inline uint8_t exact_pair_gates(uint16_t ia, uint16_t ib) { if (++g_epoch == 0u) { memset(g_mark, 0, sizeof(g_mark)); g_epoch = 1u; } return (uint8_t)(1u + exact_dag_cone(ia) + exact_dag_cone(ib)); }"
+        "typedef struct { const char* name; uint64_t plain_tt; uint64_t cry_tt; uint64_t cry_inv_tt; uint32_t best_gates; uint32_t wave_hit; } Tgt6;"
+        "static inline uint32_t qt_hash(uint64_t y) {"
+        "  uint64_t z = (y ^ (y >> 30)) * 0xbf58476d1ce4e5b9ull; z = (z ^ (z >> 27)) * 0x94d049bb133111ebull; return (uint32_t)((z ^ (z >> 31)) & QT_MASK); }"))
+    (gir-lines
+      (list-append
+        (gir-l8
+          "static void qt_compact_frontier(void) {"
+          "  for (uint32_t i = 0; i < QT_SIZE; i++) {"
+          "    if (qt_cost[i] != 255u && qt_refs[i] == 0u) {"
+          "      qt_cost[i] = 255u; qt_used--; g_gc_reclaimed++;"
+          "    }"
+          "  }"
+          "}"
+          "static int qt_observe_cryptic(uint64_t cry_y, uint8_t gates, int pin_ref) {")
+        (gir-l8
+          "  if (qt_used > (QT_SIZE * 3u) / 4u) qt_compact_frontier();"
+          "  uint32_t h = qt_hash(cry_y);"
+          "  for (unsigned probe = 0; probe < 8u; probe++) {"
+          "    uint32_t idx = (h + probe) & QT_MASK;"
+          "    if (qt_cost[idx] == 255u) { qt_cry_tt[idx] = cry_y; qt_cost[idx] = gates; qt_refs[idx] = (uint8_t)(pin_ref ? 1u : 0u); qt_used++; return 2; }"
+          "    if (qt_cry_tt[idx] == cry_y) { g_identities++; g_pruned++; if (gates < qt_cost[idx]) { qt_cost[idx] = gates; if (pin_ref) qt_refs[idx] = 1u; return 2; } return 1; }"
+          "  }"
+          "  return 0; }"))
+      tl)

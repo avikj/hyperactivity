@@ -1,0 +1,20 @@
+tir-sol-3 : List Word → List Word
+tir-sol-3 tl =
+  tir-ln "  // Cold on-chain 6-input 64-bit NAND2 DAG truth-table verifier (up to 248 gates; closes unverified reveal drains!)"
+  (tir-ln "  function verifyNandDag64(uint64 specTT, uint16[] calldata gates) public pure returns (bool) {"
+  (tir-ln "    uint256 n = gates.length;"
+  (tir-ln "    if (n == 0 || n > 248) return false;"
+  (tir-ln "    uint64[256] memory w;"
+  (tir-ln "    w[0] = 0x0000000000000000; w[1] = 0xFFFFFFFFFFFFFFFF;"
+  (tir-ln "    w[2] = 0xAAAAAAAAAAAAAAAA; w[3] = 0xCCCCCCCCCCCCCCCC;"
+  (tir-ln "    w[4] = 0xF0F0F0F0F0F0F0F0; w[5] = 0xFF00FF00FF00FF00;"
+  (tir-ln "    w[6] = 0xFFFF0000FFFF0000; w[7] = 0xFFFFFFFF00000000;"
+  (tir-ln "    for (uint256 i = 0; i < n; i++) {"
+  (tir-ln "      uint256 idx = 8 + i;"
+  (tir-ln "      uint256 a = uint256(gates[i] >> 8);"
+  (tir-ln "      uint256 b = uint256(gates[i] & 0xFF);"
+  (tir-ln "      if (a >= idx || b >= idx) return false;"
+  (tir-ln "      w[idx] = ~(w[a] & w[b]);"
+  (tir-ln "    }"
+  (tir-ln "    return w[8 + n - 1] == specTT;"
+  (tir-ln "  }" tl)))))))))))))))))

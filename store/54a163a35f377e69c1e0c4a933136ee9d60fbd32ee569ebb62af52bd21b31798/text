@@ -1,0 +1,14 @@
+vir-sv-miter : List PolyOptCert → List F2OptCert → List Word
+vir-sv-miter rcs fcs =
+  list-append (po-suite-sv rcs fcs)
+  (hw-ln nil
+  (hw-ln "module hx_verify_formal_miter("
+  (hw-ln "  input  logic [31:0] v0, v1, v2, v3, v4,"
+  (hw-ln "  output logic        miter_err_o"
+  (hw-ln ");"
+  (hw-ln "  logic [31:0] spec_y, opt_y;"
+  (hw-ln "  // Certified F2OptCert + PolyOptCert equivalence miter wire (0 iff Spec === Impl)"
+  (hw-ln "  assign spec_y = v0 + v4 * (v1 + v4 * (v2 + v4 * v3));"
+  (hw-ln "  opt_vx_horner_deg3 u_opt(.v0(v0), .v1(v1), .v2(v2), .v3(v3), .v4(v4), .out0(opt_y));"
+  (hw-ln "  assign miter_err_o = (spec_y != opt_y);"
+  (hw-ln "endmodule" nil)))))))))))

@@ -1,0 +1,11 @@
+-- 1. 4-Step Sequential LFSR (x^4 + x + 1) State Update Spec vs 1-Cycle Parallel Jump-4 XOR Matrix Impl
+--    Inputs: v0..v3 = state s0..s3, v4..v7 = serial stream bits x0..x3.
+--    Spec executes 4 sequential feedback shift stages; Impl computes all 4 next-state bits in 1 flat XOR rank!
+vx-lfsr4-spec : F2Prog
+vx-lfsr4-spec =
+  f2prog #8
+    (cons (#8  , f2-xor (f2-xor (f2-v #0) (f2-v #1)) (f2-v #4))
+    (cons (#9  , f2-xor (f2-xor (f2-v #1) (f2-v #2)) (f2-v #5))
+    (cons (#10 , f2-xor (f2-xor (f2-v #2) (f2-v #3)) (f2-v #6))
+    (cons (#11 , f2-xor (f2-xor (f2-v #3) (f2-v #8)) (f2-v #7)) nil))))
+    (cons (f2-v #8) (cons (f2-v #9) (cons (f2-v #10) (cons (f2-v #11) nil))))

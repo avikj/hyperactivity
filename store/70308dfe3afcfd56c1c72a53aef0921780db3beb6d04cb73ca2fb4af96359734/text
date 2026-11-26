@@ -1,0 +1,12 @@
+tui-parse-peers-go : Nat → List Word → List Word
+tui-parse-peers-go zero _ = nil
+tui-parse-peers-go (suc k) s =
+  let pat = h-concat (cons "[" (cons tui-q nil)) in
+  if h-infix pat s then
+    let rest = h-after pat s
+        pid  = tui-take-q rest
+        next = h-after "]," rest
+        row  = the (List Word) (if h-null pid then nil
+               else tui-line (h-concat (cons (tui-peer-tag pid) (cons " " (cons tui-bold (cons tui-ink (cons (tui-take-chars (toNat #36) pid) (cons tui-rst nil))))))))
+    in list-append row (tui-parse-peers-go k next)
+  else nil

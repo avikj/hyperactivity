@@ -1,0 +1,34 @@
+tir-mh2 : List Word → List Word
+tir-mh2 tl =
+  tir-ln "int main(void) {"
+  (tir-ln "  @autoreleasepool {"
+  (tir-ln "    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();"
+  (tir-ln (tir-pf "    if (!dev) { printf(" "NO_METAL_DEVICE" "); return 1; }")
+  (tir-ln "    NSError* err = nil;"
+  (tir-ln "    NSString* src = [NSString stringWithContentsOfFile:[NSString stringWithUTF8String:kTrMetalPath] encoding:NSUTF8StringEncoding error:&err];"
+  (tir-ln "    MTLCompileOptions* opts = [[MTLCompileOptions alloc] init];"
+  (tir-ln "    opts.mathMode = MTLMathModeSafe;"
+  (tir-ln "    id<MTLLibrary> lib = [dev newLibraryWithSource:src options:opts error:&err];"
+  (tir-ln (tir-pf "    if (!lib) { fprintf(stderr, " "Metal err: %s" ", [[err localizedDescription] UTF8String]); return 1; }")
+  (tir-ln (list-append "    id<MTLFunction> fn = [lib newFunctionWithName:@" (list-append (tir-qq "hx_treasury_u256_kernel") "];"))
+  (tir-ln "    id<MTLComputePipelineState> pso = [dev newComputePipelineStateWithFunction:fn error:&err];"
+  (tir-ln "    id<MTLCommandQueue> q = [dev newCommandQueue];"
+  (tir-ln "    const uint32_t N = 65536u, STEPS = 16u; // 1,048,576 full 256-bit (U256 >2^155 wei) counterfactual AMM routes!"
+  (tir-ln "    id<MTLBuffer> bOut = [dev newBufferWithLength:(size_t)N*sizeof(TrGpuRes) options:MTLResourceStorageModeShared];"
+  (tir-ln "    mach_timebase_info_data_t tb; mach_timebase_info(&tb);"
+  (tir-ln "    uint64_t t0 = mach_absolute_time();"
+  (tir-ln "    id<MTLCommandBuffer> cb = [q commandBuffer];"
+  (tir-ln "    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];"
+  (tir-ln "    [enc setComputePipelineState:pso]; [enc setBuffer:bOut offset:0 atIndex:0]; [enc setBytes:&STEPS length:4 atIndex:1];"
+  (tir-ln "    [enc dispatchThreads:MTLSizeMake(N,1,1) threadsPerThreadgroup:MTLSizeMake(256,1,1)];"
+  (tir-ln "    [enc endEncoding]; [cb commit]; [cb waitUntilCompleted];"
+  (tir-ln "    uint64_t t1 = mach_absolute_time();"
+  (tir-ln "    double sec = (double)(t1 - t0) * (double)tb.numer / ((double)tb.denom * 1e9);"
+  (tir-ln "    TrGpuRes* r = (TrGpuRes*)[bOut contents];"
+  (tir-ln "    uint32_t kok=1u, dok=1u, gok=1u, mok=1u, pos=0u; uint64_t fSum=0ull;"
+  (tir-ln "    for(uint32_t i=0;i<N;i++){ kok&=r[i].k_ok; dok&=r[i].dust_ok; gok&=r[i].dag_ok; mok&=r[i].antimev_ok; if(r[i].best_profit>0) pos++; fSum+=r[i].founder_cut; }"
+  (tir-ln "    uint64_t routes = (uint64_t)N * (uint64_t)STEPS;"
+  (tir-ln (tir-pf "    printf(" "[HX-TREASURY METAL U256 SIM (%s)] routes=%llu | time=%.3f ms | %.2f M-u256-routes/s | k_ok=%u dust_ok=%u dag_ok=%u antimev_ok=%u arb_pools=%u/%u" ", [[dev name] UTF8String], (unsigned long long)routes, sec*1e3, (double)routes/(sec*1e6), kok, dok, gok, mok, pos, N);")
+  (tir-ln "    return (kok && dok && gok && mok && pos == N && fSum > 0ull) ? 0 : 1;"
+  (tir-ln "  }"
+  (tir-ln "}" tl)))))))))))))))))))))))))))))))

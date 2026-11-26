@@ -1,0 +1,12 @@
+-- Independent cold relational closure checker (`vx-rel-closed`) on any discovered `rel`:
+vx-pair-ok-inputs :
+  (Word → Word → Word × Word) →
+  (Word → Word → Word × Word) →
+  List (Word × Word) → Word → Word → Nat → Word → Bool
+vx-pair-ok-inputs stp1 stp2 rel q1 q2 zero x = true
+vx-pair-ok-inputs stp1 stp2 rel q1 q2 (suc rem) x =
+  let r1 = stp1 q1 x
+      r2 = stp2 q2 x
+  in web-andB (%weq (fst r1) (fst r2))
+       (web-andB (vx-pair-mem (snd r1) (snd r2) rel)
+                 (vx-pair-ok-inputs stp1 stp2 rel q1 q2 rem (%wadd x #1)))

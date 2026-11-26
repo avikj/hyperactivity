@@ -1,0 +1,16 @@
+-- On-chain reveal & cold-verifier settlement gate (NO untrusted `equivOk : Bool` oracle input!):
+--   1. `commitBlk < revealBlk` (1-block anti-MEV delay),
+--   2. `commitHash` matches `(callerAddr, bountyId, tr-dag-hash dag, tr-dag-len dag, salt)`,
+--   3. `tr-eval-dag64 dag` is topologically acyclic AND its 64-bit truth table equals `specTT`,
+--   4. `0 < tr-dag-len dag <= maxTargetCost`!
+tr-settle-bounty :
+  Word → Word → Word → Word → Word → Word → Word → Word → List (Word × Word) → Word → Word
+tr-settle-bounty rewardWei specTT maxTargetCost commitHash commitBlk revealBlk callerAddr bountyId dag salt =
+  let achievedCost = tr-dag-len dag
+      expected     = tr-commit-hash callerAddr bountyId dag salt
+      ev           = tr-eval-dag64 dag
+      blkOk        = %wlt commitBlk revealBlk
+      hashOk       = %weq expected commitHash
+      costOk       = andB (%wlt #0 achievedCost) (tr-not (%wlt maxTargetCost achievedCost))
+      equivOk      = andB (snd ev) (%weq (fst ev) specTT)
+  in if andB blkOk (andB hashOk (andB equivOk costOk)) then rewardWei else #0
