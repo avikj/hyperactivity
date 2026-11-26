@@ -141,3 +141,8 @@ Result: **123 of 126 modules checked, 0 failed**; 3 modules exceed the 600 s bou
 - `chem/h2r2.hypercubical`: the two 48-bit certificates bracketing p for H₂⁺ at R = 2 bohr (radial chains past depth 60, angular past 6), computed once and kept as verdicts.
 - `chem/hetemple.hypercubical`: helium's ground energy bracketed from both sides (Temple and Ritz) on the Hylleraas functions 1, s, u at α = 7/4.
 All three are leaves that no module imports; on this 2-vCPU machine the certified arithmetic runs past the bound. Run them without `timeout` to obtain the verdict.
+
+## Modules run past the 600 s limit (no timeout)
+| module | exit | seconds | kernel summary |
+|---|---|---|---|
+| chem/h2claim.hypercubical | 0 | 3747 | 832 passed, 0 failed; 41,548,845,923 interaction steps |
