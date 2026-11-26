@@ -1,0 +1,10 @@
+b2-fcos : Word → Word
+b2-fcos x =
+  if orB (ief-isnan x) (ief-isinf x) then ief-NAN
+  else if ief-iszero x then #1065353216
+  else (let rd = ief-reduce x
+            q = fst rd
+            sc = ief-sc (snd rd)
+            v = the (Word × List Word) (if %weq q #0 then snd sc else if %weq q #1 then sx-neg (fst sc)
+                else if %weq q #2 then sx-neg (snd sc) else fst sc)
+        in ief-fix (fst v) (snd v))

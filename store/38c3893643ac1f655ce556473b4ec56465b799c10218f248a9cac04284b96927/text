@@ -1,0 +1,23 @@
+-- Bend in hyperactivity: the language of HigherOrderCO/bend (bend2/bend.ts: its parser, its
+-- pattern flattener, its machine, its checker and its printer), on a flat memory of words. A term
+-- is a node in the memory; a binder's body is a closure record (the TypeScript holds JavaScript
+-- functions there); a share cell is a node written in place, as the TypeScript writes its object.
+-- `bend FILE` prints what `bun bend2/main.ts FILE` prints: the verdict on a book with no main, the
+-- error under SOME PROOFS FAIL with its excerpt and location, a value main at normal form, and an
+-- IO main run on the scheduler (print, write, print_err, args, get_env, now, sleep, random_u32,
+-- spawn, channels, files; the runtimes' U32, Nat and F32 operations). Base is BEND_DIR's
+-- base.bend (or a second argument).
+--
+-- The binary is b2-c compiled; its C is made in pieces, one run each, so no run holds the whole
+-- emission (lib/emit-slices):
+--   n = ./hyperactive view in lib/bend.hypercubical b2-c-count       (the functions, k < n/1000)
+--   ./hyperactive view in lib/bend.hypercubical b2-c-head          > bend.c
+--   ./hyperactive view in lib/bend.hypercubical b2-c-protos       >> bend.c
+--   ./hyperactive view in lib/bend.hypercubical "b2-c-part #k"    >> bend.c   (k = 0, 1, ..)
+--   ./hyperactive view in lib/bend.hypercubical b2-c-main         >> bend.c
+--   cc -O2 -o bend bend.c
+import "native-opt.hypercubical"
+import "hvm2.hypercubical"
+import "hvm4.hypercubical"
+import "emit-slices.hypercubical"
+
