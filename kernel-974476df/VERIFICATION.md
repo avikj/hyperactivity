@@ -28,3 +28,9 @@ Platform: Linux x86-64, 2 vCPU, 8 GB memory cgroup, gcc, glibc static. Every run
 `lib/check.hypercubical` carries no imports: it is written to load inside `lib/core.hypercubical`'s order
 (after the bootstrap files), so checking it alone reports unbound names (`Level`, `notb`); checked in
 that order it passes, as above.
+
+## nbe modules re-run alone (2026-11-26, nothing else running but one 330 MB check)
+lib/nbe-det, lib/nbe-interval, lib/nbe-cmap, lib/nbe-subst and lib/nbe were each killed by the
+container's 8 GB memory cgroup at 5.87–5.88 GB resident after 186–200 s (exit 137, dmesg
+"Memory cgroup out of memory"). The kernel reported no failure for any of them; they need a machine
+with more than about 6 GB available to the checker to reach a verdict.
