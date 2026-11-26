@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hyperactive Labs releases</title>
+<style>
+/*
+VOICE: a release ledger from a laboratory, terse and exact.
+IDEA: a tool catalog stamped like a shipping manifest, one row per released tool.
+PICTURE: the release's check line set huge: 5394 passed, 0 failed.
+COLOUR and TYPE: Hyperactive Labs' own: pure white, pure black, electric pink #ff0a94; monospace.
+LAYOUT: title band, the check figure, then release cards with asset tables.
+*/
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#000000);--ink:light-dark(#000000,#ffffff);--dim:light-dark(#555,#aaa);--pink:#ff0a94;--rule:light-dark(#000,#fff)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;overflow-x:clip}
+.band{padding:clamp(28px,4vw,64px) max(5vw,16px);max-width:1240px;margin:0 auto}
+header{background:var(--pink);color:#fff}
+header .band{display:flex;flex-wrap:wrap;gap:16px;align-items:end;justify-content:space-between}
+h1{font-size:clamp(32px,6vw,52px);line-height:1.05;margin:0;font-weight:700;text-wrap:balance}
+header p{margin:0;max-width:60ch}
+.figure{border-bottom:2px solid var(--rule)}
+.big{font-size:clamp(40px,9vw,96px);line-height:1;font-weight:700;margin:0}
+.big span{color:var(--pink)}
+.sub{color:var(--dim);margin:12px 0 0}
+section.rel{border:2px solid var(--rule);margin:0 0 32px}
+section.rel>div{padding:20px}
+.rel h2{font-size:24px;line-height:1.2;margin:0 0 6px}
+.meta{color:var(--dim);font-size:14px;margin:0 0 12px;overflow-wrap:anywhere}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-top:1px solid var(--rule);vertical-align:top}
+th{font-weight:700}
+td.n{text-align:right;white-space:nowrap}
+a{color:var(--pink);text-decoration:underline;text-underline-offset:3px}
+a:focus-visible{outline:2px solid var(--pink);outline-offset:2px}
+.tag{display:inline-block;border:1px solid var(--pink);color:var(--pink);padding:1px 8px;font-size:13px;margin-right:6px}
+.pending{color:var(--dim)}
+code{overflow-wrap:anywhere}
+pre,.scroll{overflow-x:auto}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal}.stack td:empty{display:none}}
+</style>
+<script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+<header><div class="band">
+<h1>hyperactivity releases</h1>
+<p>Tools emitted by the hyperactivity kernel from the content-addressed store, each release pinned to one store root and checked before it ships.</p>
+</div></header>
+
+<div class="band figure">
+<p class="big">5394 passed, <span>0 failed</span></p>
+<p class="sub">The 118-module closure of <code>lib/hx.hypercubical</code>, checked cold from store root 974476df (2,408,350,028 interaction steps) before <code>hx</code> was emitted.</p>
+</div>
+
+<main class="band" id="releases"></main>
+
+<script>
+{
+const REPO='https://github.com/avikj/hyperactivity';
+const releases=[
+ {tag:'hx-974476df',title:'hx — 45-engine scientific computing toolchain',root:'974476df85cd5ed2fe5aefde5432b81d24156c05f170b67ddaf5b5e71763a8af',commit:'92ee19d26',status:'released',
+  check:'5394 passed, 0 failed · Brunerie = −2 (1 and 4 workers) · rediscovered 6-input circuits re-checked 840 passed, 0 failed',
+  assets:[
+   ['hx-linux-x86_64','2,217,576 B','Static Linux x86-64 binary: synthesis and superoptimization, formal verification, silicon, exact physics and chemistry, GPU lowering, transport, coordination'],
+   ['cubical-linux-x86_64','2,061,072 B','The kernel: checks and runs any .hypercubical file from a repository checkout'],
+   ['hx.c','2,828,845 B','The ISO C11 source the kernel emitted; cc -std=c11 -O2 -o hx hx.c -lm on any platform'],
+   ['hx-engine-artifacts.tar.gz','162,710 B','Every artifact the engines emitted: C11, SystemVerilog, GDSII v6.0, Metal, CUDA, WASM, OpenQASM 3.0, Gerber, WAV'],
+   ['VERIFICATION.md','—','Every engine run, the rebuilt artifacts’ self-checks, and the hx cm / hx zip rewind defect with its cause'],
+   ['SHA256SUMS','—','Digests of every asset']]},
+ {tag:'silicon-974476df',title:'Silicon and EDA: EPFL netlists, interaction-net processor, GDSII',status:'building'},
+ {tag:'science-974476df',title:'Exact chemistry, physics and quantum gravity modules',status:'building'},
+ {tag:'kernel-974476df',title:'Kernel and formal mathematics',status:'building'}
+];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+document.getElementById('releases').innerHTML=releases.map(r=>{
+ const base=`./${encodeURIComponent(r.tag)}/`;
+ const head=`<h2>${esc(r.title)}</h2><p class="meta"><span class="tag">${esc(r.tag)}</span>${r.status==='released'?`store root ${esc(r.root)} · commit ${esc(r.commit)}`:'<span class="pending">bundle being built and checked</span>'}</p>`;
+ if(r.status!=='released')return `<section class="rel"><div>${head}</div></section>`;
+ const rows=r.assets.map(a=>`<tr><td><a href="./${encodeURIComponent(r.tag)}/${encodeURIComponent(a[0])}">${esc(a[0])}</a></td><td class="n">${esc(a[1])}</td><td>${esc(a[2])}</td></tr>`).join('');
+ return `<section class="rel"><div>${head}<p>${esc(r.check)}</p><p><a href="${base}README.md">Release notes</a> · <a href="${base}SHA256SUMS">SHA256SUMS</a></p><table class="stack"><thead><tr><th>Asset</th><th>Size</th><th>What it is</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+}).join('');
+}
+</script>
+</body>
+</html>
