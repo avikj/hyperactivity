@@ -1,0 +1,14 @@
+py-compile-lines : Nat → List (List Word) → Lst Meaning
+py-compile-lines zero _ = lnil
+py-compile-lines _ nil = lnil
+py-compile-lines (suc fuel) (cons ln rest) =
+  let tr = py-trim ln
+  in if py-null tr then py-compile-lines fuel rest
+     else if py-is-def-line tr then
+       let pr = py-take-body rest
+           mo = py-compile-def tr (fst pr)
+           tl = py-compile-lines fuel (snd pr)
+       in case mo of
+            some m → lcons m tl
+            none   → tl
+     else py-compile-lines fuel rest

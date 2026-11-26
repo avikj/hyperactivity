@@ -1,0 +1,25 @@
+tir-sol-5 : List Word → List Word
+tir-sol-5 tl =
+  tir-ln "  function refundExpiredBounty(uint256 bountyId) external nonReentrant {"
+  (tir-ln "    Bounty storage b = bounties[bountyId];"
+  (tir-ln "    require(!b.settled && block.timestamp > b.deadline && b.rewardWei > 0);"
+  (tir-ln "    b.settled = true;"
+  (tir-ln (list-append "    (bool ok, ) = b.sponsor.call{value: b.rewardWei}(" (list-append (tir-qq "") "); require(ok);"))
+  (tir-ln "  }"
+  (tir-ln ""
+  (tir-ln "  // RAIL 3: Zero-Principal Atomic Uniswap V2 Flash-Swap Arbitrage + Zero-Dust Waterfall"
+  (tir-ln "  function distributeTokenWaterfall(IERC20Minimal token, uint256 netProfit, address[] calldata chain) internal returns (uint256 founderPaid) {"
+  (tir-ln "    if (chain.length == 0) {"
+  (tir-ln "      require(token.transfer(founderBeneficiary, netProfit));"
+  (tir-ln "      return netProfit;"
+  (tir-ln "    }"
+  (tir-ln "    uint256 rem = netProfit;"
+  (tir-ln "    founderPaid = rem >> 1;"
+  (tir-ln "    rem -= founderPaid;"
+  (tir-ln "    require(token.transfer(founderBeneficiary, founderPaid));"
+  (tir-ln "    for (uint256 i = 0; i < chain.length; i++) {"
+  (tir-ln "      uint256 sh = (i + 1 == chain.length) ? rem : (rem >> 1);"
+  (tir-ln "      rem -= sh;"
+  (tir-ln "      if (sh > 0) require(token.transfer(chain[i], sh));"
+  (tir-ln "    }"
+  (tir-ln "  }" tl))))))))))))))))))))))

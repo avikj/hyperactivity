@@ -1,0 +1,11 @@
+-- THEOREM 2 (UNIVERSAL CONJUGATED ITERATION INVARIANT — ALL TYPES X, ALL STEPS n):
+--   (enc o F o dec)^n (enc x)  ===  enc (F^n x)
+fio-thm-conj-iter :
+  {X : Type} → (c : FiberCodec X) → (f : X → X) → (n : Nat) → (x : X) →
+  fio-iter n (fio-conj c f) (fc-enc c x) ≡ fc-enc c (fio-iter n f x)
+fio-thm-conj-iter c f zero    x = refl
+fio-thm-conj-iter c f (suc n) x =
+  let ih = fio-thm-conj-iter c f n x
+      s1 = fio-cong (fio-conj c f) ih
+      s2 = fio-cong (λ z → fc-enc c (f z)) (fc-ret c (fio-iter n f x))
+  in fio-trans s1 s2

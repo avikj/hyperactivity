@@ -1,0 +1,33 @@
+gir-c3 : List Word → List Word
+gir-c3 tl =
+  gir-lines
+    (list-append
+      (gir-l8
+        "// === STAGE B: EXACT 4-VAR SYNTHESIS + CAUSAL CONTEXT-FIBER TABLE (DEPTH 3..0) ==="
+        "static uint8_t  u4_cost[65536], u4_op[65536];"
+        "static uint16_t u4_pa[65536], u4_pb[65536], u4_order[65536];"
+        "static uint32_t u4_cnt = 0;"
+        "static uint64_t g_evals = 0, g_identities = 0, g_pruned = 0, g_gc_reclaimed = 0;"
+        "static uint32_t fib3[9][9][4][4], fib2[9][9][4], fib1[9][4], fib0[4];"
+        "static inline unsigned wbucket16(uint16_t t) { unsigned w = pop16(t); if (w > 8u) w = 16u - w; return w; }"
+        "static inline unsigned wbucket64(uint64_t t) { unsigned w = pop64(t); if (w > 32u) w = 64u - w; return w >> 2; }")
+      (gir-l8
+        "static inline unsigned ovclass64(uint64_t a, uint64_t b) {"
+        "  uint64_t ab = a & b;"
+        "  if (ab == 0ull) return 0u;"
+        "  if (ab == a || ab == b) return 1u;"
+        "  if ((a ^ b) == ~0ull) return 2u;"
+        "  return 3u; }"
+        "static inline uint16_t eval4_op(unsigned op, uint16_t a, uint16_t b) {"
+        "  switch (op & 3u) { case 0u: return (uint16_t)(a ^ b); case 1u: return (uint16_t)(a & b); case 2u: return (uint16_t)((~a) & b); default: return (uint16_t)(~(a & b)); } }"))
+    (gir-lines
+      (gir-l8
+        "// 1-Cycle Gauge-Conjugated 64-bit Gate Evaluator: hat_op_K(u, v) = E_K(op(D_K(u), D_K(v)))!"
+        "static inline uint64_t eval64_cryptic_op(unsigned op, uint64_t u, uint64_t v_in) {"
+        "  if (!g_gauge.pol) {"
+        "    switch (op & 3u) { case 0u: return u ^ v_in; case 1u: return u & v_in; case 2u: return (~u) & v_in; default: return ~(u & v_in); }"
+        "  } else {"
+        "    switch (op & 3u) { case 0u: return ~(u ^ v_in); case 1u: return u | v_in; case 2u: return (~u) | v_in; default: return ~(u | v_in); }"
+        "  }"
+        "}")
+      tl)

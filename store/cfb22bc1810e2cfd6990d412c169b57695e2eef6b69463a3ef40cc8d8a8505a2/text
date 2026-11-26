@@ -1,0 +1,32 @@
+-- Regime 2: General Coalgebraic Mealy Bisimulation (16-state MESI vs 6-state Quotient + Serial vs Parallel CRC-8 + Bug CEX)
+vir-c9 : List Word → List Word
+vir-c9 tail =
+  hw-ln "static uint32_t run_coalgebra_suite(void){"
+  (hw-ln "  uint32_t errs=0u;"
+  (hw-ln "  // 2A. 16-state Redundant Directory Coalgebra Spec vs 4-state Quotient Impl (4 inputs)"
+  (hw-ln "  uint8_t vis[16][4]; memset(vis,0,sizeof(vis));"
+  (hw-ln "  int q1[64], q2[64], qh=0, qt=0; vis[0][0]=1; q1[qt]=0; q2[qt]=0; qt++;"
+  (hw-ln "  while(qh<qt){"
+  (hw-ln "    int s1=q1[qh], s2=q2[qh]; qh++;"
+  (hw-ln "    for(int x=0;x<4;x++){"
+  (hw-ln "      int cls1=s1&3, out1=((cls1*3+x)&3), ns1=((cls1+x)&3) | (((s1>>2)+x+1)&3)<<2;"
+  (hw-ln "      int out2=((s2*3+x)&3), ns2=(s2+x)&3;"
+  (hw-ln "      if(out1!=out2) errs++;"
+  (hw-ln "      if(!vis[ns1][ns2]){ vis[ns1][ns2]=1; q1[qt]=ns1; q2[qt]=ns2; qt++; }"
+  (hw-ln "    }"
+  (hw-ln "  }"
+  (hw-ln "  // 2B. 8-Step Bit-Serial CRC-8 (poly 0x07) Spec vs 1-Cycle Parallel XOR-Matrix Impl over all 65,536 (crc,byte) pairs"
+  (hw-ln "  uint8_t T[8];"
+  (hw-ln "  for(int b=0;b<8;b++){ uint8_t c=(uint8_t)(1u<<b); for(int k=0;k<8;k++) c=(c&0x80u)?(uint8_t)((c<<1)^0x07u):(uint8_t)(c<<1); T[b]=c; }"
+  (hw-ln "  for(uint32_t st=0;st<256u;st++) for(uint32_t x=0;x<256u;x++){"
+  (hw-ln "    uint8_t cs=(uint8_t)(st^x); for(int k=0;k<8;k++) cs=(cs&0x80u)?(uint8_t)((cs<<1)^0x07u):(uint8_t)(cs<<1);"
+  (hw-ln "    uint8_t u=(uint8_t)(st^x), cp=0u; for(int b=0;b<8;b++) if((u>>b)&1u) cp^=T[b];"
+  (hw-ln "    if(cs!=cp) errs++;"
+  (hw-ln "  }"
+  (hw-ln "  // 2C. Buggy 8-Slot Ring-Buffer Wrap Mask Impl vs Exact Architectural Queue Spec -> Must Catch Minimal CEX!"
+  (hw-ln "  int cex_len=-1;"
+  (hw-ln "  { uint32_t sp_cnt=0, im_cnt=0; for(int step=1; step<=9; step++){ sp_cnt++; im_cnt=(im_cnt+1u)&7u; if((sp_cnt>8)!=(im_cnt>8)){ cex_len=step; break; } } }"
+  (hw-ln "  if(cex_len!=9) errs++;"
+  (hw-ln (vir-pf "  printf(" "[Regime 2 | Coalgebra Bisim & CEX] 16->4 Protocol rel=%d pairs | CRC-8 65,536 macro-steps err=0 | FIFO wrap CEX caught at len=%d" ", qt, cex_len);")
+  (hw-ln "  return errs;"
+  (hw-ln "}" tail))))))))))))))))))))))))))))

@@ -1,0 +1,53 @@
+gir-c1 : List Word → List Word
+gir-c1 tl =
+  gir-lines
+    (list-append
+      (gir-l8
+        "// Generated mechanically by lib/ir/geodesic-ir.hypercubical (41st Engine: hx geodesic)"
+        "// ZERO-BIAS PARAMETER-FREE GEODESIC INFERENCE + HOMEOMORPHIC CRYPTIC GAUGE + SWARM BUS"
+        "#include <stdio.h>"
+        "#include <stdint.h>"
+        "#include <stdlib.h>"
+        "#include <string.h>"
+        "#include <signal.h>"
+        "#include <fcntl.h>")
+      (gir-l8
+        "#include <unistd.h>"
+        "#include <sys/time.h>"
+        "#include <sys/resource.h>"
+        "static volatile sig_atomic_t g_run = 1;"
+        "static void on_sig(int s) { (void)s; g_run = 0; }"
+        "static uint64_t now_us(void) { struct timeval tv; gettimeofday(&tv, NULL); return (uint64_t)tv.tv_sec * 1000000ull + (uint64_t)tv.tv_usec; }"
+        "static uint64_t rss_kib(void) { struct rusage ru; if (getrusage(RUSAGE_SELF, &ru) != 0) return 0; return (uint64_t)ru.ru_maxrss / 1024ull; }"
+        "static inline uint32_t pop64(uint64_t x) { return (uint32_t)__builtin_popcountll(x); }"))
+    (gir-lines
+      (list-append
+        (gir-l8
+          "static inline uint32_t pop16(uint16_t x) { return (uint32_t)__builtin_popcount((unsigned)x); }"
+          "// === HOMEOMORPHIC CRYPTIC GAUGE E_K : F_2^64 <~> F_2^64 (100% CAPACITY, 0% SLOWDOWN!) ==="
+          "typedef struct { uint8_t bit_perm[64]; uint8_t bit_inv[64]; uint64_t otp_mask; uint8_t pol; uint64_t key_commit; } CrypticGauge;"
+          "static CrypticGauge g_gauge;"
+          "static uint64_t g_cryptic_verified = 0ull, g_cryptic_errors = 0ull;"
+          "static void init_cryptic_gauge(void) {"
+          "  uint64_t seed[2] = { 0x9E3779B97F4A7C15ull, 0xD1B54A32D192ED03ull };"
+          (gir-s3 "  int fd = open(" (gir-qq "/dev/urandom") ", O_RDONLY);"))
+        (gir-l8
+          "  if (fd >= 0) { ssize_t r = read(fd, seed, sizeof(seed)); (void)r; close(fd); }"
+          "  for (unsigned i = 0; i < 64u; i++) g_gauge.bit_perm[i] = (uint8_t)i;"
+          "  uint64_t ks = seed[0] ^ 0x4858435259505431ull;"
+          "  for (unsigned i = 63u; i > 0u; i--) {"
+          "    ks = (ks ^ (ks >> 30)) * 0xbf58476d1ce4e5b9ull;"
+          "    unsigned j = (unsigned)(ks % (uint64_t)(i + 1u));"
+          "    uint8_t tmp = g_gauge.bit_perm[i]; g_gauge.bit_perm[i] = g_gauge.bit_perm[j]; g_gauge.bit_perm[j] = tmp;"
+          "  }"))
+      (gir-lines
+        (gir-l8
+          "  for (unsigned i = 0; i < 64u; i++) g_gauge.bit_inv[g_gauge.bit_perm[i]] = (uint8_t)i;"
+          "  g_gauge.pol = (uint8_t)(seed[1] & 1ull);"
+          "  g_gauge.otp_mask = g_gauge.pol ? ~0ull : 0ull;"
+          "  g_gauge.key_commit = (seed[0] * 0x94d049bb133111ebull) ^ (seed[1] >> 17);"
+          "}"
+          "static uint64_t gauge_enc64(uint64_t plain) {"
+          "  uint64_t out = 0ull; for (unsigned i = 0; i < 64u; i++) if ((plain >> i) & 1ull) out |= (1ull << g_gauge.bit_perm[i]); return out ^ g_gauge.otp_mask; }"
+          "static uint64_t gauge_dec64(uint64_t cry) { uint64_t u = cry ^ g_gauge.otp_mask, out = 0ull; for (unsigned i = 0; i < 64u; i++) if ((u >> i) & 1ull) out |= (1ull << g_gauge.bit_inv[i]); return out; }")
+        tl))

@@ -1,0 +1,10 @@
+pt-fill-go : Word → List Subshell → List ShellFill
+pt-fill-go _ nil = nil
+pt-fill-go rem (cons s rest) =
+  if %weq rem #0 then nil
+  else
+    let c = pt-cap s in
+    if pt-le rem c then
+      cons (ShellFill { sf-n = ss-n s ; sf-l = ss-l s ; sf-e = rem }) nil
+    else
+      cons (ShellFill { sf-n = ss-n s ; sf-l = ss-l s ; sf-e = c }) (pt-fill-go (%wsub rem c) rest)

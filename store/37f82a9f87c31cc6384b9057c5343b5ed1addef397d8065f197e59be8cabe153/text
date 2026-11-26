@@ -1,0 +1,21 @@
+-- Expand all inputs `0 .. nI-1` from product state `(q1, q2)` reached by `tr`:
+vx-expand-inputs :
+  (Word → Word → Word × Word) →
+  (Word → Word → Word × Word) →
+  Word → Word → List Word → Nat → Word →
+  List (Word × Word) → List ((Word × Word) × List Word) →
+  Sum (List Word) (List (Word × Word) × List ((Word × Word) × List Word))
+vx-expand-inputs stp1 stp2 q1 q2 tr zero x vis q = inr (vis , q)
+vx-expand-inputs stp1 stp2 q1 q2 tr (suc rem) x vis q =
+  let r1 = stp1 q1 x
+      r2 = stp2 q2 x
+      tr1 = vx-snoc tr x
+  in if web-notB (%weq (fst r1) (fst r2)) then inl tr1
+     else
+       let n1 = snd r1
+           n2 = snd r2
+       in if vx-pair-mem n1 n2 vis
+          then vx-expand-inputs stp1 stp2 q1 q2 tr rem (%wadd x #1) vis q
+          else vx-expand-inputs stp1 stp2 q1 q2 tr rem (%wadd x #1)
+                 (cons (n1 , n2) vis)
+                 (vx-q-app q (cons ((n1 , n2) , tr1) nil))

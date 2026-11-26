@@ -1,0 +1,16 @@
+-- every walk of k steps from s, each step any of lines top, top − 1, … , 0 either way (i counts the lines still to
+-- try at this step): Gauss's law at vertices up to v. f bounds the depth, and running out of it is false
+cv-all : Nat → Nat → Nat → Nat → Nat → List FaradayLine → CvState → Bool
+cv-all f k i top v ls s = case f of
+  zero → false
+  suc e → (case k of
+    zero → cv-gauss-to v ls s
+    suc g → (if cv-gauss-to v ls s
+      then (if cv-all e g top top v ls (cv-step ls (i , true) s)
+        then (if cv-all e g top top v ls (cv-step ls (i , false) s)
+          then (case i of
+            zero → true
+            suc j → cv-all e k j top v ls s)
+          else false)
+        else false)
+      else false))

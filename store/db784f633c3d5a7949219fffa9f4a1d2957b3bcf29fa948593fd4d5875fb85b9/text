@@ -1,0 +1,11 @@
+ge-factor-sound : (env : Nat → Bool) → (e : GuardExpr) → ge-eval env (ge-factor e) ≡ ge-eval env e
+ge-factor-sound env (ge-k b)     = refl
+ge-factor-sound env (ge-v i)     = refl
+ge-factor-sound env (ge-not a)   =
+  bfm-trans (ge-lem-mk-not env (ge-factor a)) (λ i → bfm-notB (ge-factor-sound env a i))
+ge-factor-sound env (ge-and a b) =
+  bfm-trans (ge-lem-mk-and env (ge-factor a) (ge-factor b))
+            (λ i → bfm-andB (ge-factor-sound env a i) (ge-factor-sound env b i))
+ge-factor-sound env (ge-ite c t f) =
+  bfm-trans (ge-lem-mk-ite env (ge-factor c) (ge-factor t) (ge-factor f))
+            (λ i → bfm-iteB (ge-factor-sound env c i) (ge-factor-sound env t i) (ge-factor-sound env f i))

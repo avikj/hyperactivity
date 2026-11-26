@@ -1,0 +1,43 @@
+vir-mh3 : List Word → List Word
+vir-mh3 tail =
+  hw-ln "int main(void) {"
+  (hw-ln "  @autoreleasepool {"
+  (hw-ln "    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();"
+  (hw-ln (vir-pf "    if (!dev) { printf(" "NO_METAL_DEVICE" "); return 1; }")
+  (hw-ln "    NSError* err = nil;"
+  (hw-ln "    NSString* src = [NSString stringWithContentsOfFile:[NSString stringWithUTF8String:kVxMetalPath] encoding:NSUTF8StringEncoding error:&err];"
+  (hw-ln (vir-pf "    if (!src) { fprintf(stderr, " "Failed to read metal shader" "); return 1; }")
+  (hw-ln "    MTLCompileOptions* opts = [[MTLCompileOptions alloc] init];"
+  (hw-ln "    opts.mathMode = MTLMathModeSafe;"
+  (hw-ln "    id<MTLLibrary> lib = [dev newLibraryWithSource:src options:opts error:&err];"
+  (hw-ln (vir-pf "    if (!lib) { fprintf(stderr, " "Metal compile err: %s" ", [[err localizedDescription] UTF8String]); return 1; }")
+  (hw-ln (list-append "    id<MTLFunction> fn = [lib newFunctionWithName:@" (list-append vir-q (list-append "vx_verify_miter_kernel" (list-append vir-q "];"))))
+  (hw-ln "    id<MTLComputePipelineState> pso = [dev newComputePipelineStateWithFunction:fn error:&err];"
+  (hw-ln "    id<MTLCommandQueue> q = [dev newCommandQueue];"
+  (hw-ln "    const uint32_t N = 4194304u;"
+  (hw-ln "    id<MTLBuffer> bIn  = [dev newBufferWithLength:(size_t)N*16u options:MTLResourceStorageModeShared];"
+  (hw-ln "    id<MTLBuffer> bErr = [dev newBufferWithLength:(size_t)N*4u  options:MTLResourceStorageModeShared];"
+  (hw-ln "    id<MTLBuffer> bSig = [dev newBufferWithLength:(size_t)N*4u  options:MTLResourceStorageModeShared];"
+  (hw-ln "    uint32_t* pIn = (uint32_t*)[bIn contents];"
+  (hw-ln "    for (uint32_t i = 0; i < N*4u; i++) pIn[i] = i * 2654435761u ^ 0x9e3779b9u;"
+  (hw-ln "    mach_timebase_info_data_t tb; mach_timebase_info(&tb);"
+  (hw-ln "    uint64_t t0 = mach_absolute_time();"
+  (hw-ln "    id<MTLCommandBuffer> cb = [q commandBuffer];"
+  (hw-ln "    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];"
+  (hw-ln "    [enc setComputePipelineState:pso];"
+  (hw-ln "    [enc setBuffer:bIn offset:0 atIndex:0]; [enc setBuffer:bErr offset:0 atIndex:1]; [enc setBuffer:bSig offset:0 atIndex:2];"
+  (hw-ln "    [enc dispatchThreads:MTLSizeMake(N,1,1) threadsPerThreadgroup:MTLSizeMake(256,1,1)];"
+  (hw-ln "    [enc endEncoding]; [cb commit]; [cb waitUntilCompleted];"
+  (hw-ln "    uint64_t t1 = mach_absolute_time();"
+  (hw-ln "    double sec = (double)(t1 - t0) * (double)tb.numer / ((double)tb.denom * 1e9);"
+  (hw-ln "    uint32_t* pErr = (uint32_t*)[bErr contents]; uint32_t* pSig = (uint32_t*)[bSig contents];"
+  (hw-ln "    uint32_t miterBad = 0u, sigBad = 0u;"
+  (hw-ln "    for (uint32_t i = 0; i < N; i++) if (pErr[i] != 0u) miterBad++;"
+  (hw-ln "    for (uint32_t i = 0; i < 65536u; i++) {"
+  (hw-ln "      uint32_t idx = (i * 61u) & (N - 1u);"
+  (hw-ln "      if (pSig[idx] != vx_cpu_sig(pIn[idx*4u], pIn[idx*4u+1u], pIn[idx*4u+2u], pIn[idx*4u+3u])) sigBad++;"
+  (hw-ln "    }"
+  (hw-ln (vir-pf "    printf(" "HX-VERIFY LIVE METAL GPU (%s): threads=%u | time=%.3f ms | %.2f G-threads/s | %.2f G-miter-checks/s | miter_err=%u cpu_gpu_err=%u" ", [[dev name] UTF8String], N, sec*1e3, (double)N/(sec*1e9), (double)N*32.0/(sec*1e9), miterBad, sigBad);")
+  (hw-ln "    return (miterBad || sigBad) ? 1 : 0;"
+  (hw-ln "  }"
+  (hw-ln "}" tail))))))))))))))))))))))))))))))))))))))))

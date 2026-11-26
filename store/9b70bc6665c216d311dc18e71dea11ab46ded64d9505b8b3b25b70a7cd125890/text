@@ -1,0 +1,9 @@
+-- Exhaustive verifier over all 16 LUT4 ops x all 8 wire-key gauges x all 4 input pairs = 512 checks!
+cry-check-inputs : Word → Bool → Bool → Bool → Bool
+cry-check-inputs lut ma mb mc =
+  let clut = cry-lut4-conj lut ma mb mc
+      ok00 = weq (cry-b2w (bxor mc (cry-lut4-eval clut (bxor ma false) (bxor mb false)))) (cry-b2w (cry-lut4-eval lut false false))
+      ok10 = weq (cry-b2w (bxor mc (cry-lut4-eval clut (bxor ma true)  (bxor mb false)))) (cry-b2w (cry-lut4-eval lut true  false))
+      ok01 = weq (cry-b2w (bxor mc (cry-lut4-eval clut (bxor ma false) (bxor mb true))))  (cry-b2w (cry-lut4-eval lut false true))
+      ok11 = weq (cry-b2w (bxor mc (cry-lut4-eval clut (bxor ma true)  (bxor mb true))))  (cry-b2w (cry-lut4-eval lut true  true))
+  in andB ok00 (andB ok10 (andB ok01 ok11))

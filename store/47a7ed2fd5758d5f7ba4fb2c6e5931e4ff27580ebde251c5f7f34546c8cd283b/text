@@ -1,0 +1,11 @@
+-- Concrete Vault & Parser Guard Models:
+--   v0 = callerIsRelayer, v1 = reentrantCallbackAttempt, v2 = postBalLtRequired, v3 = trailingJsonBytesGt64
+-- 1. Guarded HxMaxLevMorphoVault: SSTORE(0,0) clears active lock BEFORE subcalls, so reentrant entry requires (v1 /\ ~v1);
+--    under-repayment requires (v2 /\ ~v2) due to LT(postBal, reqBal) -> REVERT!
+bfm-vault-guarded-bad : GuardExpr
+bfm-vault-guarded-bad =
+  ge-ite (ge-v zero)
+    (ge-ite (ge-v (suc (suc (suc zero))))
+      (ge-and (ge-v (suc zero)) (ge-not (ge-v (suc zero))))
+      (ge-and (ge-v (suc (suc zero))) (ge-not (ge-v (suc (suc zero))))))
+    (ge-and (ge-v zero) (ge-not (ge-v zero)))

@@ -1,0 +1,18 @@
+-- General recursive-descent expression evaluator + cost counter over x0..x7 (zero UB: all uint64_t!)
+vir-c2 : List Word → List Word
+vir-c2 tail =
+  hw-ln "typedef struct { const char* p; uint64_t v[8]; uint32_t muls, ands, ops; int err; } VEnv;"
+  (hw-ln "static void v_ws(VEnv* e){ while(*e->p==' '||*e->p==9||*e->p==10||*e->p==13) e->p++; }"
+  (hw-ln "static uint64_t v_or(VEnv* e);"
+  (hw-ln "static uint64_t v_atom(VEnv* e){"
+  (hw-ln "  v_ws(e);"
+  (hw-ln "  if(*e->p=='('){ e->p++; uint64_t r=v_or(e); v_ws(e); if(*e->p==')') e->p++; else e->err=1; return r; }"
+  (hw-ln "  if(*e->p=='~'){ e->p++; e->ops++; return ~v_atom(e); }"
+  (hw-ln "  if(*e->p=='-'){ e->p++; e->ops++; return 0ull - v_atom(e); }"
+  (hw-ln "  if((*e->p=='x'||*e->p=='v') && e->p[1]>='0' && e->p[1]<='7'){ int idx=e->p[1]-'0'; e->p+=2; return e->v[idx]; }"
+  (hw-ln "  if(*e->p>='0' && *e->p<='9'){"
+  (hw-ln "    char* end=NULL; unsigned long long c=strtoull(e->p,&end,0);"
+  (hw-ln "    if(end==e->p){ e->err=1; return 0ull; } e->p=end; return (uint64_t)c;"
+  (hw-ln "  }"
+  (hw-ln "  e->err=1; return 0ull;"
+  (hw-ln "}" tail))))))))))))))

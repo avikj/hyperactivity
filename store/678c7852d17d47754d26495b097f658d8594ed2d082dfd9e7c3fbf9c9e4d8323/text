@@ -1,0 +1,7 @@
+-- THEOREM 3 (UNIVERSAL EXACT DECODING OF ENCRYPTED EXECUTION):
+--   dec ((enc o F o dec)^n (enc x))  ===  F^n x
+fio-thm-conj-exact-behavior :
+  {X : Type} → (c : FiberCodec X) → (f : X → X) → (n : Nat) → (x : X) →
+  fc-dec c (fio-iter n (fio-conj c f) (fc-enc c x)) ≡ fio-iter n f x
+fio-thm-conj-exact-behavior c f n x =
+  fio-trans (fio-cong (fc-dec c) (fio-thm-conj-iter c f n x)) (fc-ret c (fio-iter n f x))

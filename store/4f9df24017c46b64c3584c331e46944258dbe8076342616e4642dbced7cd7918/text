@@ -1,0 +1,15 @@
+-- THEOREM 15 (Characteristica Universalis — Calculus Ratiocinator Superoptimizer Soundness):
+-- Eliminates arbitrary nested zero-flux shifts and involutive moving-line pairs with 0 semantic loss!
+hxp-thm-characteristica-superopt-sound :
+  (e : CuTerm) → cu-eval (cu-superopt e) ≡ cu-eval e
+hxp-thm-characteristica-superopt-sound (cu-atom h) = refl
+hxp-thm-characteristica-superopt-sound (cu-zero-shift e) =
+  let ih = hxp-thm-characteristica-superopt-sound e
+  in hxp-trans ih (hxp-sym (hxp-hex6-xor-zero (cu-eval e)))
+hxp-thm-characteristica-superopt-sound (cu-dbl-change e m) =
+  let ih = hxp-thm-characteristica-superopt-sound e
+  in hxp-trans ih (hxp-sym (hxp-hex6-xor-cancel (cu-eval e) m))
+hxp-thm-characteristica-superopt-sound (cu-cut a b) =
+  let iha = hxp-thm-characteristica-superopt-sound a
+      ihb = hxp-thm-characteristica-superopt-sound b
+  in λ i → hxp-hex6-xor (iha i) (ihb i)

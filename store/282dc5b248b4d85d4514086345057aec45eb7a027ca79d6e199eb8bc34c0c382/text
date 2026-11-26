@@ -1,0 +1,18 @@
+tir-c5 : List Word → List Word
+tir-c5 tl =
+  tir-ln "int main(void){"
+  (tir-ln "  char bUni[512]={0}, bBs[512]={0}, bCb[256]={0};"
+  (tir-ln (list-append "  const char* defUni = " (list-append (tir-qq "0x00000000000000000000000000000000000000000000000faffc80612858d54200000000000000000000000000000000000000000000000000000071676f8f71") ";"))
+  (tir-ln (list-append "  const char* defBs  = " (list-append (tir-qq "0x0000000000000000000000000000000000000000000000002508450c3da9d366000000000000000000000000000000000000000000000000000000010b62ccc3") ";"))
+  (tir-ln (list-append "  int liveUni = read_file_buf(" (list-append (tir-qq "/tmp/hy_out/live_world_feeds/base_uniswapv2_weth_usdc.json") ", bUni, sizeof(bUni));"))
+  (tir-ln (list-append "  int liveBs  = read_file_buf(" (list-append (tir-qq "/tmp/hy_out/live_world_feeds/base_baseswap_weth_usdc.json") ", bBs, sizeof(bBs));"))
+  (tir-ln (list-append "  int liveCb  = read_file_buf(" (list-append (tir-qq "/tmp/hy_out/live_world_feeds/cb_eth.json") ", bCb, sizeof(bCb));"))
+  (tir-ln (list-append "  const char* pUni = liveUni ? strstr(bUni, " (list-append (tir-qq "0x") ") : defUni;"))
+  (tir-ln (list-append "  const char* pBs  = liveBs  ? strstr(bBs,  " (list-append (tir-qq "0x") ") : defBs;"))
+  (tir-ln "  if(!pUni) pUni = defUni; if(!pBs) pBs = defBs;"
+  (tir-ln "  u128 uniWeth = parse_abi_u128(pUni + 2),  uniUsdc = parse_abi_u128(pUni + 66);"
+  (tir-ln "  u128 bsWeth  = parse_abi_u128(pBs  + 2),  bsUsdc  = parse_abi_u128(pBs  + 66);"
+  (tir-ln "  uint64_t uniPxCents = (uint64_t)((uniUsdc * 100000000000000ull) / uniWeth);"
+  (tir-ln "  uint64_t bsPxCents  = (uint64_t)((bsUsdc  * 100000000000000ull) / bsWeth);"
+  (tir-ln (list-append "  uint64_t cbEthCents = liveCb ? parse_cents_after(bCb, " (list-append (tir-qq "amount") ") : 168283ull;"))
+  tl))))))))))))))

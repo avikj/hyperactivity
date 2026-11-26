@@ -1,0 +1,7 @@
+-- Compile-time gauge conjugation of a LUT4 table under per-wire polarity keys (ma, mb, mc):
+cry-lut4-bit : Word → Bool → Bool → Bool → Word → Word
+cry-lut4-bit lut ma mb mc idx =
+  let ba  = %weq (%wand idx #1) #1
+      bb  = %weq (%wand (%wshr idx #1) #1) #1
+      by0 = bxor mc (cry-lut4-eval lut (bxor ma ba) (bxor mb bb))
+  in %wshl (cry-b2w by0) idx

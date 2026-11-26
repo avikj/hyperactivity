@@ -1,0 +1,14 @@
+vir-c4 : List Word → List Word
+vir-c4 tail =
+  hw-ln "static uint64_t v_and(VEnv* e){ uint64_t r=v_add(e); for(;;){ v_ws(e); if(*e->p=='&'){ e->p++; e->ands++; e->ops++; r &= v_add(e); } else break; } return r; }"
+  (hw-ln "static uint64_t v_xor(VEnv* e){ uint64_t r=v_and(e); for(;;){ v_ws(e); if(*e->p=='^'){ e->p++; e->ops++; r ^= v_and(e); } else break; } return r; }"
+  (hw-ln "static uint64_t v_or(VEnv* e){ uint64_t r=v_xor(e); for(;;){ v_ws(e); if(*e->p=='|'){ e->p++; e->ands++; e->ops++; r |= v_xor(e); } else break; } return r; }"
+  (hw-ln "static uint64_t eval_expr(const char* src, const uint64_t in[8], uint32_t* muls, uint32_t* ands, uint32_t* ops, int* err){"
+  (hw-ln "  VEnv e; e.p=src; for(int i=0;i<8;i++) e.v[i]=in[i]; e.muls=0; e.ands=0; e.ops=0; e.err=0;"
+  (hw-ln "  uint64_t r=v_or(&e); v_ws(&e); if(*e.p!=0) e.err=1;"
+  (hw-ln "  if(muls)*muls=e.muls; if(ands)*ands=e.ands; if(ops)*ops=e.ops; if(err)*err=e.err; return r;"
+  (hw-ln "}"
+  (hw-ln "static uint64_t bool_tt6(const char* src, uint32_t* ands, uint32_t* ops, int* err){"
+  (hw-ln "  const uint64_t B6[8]={0xAAAAAAAAAAAAAAAAull,0xCCCCCCCCCCCCCCCCull,0xF0F0F0F0F0F0F0F0ull,0xFF00FF00FF00FF00ull,0xFFFF0000FFFF0000ull,0xFFFFFFFF00000000ull,0ull,0ull};"
+  (hw-ln "  return eval_expr(src, B6, NULL, ands, ops, err);"
+  (hw-ln "}" tail)))))))))))

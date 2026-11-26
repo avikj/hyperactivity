@@ -1,0 +1,7 @@
+geo-cascade : Nat → List Word → CtxState → GeoChoice
+geo-cascade zero excl st =
+  gc-ground (cm-head-or #0 (unseen-bytes excl))
+geo-cascade (suc k) excl st =
+  case ftbl-exclude excl (cstate-fiber-at k st) of
+    nil → geo-cascade k excl st
+    cons e tail0 → geo-classify-tail k e tail0

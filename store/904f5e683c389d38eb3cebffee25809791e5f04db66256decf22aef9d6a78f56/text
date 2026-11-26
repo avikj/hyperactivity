@@ -1,0 +1,16 @@
+vir-cuda-kernel : List PolyOptCert → List F2OptCert → List Word
+vir-cuda-kernel rcs fcs =
+  hw-ln "#include <stdint.h>"
+  (po-lower-rings-both kt-cuda rcs
+  (po-lower-f2s-both   kt-cuda fcs
+  (hw-ln (list-append "extern " (list-append (vir-qq "C") " __global__ void vx_verify_cuda_kernel(const uint32_t* inBuf, uint32_t* outErr, uint32_t N) {"))
+  (hw-ln "  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;"
+  (hw-ln "  if (tid >= N) return;"
+  (hw-ln "  uint32_t b = tid * 4u;"
+  (hw-ln "  uint32_t x0=inBuf[b], x1=inBuf[b+1u], x2=inBuf[b+2u], x3=inBuf[b+3u];"
+  (hw-ln "  uint32_t x4=x0^0x9e3779b9u, x5=x1^0x85ebca6bu, x6=x2^0xc2b2ae35u, x7=x3^0x27d4eb2fu;"
+  (hw-ln "  uint32_t s0[4], c0[4], s1[1], c1[1];"
+  (hw-ln "  spec_vx_lfsr_jump4(x0,x1,x2,x3,x4,x5,x6,x7,s0); opt_vx_lfsr_jump4(x0,x1,x2,x3,x4,x5,x6,x7,c0);"
+  (hw-ln "  spec_vx_mux_pipe4(x0,x1,x2,x3,x4,s1); opt_vx_mux_pipe4(x0,x1,x2,x3,x4,c1);"
+  (hw-ln "  outErr[tid] = (s0[0]^c0[0]) | (s0[1]^c0[1]) | (s0[2]^c0[2]) | (s0[3]^c0[3]) | (s1[0]^c1[0]);"
+  (hw-ln "}" nil)))))))))))))

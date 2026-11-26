@@ -1,0 +1,55 @@
+# hx
+
+The native command line of hyperactivity: 45 engines in one C11 program, emitted by the machine from
+`lib/hx.hypercubical` (`hx-c = emit-c-cli-opt (code hx-main)`). One file, no dependencies beyond a C
+compiler and libm.
+
+## Get it and run it
+
+The machine emits `hx.c` from the store; any C11 compiler builds it.
+
+```sh
+git clone https://github.com/avikj/hyperactivity && cd hyperactivity && make
+printf '%s\n' 'import "../lib/host.hypercubical"' 'import "../lib/hx.hypercubical"' \
+  'view-probe : Proc W Unit' \
+  'view-probe = bind (bind (h-out (hx-c)) (λ u2 → h-out (cons #10 nil))) (λ u → exit #0)' \
+  'view-run : Step W Unit' 'view-run = to-step view-probe' '#run view-run' > build/probe-hx.hypercubical
+./build/cubical build/probe-hx.hypercubical > hx.c       # about 4 minutes, 2,828,834 bytes at root 974476d
+cc -O2 -o hx hx.c -lm -lpthread
+mkdir -p /tmp/hy_out /tmp/hx_agent_bus
+./hx                 # the engines
+./hx matter          # one engine
+```
+
+At root `974476d` the emitted `hx.c` has SHA-256 `24a5d4a1a846bab033b05a2da595476812771375ecd70f261915e9c5f6b5138e`.
+
+Engines write what they emit (C11, Apple Metal, CUDA, SystemVerilog, GDSII, OpenQASM, WebAssembly) under
+`/tmp/hy_out`, and the agent bus under `/tmp/hx_agent_bus`.
+
+## Engines
+
+Every engine below was run once from this build on Linux x86_64 (static binary, gcc 13.3) and exited 0
+with every write it made succeeding.
+
+| Field | Command | What it does |
+|---|---|---|
+| Transport, mesh | `hx hxp` | 64-byte Hexagram exchange cells, flat mmap arena, unified-memory Metal |
+| | `hx sovereign status` | private multi-cloud socket mesh |
+| | `hx node [listen PORT \| send PORT mode \| N]` | proof-of-useful-work UDP peer |
+| | `hx swarm`, `hx agent [status\|inbox\|hello\|check]`, `hx tui once` | the agent bus and its observatory |
+| Finance | `hx treasury` | U256 flash-arbitrage and proof-of-useful-work vault |
+| | `hx book [N]` | proof-carrying limit order book |
+| Verification | `hx verify` | spec↔implementation equivalence, bisimulation, k-induction |
+| | `hx audit`, `hx hf`, `hx loop` | proof-obligation audit, store Merkle DAG and proof coverage, closed-loop audit |
+| Superoptimization, compilers | `hx genesis`, `hx poly`, `hx strike`, `hx tower`, `hx ir`, `hx kexpr`, `hx web`, `hx omni` | normal-form superoptimizers lowering one proven AST to C11, Metal, CUDA, SystemVerilog, WASM, QASM |
+| Circuit discovery | `hx discover`, `hx beast`, `hx endgame`, `hx synth [tt]` | exhaustive NAND2/NPN circuit search with proofs |
+| Silicon | `hx lux`, `hx inet`, `hx meta`, `hx psc`, `hx tapeout`, `hx alu` | GDSII v6.0 and SystemVerilog RTL, RV32I ALU |
+| Supercomputing | `hx supercomp`, `hx cosmos` | 2^d deadlock-free supercomputer compiler, placement and routing |
+| Physics, chemistry | `hx matter` | 2D Fermi–Hubbard exact diagonalization, branch-and-bound binder |
+| | `hx wetlab` | quantum-geometry wet-lab simulator (Cayley SU(2)) |
+| Inference, tensors | `hx geodesic`, `hx solve` | causal-context geodesic inference, unified solver |
+| | `hx tensor [N] [blocks]`, `hx gpu`, `hx llmzip` | one-pass attention with exact tape-free gradients, TensorIR to Metal and CUDA |
+| Cryptography | `hx space` | SHA-256 (NIST vectors) over GPU targets |
+| Data | `hx zip`/`hx unzip <in> <out>`, `hx cm [c\|d] <in> <out>` | causal rANS and context-mixing compression |
+| Store | `hx merge <base> <ours> <theirs> <out>`, `hx httpd [port]` | 3-way store-root merge, HTTP/1.1 server |
+

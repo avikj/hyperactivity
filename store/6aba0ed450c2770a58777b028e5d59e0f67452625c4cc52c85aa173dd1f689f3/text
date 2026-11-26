@@ -1,0 +1,12 @@
+ag-broadcast-local : AgentSlice → List Word → List Word → Step W Word
+ag-broadcast-local sl status msg =
+  let aid = ag-slice-id sl
+      pay = ag-slice-payload sl status msg
+      stf = list-append "/tmp/hx_agent_bus/" (list-append aid "_state.json")
+  in scmd (w-file-write-named stf pay) (λ bw →
+     scmd (w-file-read-named "/tmp/hx_agent_bus/outbox.jsonl") (λ prev →
+     scmd (w-file-write-named "/tmp/hx_agent_bus/outbox.jsonl" (list-append (snd prev) pay)) (λ bo →
+     cli-say (list-append "[hx agent bus] " (list-append aid
+       (list-append " wrote " (list-append (ce-dec bw)
+       (list-append "B state + " (list-append (ce-dec bo) "B outbox (ready for /api/p2p/signal)"))))))
+       (sdone #0))))

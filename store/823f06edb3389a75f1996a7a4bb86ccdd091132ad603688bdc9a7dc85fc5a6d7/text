@@ -1,0 +1,7 @@
+-- 1 Feistel step on packed 8-bit state (L = hi 4 bits, R = lo 4 bits): (L, R) -> (R, L xor F_k(R))
+fio-feistel-enc1 : Word → Word → Word
+fio-feistel-enc1 k st =
+  let l  = %wand (%wshr st #4) #15
+      r  = %wand st #15
+      nr = %wxor l (fio-round-f k r)
+  in %wor (%wshl r #4) nr

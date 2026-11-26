@@ -1,0 +1,21 @@
+-- Direct Certified Binary WebAssembly 1.0 Crystal (`.wasm`) for HX-VERIFY
+-- Types: 0=(i32x8)->i32, 1=(i32x5)->i32
+vx-wasm-bytes : List Word
+vx-wasm-bytes =
+  let hdr  = the (List Word) (cons #0 (cons #97 (cons #115 (cons #109 (cons #1 (cons #0 (cons #0 (cons #0 nil))))))))
+      tSec = pw-sec #1 (the (List Word)
+               (cons #2
+               (cons #96 (cons #8 (cons #127 (cons #127 (cons #127 (cons #127 (cons #127 (cons #127 (cons #127 (cons #127 (cons #1 (cons #127
+               (cons #96 (cons #5 (cons #127 (cons #127 (cons #127 (cons #127 (cons #127 (cons #1 (cons #127 nil)))))))))))))))))))))))
+      fSec = pw-sec #3 (the (List Word) (cons #3 (cons #0 (cons #1 (cons #1 nil)))))
+      eSec = pw-sec #7 (cons #3
+               (pw-cat
+                 (cons (pw-exp "vx_eigen_0"  #0)
+                 (cons (pw-exp "vx_horner_0" #1)
+                 (cons (pw-exp "vx_mux4_0"   #2) nil)))))
+      cSec = pw-sec #10 (cons #3
+               (pw-cat
+                 (cons (po-wasm-ring-fn #0 vx-cert-coupled-eigen)
+                 (cons (po-wasm-ring-fn #0 vx-cert-horner-deg3)
+                 (cons (po-wasm-f2-fn   #0 vx-cert-mux-pipe4) nil)))))
+  in pw-cat (cons hdr (cons tSec (cons fSec (cons eSec (cons cSec nil)))))

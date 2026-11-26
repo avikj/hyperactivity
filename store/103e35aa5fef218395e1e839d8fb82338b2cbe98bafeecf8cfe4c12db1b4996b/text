@@ -1,0 +1,11 @@
+-- at vertex v: (what leaves, what enters), each a count
+cv-div : Nat → List FaradayLine → List (Nat × Nat) → Nat × Nat
+cv-div v ls ns = case ls of
+  nil → (zero , zero)
+  cons l rest → (case ns of
+    nil → (zero , zero)
+    cons x more → (if eqb (fst l) v
+      then (plus (fst x) (fst (cv-div v rest more)) , plus (snd x) (snd (cv-div v rest more)))
+      else (if eqb (snd l) v
+        then (plus (snd x) (fst (cv-div v rest more)) , plus (fst x) (snd (cv-div v rest more)))
+        else cv-div v rest more)))

@@ -1,0 +1,14 @@
+-- THEOREM 14 (Zero-TCB Stateless 64-Bit Replay Bitmap + Forged Boundary Annihilation):
+hxp-replay-step : Word → Word → Word → Bool × (Word × Word)
+hxp-replay-step win maxSeq seq =
+  if %wlt maxSeq seq then
+    let sh = %wsub seq maxSeq
+        nw = if %wlt sh #64 then %wor (%wshl win sh) #1 else #1
+    in (true , (nw , seq))
+  else
+    let age = %wsub maxSeq seq in
+    if %wlt age #64 then
+      let bit = %wshl #1 age in
+      if %weq (%wand win bit) #0 then (true , (%wor win bit , maxSeq))
+      else (false , (win , maxSeq))
+    else (false , (win , maxSeq))

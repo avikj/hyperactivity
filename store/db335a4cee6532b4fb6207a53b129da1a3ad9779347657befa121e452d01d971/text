@@ -1,0 +1,19 @@
+vir-c3 : List Word → List Word
+vir-c3 tail =
+  hw-ln "static uint64_t v_mul(VEnv* e){"
+  (hw-ln "  uint64_t r=v_atom(e);"
+  (hw-ln "  for(;;){ v_ws(e);"
+  (hw-ln "    if(*e->p=='*'){ e->p++; e->muls++; e->ops++; r = r * v_atom(e); }"
+  (hw-ln "    else if(e->p[0]=='<'&&e->p[1]=='<'){ e->p+=2; e->ops++; r = r << (v_atom(e)&63ull); }"
+  (hw-ln "    else if(e->p[0]=='>'&&e->p[1]=='>'){ e->p+=2; e->ops++; r = r >> (v_atom(e)&63ull); }"
+  (hw-ln "    else break;"
+  (hw-ln "  } return r;"
+  (hw-ln "}"
+  (hw-ln "static uint64_t v_add(VEnv* e){"
+  (hw-ln "  uint64_t r=v_mul(e);"
+  (hw-ln "  for(;;){ v_ws(e);"
+  (hw-ln "    if(*e->p=='+'){ e->p++; e->ops++; r = r + v_mul(e); }"
+  (hw-ln "    else if(*e->p=='-'){ e->p++; e->ops++; r = r - v_mul(e); }"
+  (hw-ln "    else break;"
+  (hw-ln "  } return r;"
+  (hw-ln "}" tail))))))))))))))))

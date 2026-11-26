@@ -1,0 +1,33 @@
+gir-mh1 : List Word → List Word
+gir-mh1 tl =
+  gir-lines
+    (list-append
+      (gir-l8
+        "// Generated mechanically by lib/ir/geodesic-ir.hypercubical — Apple Metal Cryptic Geodesic Host"
+        "#import <Foundation/Foundation.h>"
+        "#import <Metal/Metal.h>"
+        "#include <stdio.h>"
+        "#include <stdint.h>"
+        "#include <sys/time.h>"
+        "static double now_ms(void) { struct timeval tv; gettimeofday(&tv, NULL); return tv.tv_sec * 1000.0 + tv.tv_usec * 1e-3; }"
+        "static uint64_t perm_enc64(uint64_t x, const uint8_t p[64], uint64_t mask) {")
+      (gir-l8
+        "  uint64_t y = 0ull; for (unsigned i = 0; i < 64u; i++) if ((x >> i) & 1ull) y |= (1ull << p[i]); return y ^ mask;"
+        "}"
+        "int main(int argc, char** argv) {"
+        "  @autoreleasepool {"
+        (gir-s3 "    const char* mpath = (argc > 1) ? argv[1] : " (gir-qq "/tmp/hy_out/hx_geo_gpu.metal") ";")
+        "    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();"
+        (gir-cstmt "    if (!dev) { fprintf(stderr, " "NO_METAL_DEVICE" "); return 1; }")
+        "    NSError* err = nil;"))
+    (gir-lines
+      (gir-l8
+        "    NSString* src = [NSString stringWithContentsOfFile:[NSString stringWithUTF8String:mpath] encoding:NSUTF8StringEncoding error:&err];"
+        (gir-cstmt "    if (!src) { fprintf(stderr, " "CANNOT_READ_METAL" "); return 1; }")
+        "    MTLCompileOptions* opts = [[MTLCompileOptions alloc] init]; opts.mathMode = MTLMathModeSafe;"
+        "    id<MTLLibrary> lib = [dev newLibraryWithSource:src options:opts error:&err];"
+        (gir-cstmt "    if (!lib) { fprintf(stderr, " "METAL_COMPILE_ERR: %s" ", [[err localizedDescription] UTF8String]); return 1; }")
+        (gir-s3 "    id<MTLComputePipelineState> pso = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@" (gir-qq "geodesic_wave_pair64") "] error:&err];")
+        "    id<MTLCommandQueue> q = [dev newCommandQueue];"
+        "    uint8_t perm[64]; for (unsigned i = 0; i < 64u; i++) perm[i] = (uint8_t)((i * 37u + 19u) & 63u); uint32_t pol = 1u; uint64_t mask = ~0ull;")
+      tl)

@@ -1,0 +1,71 @@
+gir-c7 : List Word → List Word
+gir-c7 tl =
+  gir-lines
+    (list-append
+      (gir-l8
+        "// Swarm State Broadcaster: synchronizes shard progress & min-gate CRDT certs on /tmp/hx_agent_bus/"
+        "static void write_swarm_state(uint32_t wave, uint32_t shard_id, uint32_t num_shards, const Tgt6 tgts[12]) {"
+        (gir-s5 "  FILE* sf = fopen(" (gir-qq "/tmp/hx_agent_bus/agent_cryptic_geodesic_000fe7ce_state.json") ", " (gir-qq "w") ");")
+        "  if (!sf) return;"
+        (gir-cstmt "  fprintf(sf, " gir-fmt-swarm-state ", wave, shard_id, num_shards, (unsigned long long)g_gauge.key_commit, (unsigned long long)g_cryptic_verified, (unsigned long long)g_cryptic_errors, (unsigned long long)rss_kib(), tgts[0].best_gates, tgts[3].best_gates, tgts[9].best_gates);")
+        "  fclose(sf);"
+        "}"
+        "static void run_geodesic_unleashed(FILE* jlog, FILE* busf, int max_waves, uint32_t shard_id, uint32_t num_shards) {")
+      (gir-l8
+        "  memset(qt_cost, 255, sizeof(qt_cost)); qt_used = 0; g_pool_sz = 0;"
+        "  const uint64_t vp[6] = { 0xAAAAAAAAAAAAAAAAull, 0xCCCCCCCCCCCCCCCCull, 0xF0F0F0F0F0F0F0F0ull, 0xFF00FF00FF00FF00ull, 0xFFFF0000FFFF0000ull, 0xFFFFFFFF00000000ull };"
+        "  Tgt6 tgts[12]; build_12_cryptic_targets(vp, tgts);"
+        "  for (unsigned i = 0; i < 6u; i++) {"
+        "    uint64_t cv = gauge_enc64(vp[i]);"
+        "    g_pool[g_pool_sz] = (GeoNode){ cv, (uint16_t)i, (uint16_t)i, 0u, 0u };"
+        "    qt_observe_cryptic(cv, 0u, 1); g_pool_sz++;"
+        "  }"))
+    (gir-lines
+      (list-append
+        (gir-l8
+          "  uint64_t t0_us = now_us(); uint32_t cursor_i = 1u, cursor_j = 0u, wave = 2u; uint64_t pair_seq = 0ull;"
+          "  uint64_t contractible_steps = 0ull;"
+          "  while (g_run && (max_waves <= 0 || (int)wave < max_waves + 2)) {"
+          "    for (uint32_t step = 0; step < 120000u && g_run; step++) {"
+          "      if (cursor_i >= g_pool_sz) { cursor_i = 1u; cursor_j = 0u; }"
+          "      uint32_t ia = cursor_i, ib = cursor_j;"
+          "      cursor_j++; if (cursor_j > cursor_i) { cursor_i++; cursor_j = 0u; }"
+          "      if (ia >= 16u && num_shards > 1u && ((pair_seq++) % num_shards) != shard_id) continue;")
+        (gir-l8
+          "      GeoNode na = g_pool[ia], nb = g_pool[ib];"
+          "      uint8_t ng = exact_pair_gates((uint16_t)ia, (uint16_t)ib);"
+          "      if (ng > 14u) continue;"
+          "      unsigned c1 = wbucket64(na.cry_tt), c2 = wbucket64(nb.cry_tt), c3 = ovclass64(na.cry_tt, nb.cry_tt);"
+          "      unsigned ops[4], is_contr = 0u; geo_rank_ops(c1, c2, c3, ops, &is_contr); contractible_steps += is_contr;"
+          "      for (unsigned k = 0; k < 4u; k++) {"
+          "        unsigned op = ops[k]; unsigned dirs = (op == 2u && ia != ib) ? 2u : 1u;"
+          "        for (unsigned sw = 0; sw < dirs; sw++) {"))
+      (gir-lines
+        (list-append
+          (gir-l8
+            "          uint64_t cu = sw ? nb.cry_tt : na.cry_tt, cv = sw ? na.cry_tt : nb.cry_tt;"
+            "          uint64_t cry_y = eval64_cryptic_op(op, cu, cv);"
+            "          g_evals++; int obs = qt_observe_cryptic(cry_y, ng, 0);"
+            "          for (int ti = 0; ti < 12; ti++) {"
+            "            uint8_t eff_g = (cry_y == tgts[ti].cry_tt) ? ng : ((cry_y == tgts[ti].cry_inv_tt) ? (uint8_t)(ng + 1u) : 255u);"
+            "            if (eff_g < tgts[ti].best_gates) {"
+            "              uint64_t dec_y = gauge_dec64(cry_y);"
+            "              if (dec_y == tgts[ti].plain_tt || (~dec_y) == tgts[ti].plain_tt) g_cryptic_verified++; else g_cryptic_errors++;")
+          (gir-l6
+            "              tgts[ti].best_gates = eff_g; tgts[ti].wave_hit = wave;"
+            "              fib3[c1][c2][c3][op]++; fib2[c1][c2][op]++; fib1[c1][op]++; fib0[op]++;"
+            "              uint64_t cry_commit = (cry_y ^ g_gauge.key_commit) * 0x9e3779b97f4a7c15ull;"
+            (gir-cstmt "              fprintf(jlog, " gir-fmt-disc ", wave, shard_id, tgts[ti].name, eff_g, (unsigned long long)cry_commit); fflush(jlog);")
+            (gir-cstmt "              if (busf) { fprintf(busf, " gir-fmt-bus ", wave, shard_id, tgts[ti].name, eff_g); fflush(busf); }")
+            "            } }"))
+        (gir-lines
+          (gir-l8
+            "          if (obs == 2 && g_pool_sz < POOL_CAP && ng <= 9u && g_depth_cnt[ng] < 4096u) {"
+            "            g_depth_cnt[ng]++; g_pool[g_pool_sz++] = (GeoNode){ cry_y, (uint16_t)(sw ? ib : ia), (uint16_t)(sw ? ia : ib), (uint8_t)op, ng };"
+            "            qt_observe_cryptic(cry_y, ng, 1);"
+            "          } } } }"
+            "    double dt_s = (double)(now_us() - t0_us) * 1e-6 + 1e-9;"
+            "    write_swarm_state(wave, shard_id, num_shards, tgts);"
+            (gir-cstmt "    fprintf(jlog, " gir-fmt-telem ", wave, shard_id, dt_s, (unsigned long long)g_evals, (double)g_evals / (dt_s * 1e6), qt_used, g_pool_sz, (unsigned long long)g_pruned, (unsigned long long)g_gc_reclaimed, (unsigned long long)contractible_steps, (unsigned long long)g_cryptic_verified, (unsigned long long)rss_kib(), tgts[0].best_gates, tgts[1].best_gates, tgts[3].best_gates, tgts[4].best_gates, tgts[6].best_gates, tgts[9].best_gates, tgts[10].best_gates, tgts[11].best_gates); fflush(jlog);")
+            "    wave++; } }")
+          tl)))

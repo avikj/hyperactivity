@@ -1,0 +1,8 @@
+-- Exact constant-product swap with configurable `feeKeep / 10000` (`#9970` = 30 bps, `#9999` = 1 bps):
+-- Works on arbitrary-precision `Word` (`WN` bignum in kernel -> ZERO overflow even when `ry * dxf > 2^128`!)
+tr-amm-out-bps : Word → Word → Word → Word → Word
+tr-amm-out-bps rx ry dx feeKeep =
+  let dxf = %wmul dx feeKeep
+      num = %wmul ry dxf
+      den = %wadd (%wmul rx #10000) dxf
+  in if %weq den #0 then #0 else %wdiv num den

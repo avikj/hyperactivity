@@ -1,0 +1,22 @@
+-- Exact 4-var NAND2 + (XOR,AND) canonical atlas & Productive Fixed-Point Superoptimizer
+vir-c6 : List Word → List Word
+vir-c6 tail =
+  hw-ln "static uint8_t u4_cost[65536]; static uint16_t u4_lhs[65536], u4_rhs[65536], u4_q[65536]; static uint32_t u4_n=0, u4_laws=0;"
+  (hw-ln "static void build_u4_productive_atlas(void){"
+  (hw-ln "  if(u4_n==65536u) return;"
+  (hw-ln "  memset(u4_cost,255,sizeof(u4_cost)); u4_n=0; u4_laws=0;"
+  (hw-ln "  const uint16_t S[6]={0x0000u,0xFFFFu,0xAAAAu,0xCCCCu,0xF0F0u,0xFF00u};"
+  (hw-ln "  for(int i=0;i<6;i++){ u4_cost[S[i]]=0; u4_lhs[S[i]]=S[i]; u4_rhs[S[i]]=S[i]; u4_q[u4_n++]=S[i]; }"
+  (hw-ln "  uint32_t lvl[12]; lvl[0]=0; lvl[1]=u4_n;"
+  (hw-ln "  for(uint8_t d=1; d<=8 && u4_n<65536u; d++){"
+  (hw-ln "    uint32_t pe=u4_n, ns=lvl[d-1];"
+  (hw-ln "    for(uint32_t i=ns; i<pe && u4_n<65536u; i++){"
+  (hw-ln "      uint16_t a=u4_q[i];"
+  (hw-ln "      for(uint32_t j=0; j<=i; j++){"
+  (hw-ln "        uint16_t b=u4_q[j], y=(uint16_t)~(a&b);"
+  (hw-ln "        if(u4_cost[y]==255){ u4_cost[y]=d; u4_lhs[y]=a; u4_rhs[y]=b; u4_q[u4_n++]=y; } else { u4_laws++; }"
+  (hw-ln "      }"
+  (hw-ln "    }"
+  (hw-ln "    lvl[d+1]=u4_n;"
+  (hw-ln "  }"
+  (hw-ln "}" tail))))))))))))))))))

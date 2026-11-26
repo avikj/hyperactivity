@@ -1,0 +1,53 @@
+gir-c4 : List Word → List Word
+gir-c4 tl =
+  gir-lines
+    (list-append
+      (gir-l8
+        "static void geo_rank_ops(unsigned c1, unsigned c2, unsigned c3, unsigned out_ops[4], unsigned* contractible_hit) {"
+        "  unsigned excl = 0u, placed = 0u; *contractible_hit = 0u;"
+        "  for (int depth = 3; depth >= 0 && placed < 4u; depth--) {"
+        "    const uint32_t* f = (depth == 3) ? fib3[c1][c2][c3] : (depth == 2) ? fib2[c1][c2] : (depth == 1) ? fib1[c1] : fib0;"
+        "    unsigned rem_in_fib = 0u;"
+        "    for (unsigned op = 0; op < 4u; op++) if (!(excl & (1u << op)) && f[op] > 0u) rem_in_fib++;"
+        "    if (depth == 3 && placed == 0u && rem_in_fib == 1u) *contractible_hit = 1u;"
+        "    while (rem_in_fib > 0u && placed < 4u) {")
+      (gir-l8
+        "      uint32_t best_cnt = 0u; unsigned best_op = 0u;"
+        "      for (unsigned op = 0; op < 4u; op++) if (!(excl & (1u << op)) && f[op] > best_cnt) { best_cnt = f[op]; best_op = op; }"
+        "      if (best_cnt == 0u) break;"
+        "      out_ops[placed++] = best_op; excl |= (1u << best_op); rem_in_fib--;"
+        "    }"
+        "  }"
+        "  for (unsigned op = 0; op < 4u && placed < 4u; op++) if (!(excl & (1u << op))) { out_ops[placed++] = op; excl |= (1u << op); }"
+        "}"))
+    (gir-lines
+      (list-append
+        (gir-l8
+          "static void run_wave01_and_extract_fibers(FILE* jlog) {"
+          "  memset(u4_cost, 255, sizeof(u4_cost)); u4_cnt = 0;"
+          "  const uint16_t seeds[6] = { 0x0000u, 0xFFFFu, 0xAAAAu, 0xCCCCu, 0xF0F0u, 0xFF00u };"
+          "  for (unsigned i = 0; i < 6u; i++) { u4_cost[seeds[i]] = 0; u4_order[u4_cnt++] = seeds[i]; }"
+          "  uint32_t lstart[16]; lstart[0] = 0; lstart[1] = u4_cnt;"
+          "  for (uint8_t d = 1; d <= 9 && u4_cnt < 65536u && g_run; d++) {"
+          "    uint32_t prev_end = u4_cnt, ns = lstart[d - 1];"
+          "    for (uint32_t i = ns; i < prev_end && u4_cnt < 65536u; i++) {")
+        (gir-l8
+          "      uint16_t a = u4_order[i];"
+          "      for (uint32_t j = 0; j <= i && u4_cnt < 65536u; j++) {"
+          "        uint16_t b = u4_order[j];"
+          "        for (unsigned op = 0; op < 4u; op++) {"
+          "          unsigned maxk = (op == 2u) ? 2u : 1u;"
+          "          for (unsigned sw = 0; sw < maxk; sw++) {"
+          "            uint16_t x = sw ? b : a, y0 = sw ? a : b; uint16_t r = eval4_op(op, x, y0); g_evals++;"
+          "            if (u4_cost[r] == 255u) {"))
+      (gir-lines
+        (gir-l8
+          "              u4_cost[r] = d; u4_op[r] = (uint8_t)op; u4_pa[r] = x; u4_pb[r] = y0; u4_order[u4_cnt++] = r;"
+          "              unsigned c1 = wbucket16(x), c2 = wbucket16(y0);"
+          "              unsigned c3 = ovclass64((uint64_t)x * 0x0001000100010001ull, (uint64_t)y0 * 0x0001000100010001ull);"
+          "              fib3[c1][c2][c3][op]++; fib2[c1][c2][op]++; fib1[c1][op]++; fib0[op]++;"
+          "            } else { g_identities++; g_pruned++; }"
+          "          } } } }"
+          "    lstart[d + 1] = u4_cnt; }"
+          (gir-cstmt "  fprintf(jlog, " gir-fmt-wave1 ", g_npn3_classes, g_npn4_classes, u4_cnt, (unsigned long long)g_gauge.key_commit, fib0[0], fib0[1], fib0[3]); fflush(jlog); }"))
+        tl))

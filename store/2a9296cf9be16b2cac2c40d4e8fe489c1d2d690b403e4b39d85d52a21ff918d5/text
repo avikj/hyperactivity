@@ -1,0 +1,33 @@
+gir-metal-shader : List Word
+gir-metal-shader =
+  gir-lines
+    (list-append
+      (gir-l8
+        "// Generated mechanically by lib/ir/geodesic-ir.hypercubical — Apple Metal Cryptic Geodesic Kernel"
+        "#include <metal_stdlib>"
+        "using namespace metal;"
+        "kernel void geodesic_wave_pair64("
+        "    device const ulong* cry_pool [[buffer(0)]],"
+        "    device const uchar* pool_g   [[buffer(1)]],"
+        "    device const ulong* cry_tgt  [[buffer(2)]],"
+        "    device atomic_uint* best_out [[buffer(3)]],")
+      (gir-l8
+        "    constant uint&      pool_sz  [[buffer(4)]],"
+        "    constant uint&      pol_bit  [[buffer(5)]],"
+        "    uint tid [[thread_position_in_grid]]) {"
+        "  uint i = (tid / pool_sz) % pool_sz;"
+        "  uint j = tid % pool_sz;"
+        "  if (j > i) return;"
+        "  ulong u = cry_pool[i], v = cry_pool[j];"
+        "  uint  g = uint(pool_g[i]) + uint(pool_g[j]) + 1u;"))
+    (gir-lines
+      (gir-l8
+        "  ulong outs[5];"
+        "  if (pol_bit == 0u) { outs[0]=u^v; outs[1]=u&v; outs[2]=(~u)&v; outs[3]=u&(~v); outs[4]=~(u&v); }"
+        "  else               { outs[0]=~(u^v); outs[1]=u|v; outs[2]=(~u)|v; outs[3]=u|(~v); outs[4]=~(u|v); }"
+        "  for (uint op = 0; op < 5u; op++) {"
+        "    ulong cy = outs[op];"
+        "    for (uint t = 0; t < 12u; t++) {"
+        "      if (cy == cry_tgt[t]) atomic_fetch_min_explicit(&best_out[t], g, memory_order_relaxed);"
+        "      else if ((~cy) == cry_tgt[t]) atomic_fetch_min_explicit(&best_out[t], g + 1u, memory_order_relaxed); } } }")
+      nil)

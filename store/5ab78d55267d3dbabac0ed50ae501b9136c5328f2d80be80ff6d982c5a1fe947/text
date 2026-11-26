@@ -1,0 +1,8 @@
+-- THEOREM 7 (`refl`): Exhaustive 256-trace adversarial EVM vault model (`caller, cbCaller, s0Clear, reenter, postGeReq, destFounder`)
+-- + `patchOff ∈ {4, 100, 132, 164}` scratch-memory non-interference (`[256+patchOff, 288+patchOff)` disjoint from `mem[0..256)`)
+-- + 3-strike gas circuit-breaker bound (`3 * 850,000 * 80,000,000 == 204,000,000,000,000 wei` = `0.000204 ETH` max loss)!
+bfm-patch-safe : Word → Word → Bool
+bfm-patch-safe pOff cdLen =
+  let lo = %wadd #256 pOff
+      hi = %wadd lo #32
+  in andB (eth-le #260 lo) (eth-le hi (%wadd #256 cdLen))

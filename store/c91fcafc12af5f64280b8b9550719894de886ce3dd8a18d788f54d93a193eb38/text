@@ -1,0 +1,14 @@
+py-parse-params-go : Nat → List PyTok → (List (List Word × Code) × List PyTok)
+py-parse-params-go zero ts = (nil , ts)
+py-parse-params-go (suc fuel) ts =
+  case ts of
+    nil → (nil , nil)
+    cons t rest →
+      case t of
+        tk-rp → (nil , rest)
+        tk-id nm →
+          let pt  = py-read-param-type rest
+              r2  = py-drop-comma (snd pt)
+              nxt = py-parse-params-go fuel r2
+          in (cons (nm , fst pt) (fst nxt) , snd nxt)
+        _ → (nil , cons t rest)

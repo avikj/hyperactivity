@@ -1,0 +1,11 @@
+-- Verify electron conservation (sum(sf-e) == Z) AND relativistic Dirac stability (Z^2 < 137^2)
+-- for EVERY SINGLE ELEMENT Z = 1..118!
+pt-check-all-118 : Nat → Word → Bool
+pt-check-all-118 zero _ = true
+pt-check-all-118 (suc k) z =
+  let cfg = pt-config z
+      ok-e = %weq (pt-total-electrons cfg) z
+      ok-dirac = %wlt (%wmul z z) (%wmul #137 #137)
+      -- Every noble gas has 0 unpaired electrons!
+      ok-hund = if pt-is-noble z then %weq (pt-unpaired z) #0 else true
+  in andB ok-e (andB ok-dirac (andB ok-hund (pt-check-all-118 k (%wadd z #1))))

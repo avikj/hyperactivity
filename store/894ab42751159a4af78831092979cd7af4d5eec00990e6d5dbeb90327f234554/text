@@ -1,0 +1,11 @@
+-- One prime voice p with harmonic weight w, accumulated into biased [0..65536] carrier `acc`
+gn-prime-voice : Word → Word → Word → Word → Word
+gn-prime-voice t p w acc =
+  let phi = %wand (%wmul t (%wmul #28 p)) #2047
+  in if %wlt phi #1024 then
+       let amp = %wmul w (gn_py_bhaskara_lobe phi)
+       in %wadd acc (%wshr amp #1)
+     else
+       let u   = %wsub phi #1024
+           amp = %wmul w (gn_py_bhaskara_lobe u)
+       in %wsub acc (%wshr amp #1)

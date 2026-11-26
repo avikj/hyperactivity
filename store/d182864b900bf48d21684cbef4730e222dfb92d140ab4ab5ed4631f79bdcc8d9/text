@@ -1,0 +1,10 @@
+bfm-thm-superopt-proves-zero-exploit :
+  (n : Nat) → (eBad : GuardExpr) → ge-superopt n eBad ≡ ge-k false →
+  ((env : Nat → Bool) × (ge-eval env eBad ≡ true)) → Empty
+bfm-thm-superopt-proves-zero-exploit n eBad hOpt w =
+  bfm-bool-contra3
+    (ge-eval (fst w) (ge-superopt n eBad))
+    (ge-eval (fst w) eBad)
+    (bfm-eval-false (fst w) (ge-superopt n eBad) hOpt)
+    (bfm-thm-superopt-sound n (fst w) eBad)
+    (snd w)

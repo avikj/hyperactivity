@@ -1,0 +1,7 @@
+-- Zero-capital atomic flash-swap profit (`#0` principal required; atomic revert yields `#0` loss!):
+tr-flash-net-profit : Word → Word → Word → Word → Word → Word → Word → Word → Word
+tr-flash-net-profit wethBuy usdcBuy feeBuy wethSell usdcSell feeSell borrowUsdc gasUsdc =
+  let wethOut = tr-amm-out-bps usdcBuy wethBuy borrowUsdc feeBuy
+      usdcOut = tr-amm-out-bps wethSell usdcSell wethOut feeSell
+      repay   = %wadd borrowUsdc gasUsdc
+  in if %wlt repay usdcOut then %wsub usdcOut repay else #0

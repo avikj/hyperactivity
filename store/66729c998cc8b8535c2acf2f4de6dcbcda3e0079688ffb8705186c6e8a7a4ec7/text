@@ -1,0 +1,16 @@
+-- THEOREM 1 (refl): Verify exact 4-byte Keccak-256 selectors for Aave V3 liquidationCall,
+-- Aave V3 getUserAccountData, Uniswap V2 swapExactTokensForTokens, Morpho flashLoan,
+-- and Founder Coinbase EIP-55 lock!
+bfm-thm-selectors-and-founder-exact :
+  let sAaveLiq = h-take (toNat #8) (h-hex (keccak256 "liquidationCall(address,address,address,uint256,bool)"))
+      sAaveUsr = h-take (toNat #8) (h-hex (keccak256 "getUserAccountData(address)"))
+      sUniV2   = h-take (toNat #8) (h-hex (keccak256 "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"))
+      sAeroV2  = h-take (toNat #8) (h-hex (keccak256 "swapExactTokensForTokens(uint256,uint256,(address,address,bool,address)[],address,uint256)"))
+      sMorpho  = h-take (toNat #8) (h-hex (keccak256 "flashLoan(address,uint256,bytes)"))
+      fndOk    = h-eq (eth-eip55-from-bytes20 eth-founder-coinbase-addr20) "0x4A50FBF0128E2679C42466A8cC1A9D230b08A26f"
+  in andB (h-eq sAaveLiq "00a718a9")
+     (andB (h-eq sAaveUsr "bf92857c")
+     (andB (h-eq sUniV2   "38ed1739")
+     (andB (h-eq sAeroV2  "cac88ea9")
+     (andB (h-eq sMorpho  "e0232b42") fndOk)))) ≡ true
+bfm-thm-selectors-and-founder-exact = refl

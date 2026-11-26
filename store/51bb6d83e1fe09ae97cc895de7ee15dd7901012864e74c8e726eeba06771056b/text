@@ -1,0 +1,25 @@
+tir-sol-2 : List Word → List Word
+tir-sol-2 tl =
+  tir-ln "  struct Commitment { bytes32 commitHash; uint64 blockNum; }"
+  (tir-ln "  struct FlashParams { address borrowPool; address sellPool; address midToken; address repayToken; bool borrowToken0; bool sellMidIs0; uint256 minProfit; }"
+  (tir-ln "  uint256 public nextBountyId;"
+  (tir-ln "  uint256 public totalFounderPaidWei;"
+  (tir-ln "  mapping(uint256 => Bounty) public bounties;"
+  (tir-ln "  mapping(uint256 => mapping(address => Commitment)) public commits;"
+  (tir-ln ""
+  (tir-ln "  event FlashArbExecuted(address indexed caller, address indexed token, uint256 netProfit, uint256 founderPaid);"
+  (tir-ln "  event BountyPosted(uint256 indexed bountyId, uint64 specTruthTable, uint256 rewardWei, uint64 maxTargetCost);"
+  (tir-ln "  event SolutionCommitted(uint256 indexed bountyId, address indexed solver, bytes32 commitHash);"
+  (tir-ln "  event BountySettled(uint256 indexed bountyId, address indexed solver, bytes32 solutionHash, uint64 achievedCost, uint256 founderCut, uint256 solverCut);"
+  (tir-ln "  event ComputeLicensePaid(address indexed payer, bytes32 indexed jobSpecHash, uint256 amountWei);"
+  (tir-ln ""
+  (tir-ln (list-append "  constructor(address _founder) { require(_founder != address(0), " (list-append (tir-qq "ZERO_FOUNDER") "); founderBeneficiary = _founder; }"))
+  (tir-ln ""
+  (tir-ln "  // RAIL 1: Direct Sovereign Compute / Silicon / Superoptimization Meter (0% VC, instant non-custodial sweep)"
+  (tir-ln "  function payComputeLicense(bytes32 jobSpecHash) external payable nonReentrant {"
+  (tir-ln (list-append "    require(msg.value > 0, " (list-append (tir-qq "ZERO_VALUE") ");"))
+  (tir-ln "    totalFounderPaidWei += msg.value;"
+  (tir-ln (list-append "    (bool ok, ) = founderBeneficiary.call{value: msg.value}(" (list-append (tir-qq "") ");"))
+  (tir-ln (list-append "    require(ok, " (list-append (tir-qq "TRANSFER_FAILED") ");"))
+  (tir-ln "    emit ComputeLicensePaid(msg.sender, jobSpecHash, msg.value);"
+  (tir-ln "  }" tl))))))))))))))))))))))

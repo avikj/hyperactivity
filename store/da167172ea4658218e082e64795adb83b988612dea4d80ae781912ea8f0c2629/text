@@ -1,0 +1,16 @@
+-- THEOREM 3 (Hyperactive Hermeticism — Universal Micro/Macro Scale Homomorphism):
+hxp-thm-hermetic-as-above-so-below :
+  {Above Below : Type} →
+  (pi : Above → Below) →
+  (opAbove : Above → Above → Above) →
+  (opBelow : Below → Below → Below) →
+  ((x y : Above) → pi (opAbove x y) ≡ opBelow (pi x) (pi y)) →
+  (net : HxpTree Above) →
+  pi (hxp-fold-tree opAbove net) ≡ hxp-fold-tree opBelow (hxp-map-tree pi net)
+hxp-thm-hermetic-as-above-so-below pi opA opB hom (hxp-leaf x) = refl
+hxp-thm-hermetic-as-above-so-below pi opA opB hom (hxp-cut l r) =
+  let ihl = hxp-thm-hermetic-as-above-so-below pi opA opB hom l
+      ihr = hxp-thm-hermetic-as-above-so-below pi opA opB hom r
+      st1 = hom (hxp-fold-tree opA l) (hxp-fold-tree opA r)
+      st2 = λ i → opB (ihl i) (ihr i)
+  in hxp-trans st1 st2

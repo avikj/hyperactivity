@@ -1,0 +1,25 @@
+-- THEOREM 6: UNIVALENT TELESCOPING CANCELLATION (EXACT BEHAVIORAL INVARIANCE OVER ANY GAUGE `e : Equiv S S`!)
+-- Composing two encrypted steps `cry-conj1 e g (cry-conj1 e f (fst e x))` and decoding at the boundary
+-- reduces identically to `g (f x)` for EVERY type `S`, EVERY secret equivalence `e`, and EVERY `f, g`!
+cry-thm-telescoping-chain :
+  {S : Type} → (e : Equiv S S) → (f g : S → S) → (x : S) →
+  cry-inv e (cry-conj1 e g (cry-conj1 e f (fst e x))) ≡ g (f x)
+cry-thm-telescoping-chain {S} e f g x =
+  let s1 : cry-inv e (fst e (g (cry-inv e (fst e (f (cry-inv e (fst e x)))))))
+           ≡ g (cry-inv e (fst e (f (cry-inv e (fst e x)))))
+      s1 = cry-ret e (g (cry-inv e (fst e (f (cry-inv e (fst e x))))))
+      s2 : g (cry-inv e (fst e (f (cry-inv e (fst e x)))))
+           ≡ g (f (cry-inv e (fst e x)))
+      s2 = cong {lzero} {lzero} {S} {S} g (cry-ret e (f (cry-inv e (fst e x))))
+      s3 : g (f (cry-inv e (fst e x))) ≡ g (f x)
+      s3 = cong {lzero} {lzero} {S} {S} (λ z → g (f z)) (cry-ret e x)
+  in concat {lzero} {S}
+       {cry-inv e (cry-conj1 e g (cry-conj1 e f (fst e x)))}
+       {g (cry-inv e (fst e (f (cry-inv e (fst e x)))))}
+       {g (f x)}
+       s1
+       (concat {lzero} {S}
+          {g (cry-inv e (fst e (f (cry-inv e (fst e x)))))}
+          {g (f (cry-inv e (fst e x)))}
+          {g (f x)}
+          s2 s3)

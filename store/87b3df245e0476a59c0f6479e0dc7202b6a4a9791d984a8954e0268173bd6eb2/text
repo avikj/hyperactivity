@@ -1,0 +1,32 @@
+py-lex-go : Nat → List Word → List PyTok
+py-lex-go zero _ = nil
+py-lex-go _ nil = nil
+py-lex-go (suc fuel) (cons b r) =
+  if py-is-space b then py-lex-go fuel r
+  else if weq b #35 then nil
+  else if weq b #40 then cons tk-lp (py-lex-go fuel r)
+  else if weq b #41 then cons tk-rp (py-lex-go fuel r)
+  else if weq b #58 then cons tk-colon (py-lex-go fuel r)
+  else if weq b #44 then cons tk-comma (py-lex-go fuel r)
+  else if weq b #43 then cons tk-plus (py-lex-go fuel r)
+  else if weq b #42 then cons tk-star (py-lex-go fuel r)
+  else if weq b #47 then cons tk-slash (py-lex-go fuel r)
+  else if weq b #60 then cons tk-lt (py-lex-go fuel r)
+  else if weq b #38 then cons tk-amp (py-lex-go fuel r)
+  else if weq b #124 then cons tk-bar (py-lex-go fuel r)
+  else if weq b #94 then cons tk-caret (py-lex-go fuel r)
+  else if weq b #45 then
+    (case r of
+      nil → cons tk-minus nil
+      cons b2 r2 → if weq b2 #62 then cons tk-arrow (py-lex-go fuel r2) else cons tk-minus (py-lex-go fuel r))
+  else if weq b #61 then
+    (case r of
+      nil → cons tk-eq nil
+      cons b2 r2 → if weq b2 #61 then cons tk-eqeq (py-lex-go fuel r2) else cons tk-eq (py-lex-go fuel r))
+  else if py-is-digit b then
+    let pr = py-read-num (%wsub b #48) r
+    in cons (tk-num (fst pr)) (py-lex-go fuel (snd pr))
+  else if py-is-alpha b then
+    let pr = py-read-id (cons b nil) r
+    in cons (tk-id (fst pr)) (py-lex-go fuel (snd pr))
+  else py-lex-go fuel r

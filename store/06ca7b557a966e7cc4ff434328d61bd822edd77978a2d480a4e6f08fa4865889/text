@@ -1,0 +1,16 @@
+-- Cold proof: on thin 1bp active ticks (`m = #45`, i.e. `$45` optimal flash notional!), unclamped
+-- concave sizing `x* = #45` yields positive surplus `#2025`, whereas a rigid `$250` probe floor
+-- (`x = #250 > 2*m`) overshoots active-tick liquidity and yields `#0` (reverts!), AND 1-call
+-- 29-leg Multicall3 sieving (`S + K = 3 + 29 = 32`) strictly beats 29 serial RPCs (`29 * 3 = 87`)!
+bl-thm-whole-network-200ms-hyperreactor :
+  let optX     = #45
+      optP     = bl-concave-surplus #45 optX
+      rigid250 = bl-concave-surplus #45 #250
+      sTrunk   = #3
+      kCalls   = #29
+  in andB (%weq optP #2025)
+     (andB (%weq rigid250 #0)
+     (andB (%wlt (bl-concave-surplus #45 #30) optP)
+     (andB (%wlt (bl-concave-surplus #45 #60) optP)
+           (%wlt (%wadd sTrunk kCalls) (%wmul kCalls sTrunk))))) ≡ true
+bl-thm-whole-network-200ms-hyperreactor = refl

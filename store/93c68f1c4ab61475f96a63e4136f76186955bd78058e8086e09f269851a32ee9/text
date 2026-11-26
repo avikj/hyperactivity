@@ -1,0 +1,9 @@
+-- the Laplacian's entry at (v, u): lines at v on the diagonal, minus the lines between
+np-entry : Nat → Nat → List FaradayLine → SQ
+np-entry v u ls = case ls of
+  nil → sq-zero
+  cons l rest → sq-plus (if eqb v u
+      then (if eqb (fst l) v then sq-one else (if eqb (snd l) v then sq-one else sq-zero))
+      else (if eqb (fst l) v then (if eqb (snd l) u then sq-neg sq-one else sq-zero)
+        else (if eqb (snd l) v then (if eqb (fst l) u then sq-neg sq-one else sq-zero) else sq-zero)))
+    (np-entry v u rest)

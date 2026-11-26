@@ -1,0 +1,34 @@
+tir-sol-4 : List Word → List Word
+tir-sol-4 tl =
+  tir-ln "  // RAIL 2: On-Chain Cold-Verified Anti-MEV Commit-Reveal PoUW Superoptimization Bounty Escrow"
+  (tir-ln "  function postBounty(uint64 specTruthTable, uint64 maxTargetCost, uint64 durationSecs) external payable nonReentrant returns (uint256 id) {"
+  (tir-ln (list-append "    require(msg.value > 0 && maxTargetCost > 0 && maxTargetCost <= 248 && durationSecs >= 60, " (list-append (tir-qq "INVALID_BOUNTY") ");"))
+  (tir-ln "    id = nextBountyId++;"
+  (tir-ln "    bounties[id] = Bounty(msg.sender, specTruthTable, msg.value, maxTargetCost, uint64(block.timestamp) + durationSecs, false);"
+  (tir-ln "    emit BountyPosted(id, specTruthTable, msg.value, maxTargetCost);"
+  (tir-ln "  }"
+  (tir-ln ""
+  (tir-ln "  function commitSolution(uint256 bountyId, bytes32 commitHash) external {"
+  (tir-ln (list-append "    require(!bounties[bountyId].settled, " (list-append (tir-qq "ALREADY_SETTLED") ");"))
+  (tir-ln "    commits[bountyId][msg.sender] = Commitment(commitHash, uint64(block.number));"
+  (tir-ln "    emit SolutionCommitted(bountyId, msg.sender, commitHash);"
+  (tir-ln "  }"
+  (tir-ln ""
+  (tir-ln "  function revealAndSettle(uint256 bountyId, uint16[] calldata gates, bytes32 salt) external nonReentrant {"
+  (tir-ln "    Bounty storage b = bounties[bountyId];"
+  (tir-ln "    Commitment memory c = commits[bountyId][msg.sender];"
+  (tir-ln "    uint64 achievedCost = uint64(gates.length);"
+  (tir-ln "    bytes32 solutionHash = keccak256(abi.encodePacked(gates));"
+  (tir-ln (list-append "    require(!b.settled && block.timestamp <= b.deadline, " (list-append (tir-qq "EXPIRED_OR_SETTLED") ");"))
+  (tir-ln (list-append "    require(c.commitHash != bytes32(0) && block.number > c.blockNum, " (list-append (tir-qq "WAIT_1_BLOCK_ANTIMEV") ");"))
+  (tir-ln (list-append "    require(keccak256(abi.encodePacked(msg.sender, bountyId, solutionHash, achievedCost, salt)) == c.commitHash, " (list-append (tir-qq "BAD_COMMIT") ");"))
+  (tir-ln (list-append "    require(achievedCost > 0 && achievedCost <= b.maxTargetCost, " (list-append (tir-qq "COST_TOO_HIGH") ");"))
+  (tir-ln (list-append "    require(verifyNandDag64(b.specTruthTable, gates), " (list-append (tir-qq "SPEC_MISMATCH") ");"))
+  (tir-ln "    b.settled = true;"
+  (tir-ln "    uint256 founderCut = (msg.sender == founderBeneficiary) ? b.rewardWei : (b.rewardWei >> 1);"
+  (tir-ln "    uint256 solverCut  = b.rewardWei - founderCut;"
+  (tir-ln "    totalFounderPaidWei += founderCut;"
+  (tir-ln (list-append "    (bool okF, ) = founderBeneficiary.call{value: founderCut}(" (list-append (tir-qq "") "); require(okF);"))
+  (tir-ln (list-append "    if (solverCut > 0) { (bool okS, ) = msg.sender.call{value: solverCut}(" (list-append (tir-qq "") "); require(okS); }"))
+  (tir-ln "    emit BountySettled(bountyId, msg.sender, solutionHash, achievedCost, founderCut, solverCut);"
+  (tir-ln "  }" tl)))))))))))))))))))))))))))))))
