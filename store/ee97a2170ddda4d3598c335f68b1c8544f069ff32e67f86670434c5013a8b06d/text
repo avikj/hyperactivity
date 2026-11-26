@@ -1,0 +1,21 @@
+hr-comm : Nat → Word → Word → Word → (Word → Step W Word) → Step W Word
+hr-comm fu m a b k =
+  scmd (w-load (hr-na m (hv2-val a))) (λ wa →
+  scmd (w-load (hr-na m (hv2-val b))) (λ wb →
+  hr-free-node m (hv2-val a) (λ m0 →
+  hr-free-node m0 (hv2-val b) (λ m1 →
+  hr-new4n m1 (λ n0 n1 n2 n3 →
+  hr-new4v (hv2-keep m1 n3) (λ v0 v1 v2 v3 →
+  let mm = hv2-keep m1 v3
+      x0 = hv2-port hv2-VAR v0
+      x1 = hv2-port hv2-VAR v1
+      x2 = hv2-port hv2-VAR v2
+      x3 = hv2-port hv2-VAR v3
+  in hr-st mm (hr-na mm n0) (hv2-pair x0 x1) (λ s1 →
+     hr-st s1 (hr-na s1 n1) (hv2-pair x2 x3) (λ s2 →
+     hr-st s2 (hr-na s2 n2) (hv2-pair x0 x2) (λ s3 →
+     hr-st s3 (hr-na s3 n3) (hv2-pair x1 x3) (λ s4 →
+     hr-ln fu s4 (hv2-port (hv2-tag b) n0) (hv2-fst wa) (λ q1 →
+     hr-ln fu q1 (hv2-port (hv2-tag b) n1) (hv2-snd wa) (λ q2 →
+     hr-ln fu q2 (hv2-port (hv2-tag a) n2) (hv2-fst wb) (λ q3 →
+     hr-ln fu q3 (hv2-port (hv2-tag a) n3) (hv2-snd wb) k)))))))))))))

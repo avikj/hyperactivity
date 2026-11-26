@@ -1,0 +1,8 @@
+-- the top 62 bits: (m, shift, sticky) with a = m·2^shift + (less than 2^shift, nonzero iff sticky)
+bg-top : List Word → Word × (Word × Word)
+bg-top a =
+  let l = bg-bitlen a
+  in if %wlt l #63 then (bg-lo a , (#0 , #0))
+     else (let sh = %wsub l #62
+               q = bg-shr a sh
+           in (bg-lo q , (sh , if bg-is0 (bg-sub a (bg-shl q sh)) then #0 else #1)))

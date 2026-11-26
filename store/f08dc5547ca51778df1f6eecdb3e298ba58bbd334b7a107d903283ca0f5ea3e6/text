@@ -1,0 +1,19 @@
+-- the candidate of n digits, t its exponent: Just (c) as (true, c) or (false, _)
+ief-try : List Word → List Word → List Word → Bool → Word → Word → Bool × Word
+ief-try v l h incl a t =
+  let s2 = bg-mul (bg-shl bg-one (ief-pos a)) (ief-p10 (ief-ngt t))
+      dv = bg-shl (ief-p10 (ief-pos t)) (ief-ngt a)
+      nv = bg-mul v s2
+      ls = bg-mul l s2
+      hs = bg-mul h s2
+      qr = bg-divmod nv dv
+      c0 = fst qr
+      r2 = bg-shl1 (snd qr)
+      rc = bg-cmp r2 dv
+      c = if orB (%weq rc #2) (andB (%weq rc #1) (%weq (%wand (bg-lo c0) #1) #1)) then bg-add c0 bg-one else c0
+      cd = bg-mul c dv
+  in if ief-dec-ok incl ls hs cd then (true , bg-lo c)
+     else if bg-ge ls cd
+     then (let c1 = bg-add c bg-one in if ief-dec-ok incl ls hs (bg-mul c1 dv) then (true , bg-lo c1) else (false , #0))
+     else (if bg-is0 c then (false , #0)
+           else (let c1 = bg-sub c bg-one in if ief-dec-ok incl ls hs (bg-mul c1 dv) then (true , bg-lo c1) else (false , #0)))

@@ -1,0 +1,14 @@
+-- the remainder of truncating division, exact (C's fmodf, Rust's %)
+ief-rem : Word → Word → Word
+ief-rem a b =
+  if orB (orB (ief-isnan a) (ief-isnan b)) (orB (ief-isinf a) (ief-iszero b)) then ief-NAN
+  else if ief-isinf b then a
+  else if ief-iszero a then a
+  else if %wlt (ief-abs a) (ief-abs b) then a
+  else (let ma = ief-m a
+            mb = ief-m b
+            ea = ief-e a
+            eb = ief-e b
+        in if %wlt ea eb
+           then ief-round (ief-sgn a) (%wmod ma (%wshl mb (%wsub eb ea))) ea #0
+           else ief-round (ief-sgn a) (ief-modsh (toNat (%wsub ea eb)) (%wmod ma mb) mb) eb #0)

@@ -1,0 +1,24 @@
+-- link two ports (src/hvm.c link): a variable first; enter the other side; set the variable,
+-- and if its other occurrence had arrived first, link what it held to the other side
+hr-ln : Nat → Word → Word → Word → (Word → Step W Word) → Step W Word
+hr-ln zero m a b k = k m
+hr-ln (suc f) m a b k =
+  let sw = andB (not (hv2-isvar a)) (hv2-isvar b)
+      a1 = if sw then b else a
+      b1 = if sw then a else b
+  in if not (hv2-isvar a1) then hr-push m a1 b1 k
+     else if hv2-isvar b1
+     then scmd (w-load (hr-va m (hv2-val b1))) (λ vb →
+            if %weq vb #0
+            then scmd (w-load (hr-va m (hv2-val a1))) (λ old →
+                 hr-st m (hr-va m (hv2-val a1)) (%wsucc b1) (λ m1 →
+                   if %weq old #0 then k m1
+                   else hr-st m1 (hr-va m1 (hv2-val a1)) #0 (λ m2 →
+                        hr-free-var m2 (hv2-val a1) (λ m3 → hr-ln f m3 (hv2-dep m3 (%wsub old #1)) b1 k))))
+            else hr-st m (hr-va m (hv2-val b1)) #0 (λ m1 →
+                 hr-free-var m1 (hv2-val b1) (λ m2 → hr-ln f m2 a1 (hv2-dep m2 (%wsub vb #1)) k)))
+     else scmd (w-load (hr-va m (hv2-val a1))) (λ old →
+          hr-st m (hr-va m (hv2-val a1)) (%wsucc b1) (λ m1 →
+            if %weq old #0 then k m1
+            else hr-st m1 (hr-va m1 (hv2-val a1)) #0 (λ m2 →
+                 hr-free-var m2 (hv2-val a1) (λ m3 → hr-ln f m3 (hv2-dep m3 (%wsub old #1)) b1 k))))

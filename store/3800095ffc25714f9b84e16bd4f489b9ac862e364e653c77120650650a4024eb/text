@@ -1,0 +1,7 @@
+-- f32 to the 24 bits of f24, and back
+ief-f24 : Word → Word
+ief-f24 x =
+  let sh = %wshr x #8
+      lost = %wand x #255
+  in if ief-isnan x then %wor sh #1
+     else %wadd sh (if %wlt #128 lost then #1 else if %weq lost #128 then %wand sh #1 else #0)

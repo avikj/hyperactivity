@@ -1,0 +1,20 @@
+hv2-main : List (List Word) → Step W Word
+hv2-main nil = cli-say "usage: hv2 FILE.hvm   (an HVM2 program, run by hyperactivity)" (sdone #2)
+hv2-main (cons file rest) =
+  scmd (w-file-read-named file) (λ rd →
+  let defs = hv2-parse (snd rd)
+      names = hv2-names defs
+      book = hv2-book defs names
+  in if not (hv2-has-main defs) then cli-say "ERROR: missing `@main` definition" (sdone #1) else
+     scmd (w-alloc hr-size) (λ m →
+     hr-st m (%wadd m #8) #1 (λ m0 →
+     hr-push m0 (hv2-port hv2-REF #0) hv2-root (λ m1 →
+     scmd w-now (λ t0 →
+     hr-loop (toNat hr-cap) book (hv2-keep m1 t0) (λ m2 →
+     scmd w-now (λ t1 →
+     hr-show m2 names (toNat #100000) hv2-root nil (λ s vs →
+     scmd (w-load (%wadd m2 #24)) (λ it →
+     cli-say (list-append "Result: " s)
+       (cli-say (list-append "- ITRS: " (ce-dec it))
+       (cli-say (list-append "- TIME: " (list-append (ce-dec (%wdiv (%wsub t1 t0) #1000000)) " ms"))
+       (sdone #0))))))))))))

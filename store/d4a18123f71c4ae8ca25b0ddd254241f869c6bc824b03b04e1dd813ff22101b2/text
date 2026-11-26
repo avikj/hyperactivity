@@ -1,0 +1,15 @@
+hr-swit : Nat → Word → Word → Word → (Word → Step W Word) → Step W Word
+hr-swit fu m a b k =
+  scmd (w-load (hr-na m (hv2-val b))) (λ w →
+  hr-free-node m (hv2-val b) (λ m0 →
+  let av = hv2-u24 (hv2-val a)
+      era = hv2-port hv2-ERA #0
+  in if %weq av #0
+     then hr-new-node m0 (λ n0 →
+          hr-st m0 (hr-na m0 n0) (hv2-pair (hv2-snd w) era) (λ m1 →
+          hr-ln fu m1 (hv2-port hv2-CON n0) (hv2-fst w) k))
+     else hr-new-node m0 (λ n0 →
+          hr-new-node (hv2-keep m0 n0) (λ n1 →
+          hr-st m0 (hr-na m0 n0) (hv2-pair era (hv2-port hv2-CON n1)) (λ m1 →
+          hr-st m1 (hr-na m1 n1) (hv2-pair (hv2-port hv2-NUM (hv2-new hv2-TY-U24 (%wsub av #1))) (hv2-snd w)) (λ m2 →
+          hr-ln fu m2 (hv2-port hv2-CON n0) (hv2-fst w) k))))))

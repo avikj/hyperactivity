@@ -1,0 +1,11 @@
+-- the target of a variable, taking each variable it passes through (src/hvm.c enter); the fuel
+-- is the number of variables memory holds, which no chain is longer than
+hr-enter : Nat → Word → Word → (Word → Step W Word) → Step W Word
+hr-enter zero m p k = k p
+hr-enter (suc f) m p k =
+  if hv2-isvar p then
+    scmd (w-load (hr-va m (hv2-val p))) (λ v →
+      if %weq v #0 then k p
+      else hr-st m (hr-va m (hv2-val p)) #0 (λ m1 →
+           hr-free-var m1 (hv2-val p) (λ m2 → hr-enter f m2 (hv2-dep m2 (%wsub v #1)) k)))
+  else k p

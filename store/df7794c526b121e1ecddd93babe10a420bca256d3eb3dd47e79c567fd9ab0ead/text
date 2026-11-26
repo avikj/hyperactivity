@@ -1,0 +1,13 @@
+-- |x|^y by exp(y·ln|x|), x positive finite nonzero, y finite nonzero
+ief-pow-gen : Word → Word → Word
+ief-pow-gen x y =
+  let pe = if %weq (ief-sgn y) #0 then ief-pow-exact x y else (false , #0)
+  in if fst pe then snd pe
+     else (let l = ief-lnfix x
+               zm = bg-mulw (snd l) (ief-m y)
+               ey = ief-e y
+               zs = if %wlt ey #4096 then bg-shr zm (%wsub #4096 ey) else bg-shl zm (%wsub ey #4096)
+               zsg = %wxor (fst l) (ief-sgn y)
+               lim = bg-shl (bg-of #110) ief-P
+           in if bg-ge zs lim then (if %weq zsg #0 then ief-INF else #0)
+              else ief-expfix (if bg-is0 zs then #0 else zsg , zs))
