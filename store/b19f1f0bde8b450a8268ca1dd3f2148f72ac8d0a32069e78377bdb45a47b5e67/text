@@ -1,0 +1,12 @@
+-- UTF-16 units as UTF-8 bytes (a lone surrogate as the replacement character, as a write does)
+b2-utf8g : Nat → List Word → List Word
+b2-utf8g zero r = nil
+b2-utf8g (suc f) nil = nil
+b2-utf8g (suc f) (cons u r) =
+  if andB (%wlt #55295 u) (%wlt u #56320) then
+    (let v = hv2-nth #0 r in
+     if andB (%wlt #56319 v) (%wlt v #57344)
+     then list-append (h4-utf8enc (%wadd #65536 (%wor (%wshl (%wsub u #55296) #10) (%wsub v #56320)))) (b2-utf8g f (hv2-drop1 r))
+     else list-append (h4-utf8enc #65533) (b2-utf8g f r))
+  else if andB (%wlt #56319 u) (%wlt u #57344) then list-append (h4-utf8enc #65533) (b2-utf8g f r)
+  else list-append (h4-utf8enc u) (b2-utf8g f r)

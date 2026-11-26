@@ -1,0 +1,12 @@
+b2-jsesc : List Word → List Word
+b2-jsesc nil = nil
+b2-jsesc (cons c r) =
+  if %weq c #34 then cons #92 (cons #34 (b2-jsesc r))
+  else if %weq c #92 then cons #92 (cons #92 (b2-jsesc r))
+  else if %weq c #10 then cons #92 (cons #110 (b2-jsesc r))
+  else if %weq c #9 then cons #92 (cons #116 (b2-jsesc r))
+  else if %weq c #13 then cons #92 (cons #114 (b2-jsesc r))
+  else if %weq c #8 then cons #92 (cons #98 (b2-jsesc r))
+  else if %weq c #12 then cons #92 (cons #102 (b2-jsesc r))
+  else if %wlt c #32 then cons #92 (cons #117 (cons #48 (cons #48 (cons (b2-hexd (%wshr c #4)) (cons (b2-hexd (%wand c #15)) (b2-jsesc r))))))
+  else cons c (b2-jsesc r)
