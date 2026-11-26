@@ -1,0 +1,21 @@
+-- src/hvm.c term_op2_u32 (u32 arithmetic; shifts by the count mod 32, as the machine does)
+h4-op : Word → Word → Word → Word
+h4-op o a b =
+  if %weq o #0 then h4-u32 (%wadd a b)
+  else if %weq o #1 then h4-u32 (%wsub (%wadd a #4294967296) b)
+  else if %weq o #2 then h4-u32 (%wmul a b)
+  else if %weq o #3 then (if %weq b #0 then #0 else %wdiv a b)
+  else if %weq o #4 then (if %weq b #0 then #0 else %wmod a b)
+  else if %weq o #5 then %wand a b
+  else if %weq o #6 then %wor a b
+  else if %weq o #7 then %wxor a b
+  else if %weq o #8 then h4-u32 (%wshl (%wand a #4294967295) (%wand b #31))
+  else if %weq o #9 then %wshr a (%wand b #31)
+  else if %weq o #10 then %wxor b #4294967295
+  else if %weq o #11 then hv2-b (%weq a b)
+  else if %weq o #12 then hv2-b (not (%weq a b))
+  else if %weq o #13 then hv2-b (%wlt a b)
+  else if %weq o #14 then hv2-b (not (%wlt b a))
+  else if %weq o #15 then hv2-b (%wlt b a)
+  else if %weq o #16 then hv2-b (not (%wlt a b))
+  else #0

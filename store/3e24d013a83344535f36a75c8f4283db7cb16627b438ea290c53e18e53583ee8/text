@@ -1,0 +1,14 @@
+-- [x, &y, ...]: (ok, state, captures as (name, depth, label, tag, cloned))
+h4-supnames : Nat → H4S → Word → List H4B → Bool × (H4S × List H4B)
+h4-supnames zero s saved acc = (false , (s , nil))
+h4-supnames (suc f) s0 saved acc =
+  let s = h4-skip s0
+  in if %weq (h4-peek s) #93 then (true , (s , h4-revb acc nil))
+     else (let cm = h4-match s "&"
+               s1 = if fst cm then h4-skip (snd cm) else snd cm
+               n = h4-name s1
+           in if not (fst n) then (false , (s1 , nil))
+              else (let lk = h4-look (fst (snd n)) (snd (snd n)) #2
+                    in if not (%weq (fst lk) #0) then (false , (fst (snd n) , nil))
+                       else h4-supnames f (h4-sep (h4-skip (fst (snd n)))) saved
+                              (cons (h4-capof (snd lk) (snd (snd n)) (if fst cm then #1 else #0) saved) acc)))

@@ -1,0 +1,9 @@
+-- a captured variable's term (src/hvm.c parse_term_sup_fork): from its binder and the fork side
+h4-capof : H4B → Word → Word → Word → H4B
+h4-capof b nm cl saved =
+  if %wlt (h4b-sd b) #2
+  then (if %weq (h4b-lab b) h4-DYN then h4b nm (%wadd (h4b-lvl b) (h4b-sd b)) #0 h4-BJV cl #0
+        else h4b nm (h4b-lvl b) (h4b-lab b) (if %weq (h4b-sd b) #0 then h4-BJ0 else h4-BJ1) cl #0)
+  else if andB (not (%weq (h4b-fk b) #0)) (%wlt saved #2)
+  then h4b nm (h4b-lvl b) (h4b-lab b) (if %weq saved #0 then h4-BJ0 else h4-BJ1) cl #0
+  else h4b nm (h4b-lvl b) #0 h4-BJV cl #0

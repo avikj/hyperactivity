@@ -1,0 +1,9 @@
+-- the codepoints of a string up to its fence
+h4-strchars : Nat → Word → List Word → Bool × (List Word × List Word)
+h4-strchars zero fence s = (false , (nil , s))
+h4-strchars (suc f) fence s =
+  if %weq (cli-len s) #0 then (false , (nil , s))
+  else if %weq (hv2-nth #0 s) fence then (true , (nil , hv2-drop1 s))
+  else (let e = h4-chesc s
+        in if not (fst e) then (false , (nil , s))
+           else (let r = h4-strchars f fence (snd (snd e)) in (fst r , (cons (fst (snd e)) (fst (snd r)) , snd (snd r)))))

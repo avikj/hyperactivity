@@ -1,0 +1,8 @@
+-- the fork binders' names: (ok, state, names)
+h4-forknames : Nat → H4S → List Word → Bool × (H4S × List Word)
+h4-forknames zero s acc = (true , (s , hv2-rev acc))
+h4-forknames (suc f) s0 acc =
+  if %weq (h4-peek s0) #123 then (true , (s0 , hv2-rev acc))
+  else (let s1 = h4-skip (h4-sep s0)
+        in if %weq (h4-peek s1) #123 then (true , (s1 , hv2-rev acc))
+           else (let n = h4-name s1 in if not (fst n) then (false , (s1 , nil)) else h4-forknames f (h4-skip (fst (snd n))) (cons (snd (snd n)) acc)))

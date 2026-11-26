@@ -1,0 +1,9 @@
+h4-main : List (List Word) → Step W Word
+h4-main nil = cli-say "usage: hvm4 FILE.hvm [-C[N]]   (an HVM4 program, run by hyperactivity)" (sdone #2)
+h4-main (cons file rest) =
+  scmd (w-file-read-named file) (λ fr →
+  if not (%weq (fst fr) #0) then cli-say (list-append "Error: could not open '" (list-append file "'")) (sdone #1) else
+  scmd (w-alloc h4-size) (λ m →
+  let fu = toNat #1048576
+      fb = toNat #2048
+  in h4-go m fu fb file (snd fr) (h4-climit rest) (λ r → sdone #0)))
