@@ -1,0 +1,17 @@
+-- a tree; the fuel is the length of the text, and every call consumes at least one character
+hv2-tree : Nat → List Word → Hv2Tree × List Word
+hv2-tree zero s = (hv2-tera , s)
+hv2-tree (suc n) s0 =
+  case hv2-sk s0 of
+    nil → (hv2-tera , nil)
+    cons c r →
+      if %wlt #0 (hv2-node-of c) then
+        (let s1 = if %wlt (hv2-node-of c) #6 then r else hv2-drop1 (hv2-sk r)
+             x = hv2-tree n s1
+             y = hv2-tree n (snd x)
+         in (hv2-tnode (hv2-node-of c) (fst x) (fst y) , hv2-drop1 (hv2-sk (snd y))))
+      else if %weq c #64 then (let m = hv2-name r in (hv2-tref (fst m) , snd m))
+      else if %weq c #42 then (hv2-tera , r)
+      else if %weq c #91 then (let m = hv2-sym-lit r in (hv2-tnum (fst m) , snd m))
+      else if hv2-numstart c then (let m = hv2-lit (cons c r) in (hv2-tnum (fst m) , snd m))
+      else (let m = hv2-name (cons c r) in (hv2-tvar (fst m) , snd m))

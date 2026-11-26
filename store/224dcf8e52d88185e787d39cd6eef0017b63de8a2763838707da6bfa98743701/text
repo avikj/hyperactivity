@@ -1,0 +1,8 @@
+-- src/hvm.c enter: a variable's final target, the chain it passed through deleted; one step,
+-- then 2^d steps by doubling, stopping as soon as the target is not a bound variable
+hv2-enter1 : Hv2Net → Word → Hv2Net × Word
+hv2-enter1 net p =
+  if hv2-isvar p then
+    (let x = hv2-var-get net (hv2-val p)
+     in if %weq x hv2-none then (net , p) else (hv2-var-del net (hv2-val p) , x))
+  else (net , p)

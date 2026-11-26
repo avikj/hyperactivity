@@ -1,0 +1,6 @@
+hr-new-var : Word → (Word → Step W Word) → Step W Word
+hr-new-var m k =
+  scmd (w-load (%wadd m #40)) (λ c →
+  if %weq c #0
+  then scmd (w-load (%wadd m #8)) (λ i → hr-st m (%wadd m #8) (%wsucc i) (λ m1 → k (hv2-dep m1 i)))
+  else scmd (w-load (hr-fva m (%wsub c #1))) (λ i → hr-st m (%wadd m #40) (%wsub c #1) (λ m1 → k (hv2-dep m1 i))))

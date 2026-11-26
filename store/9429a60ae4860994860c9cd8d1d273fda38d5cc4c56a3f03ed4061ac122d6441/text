@@ -1,0 +1,17 @@
+-- one interaction: pop a redex and perform its rule (kd when there was none)
+hr-loop1 : List Hv2Def → Word → (Word → Step W Word) → (Word → Step W Word) → Step W Word
+hr-loop1 book m kd km =
+  scmd (w-load (%wadd m #16)) (λ t →
+    if %weq t #0 then kd m
+    else scmd (w-load (hr-ba m (%wsub t #1))) (λ rx →
+         hr-st m (%wadd m #16) (%wsub t #1) (λ m1 →
+         scmd (w-load (%wadd m1 #24)) (λ it →
+         hr-st m1 (%wadd m1 #24) (%wsucc it) (λ m2 →
+         let a0 = hv2-fst rx
+             b0 = hv2-snd rx
+             root = andB (%weq (hv2-tag a0) hv2-REF) (%weq b0 hv2-root)
+             sw = andB (not root) (%wlt (hv2-tag b0) (hv2-tag a0))
+             a = if sw then b0 else a0
+             b = if sw then a0 else b0
+             r = if root then hv2-CALL else hv2-rule (hv2-tag a) (hv2-tag b)
+         in hr-do book r m2 a b km)))))

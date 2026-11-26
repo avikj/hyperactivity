@@ -1,0 +1,16 @@
+hr-show : Word → List (List Word) → Nat → Word → List Word → (List Word → List Word → Step W Word) → Step W Word
+hr-show m names zero p0 vs k = k "..." vs
+hr-show m names (suc n) p0 vs k =
+  hr-peek m p0 (λ p →
+  let t = hv2-tag p
+  in if %weq t hv2-VAR then
+       (let i = hv2-vpos-go #0 (hv2-val p) vs
+        in if %weq i hv2-none then k (list-append "x" (ce-dec (hv2-vlen vs))) (list-append vs (cons (hv2-val p) nil))
+           else k (list-append "x" (ce-dec i)) vs)
+     else if %weq t hv2-REF then k (list-append "@" (hv2-name-at (hv2-val p) names)) vs
+     else if %weq t hv2-ERA then k "*" vs
+     else if %weq t hv2-NUM then k (hv2-numshow (hv2-val p)) vs
+     else scmd (w-load (hr-na m (hv2-val p))) (λ w →
+          hr-show m names n (hv2-fst w) vs (λ s1 vs1 →
+          hr-show m names n (hv2-snd w) vs1 (λ s2 vs2 →
+          k (list-append (hv2-open t) (list-append s1 (list-append " " (list-append s2 (hv2-close t))))) vs2))))

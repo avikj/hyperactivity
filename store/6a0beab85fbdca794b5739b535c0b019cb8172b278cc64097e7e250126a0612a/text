@@ -1,0 +1,16 @@
+hv2-show : Nat → Hv2Net → List (List Word) → Word → List Word → List Word × List Word
+hv2-show zero net names p0 vs = ("..." , vs)
+hv2-show (suc n) net names p0 vs =
+  let p = hv2-peek net p0
+      t = hv2-tag p
+  in if %weq t hv2-VAR then
+       (let i = hv2-vpos-go #0 (hv2-val p) vs
+        in if %weq i hv2-none then (list-append "x" (ce-dec (hv2-vlen vs)) , list-append vs (cons (hv2-val p) nil))
+           else (list-append "x" (ce-dec i) , vs))
+     else if %weq t hv2-REF then (list-append "@" (hv2-name-at (hv2-val p) names) , vs)
+     else if %weq t hv2-ERA then ("*" , vs)
+     else if %weq t hv2-NUM then (hv2-numshow (hv2-val p) , vs)
+     else (let w = hv2-node-get net (hv2-val p)
+               x = hv2-show n net names (hv2-fst w) vs
+               y = hv2-show n net names (hv2-snd w) (snd x)
+           in (list-append (hv2-open t) (list-append (fst x) (list-append " " (list-append (fst y) (hv2-close t)))) , snd y))

@@ -1,0 +1,14 @@
+-- src/hvm.c operate
+hv2-operate : Word → Word → Word
+hv2-operate a b =
+  let at = hv2-typ a
+      bt = hv2-typ b
+  in if andB (%weq at #0) (%weq bt #0) then hv2-new hv2-TY-U24 #0
+     else if andB (hv2-iscast a) (hv2-isnumty b) then hv2-cast a b
+     else if andB (hv2-iscast b) (hv2-isnumty a) then hv2-cast b a
+     else if %weq at #0 then hv2-partial a b
+     else if %weq bt #0 then hv2-partial b a
+     else if andB (%wlt #3 at) (%wlt #3 bt) then hv2-new hv2-TY-U24 #0
+     else if andB (%wlt at #4) (%wlt bt #4) then hv2-new hv2-TY-U24 #0
+     else if %wlt #3 at then hv2-apply at bt a b
+     else hv2-apply bt at b a

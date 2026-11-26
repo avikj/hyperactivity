@@ -1,0 +1,8 @@
+hr-enter-d : Nat → Word → Word → (Word → Step W Word) → (Word → Step W Word) → Step W Word
+hr-enter-d zero m p kd km =
+  if hv2-isvar p then
+    scmd (w-load (hr-va m (hv2-val p))) (λ v →
+      if %weq v #0 then kd p
+      else hr-st m (hr-va m (hv2-val p)) #0 (λ m1 → hr-free-var m1 (hv2-val p) (λ m2 → km (hv2-dep m2 (%wsub v #1)))))
+  else kd p
+hr-enter-d (suc d) m p kd km = hr-enter-d d m p kd (λ p1 → hr-enter-d d m p1 kd km)

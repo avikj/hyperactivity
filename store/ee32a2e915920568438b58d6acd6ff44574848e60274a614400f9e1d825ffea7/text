@@ -1,0 +1,6 @@
+-- a call places each node and variable of the definition (the tables), then writes its nodes
+-- and redexes with their ports moved to where they were placed (src/hvm.c interact_call)
+hr-tab-nodes : Word → List (Word × Word) → (Word → Step W Word) → Step W Word
+hr-tab-nodes m nil k = k m
+hr-tab-nodes m (cons iw r) k =
+  hr-new-node m (λ g → hr-st m (hr-nta m (fst iw)) g (λ m1 → hr-tab-nodes m1 r k))

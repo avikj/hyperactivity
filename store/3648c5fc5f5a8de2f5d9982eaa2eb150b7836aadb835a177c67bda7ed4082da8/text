@@ -1,0 +1,11 @@
+hr-link1 : Word → Word → Word → (Word → Step W Word) → (Word → Word → Step W Word) → Step W Word
+hr-link1 m a b kd km =
+  let sw = andB (not (hv2-isvar a)) (hv2-isvar b)
+      a1 = if sw then b else a
+      b1 = if sw then a else b
+  in if not (hv2-isvar a1) then hr-push m a1 b1 kd
+     else hr-enter m b1 (λ b2 →
+          scmd (w-load (hr-va m (hv2-val a1))) (λ old →
+          hr-st m (hr-va m (hv2-val a1)) (%wsucc b2) (λ m1 →
+            if %weq old #0 then kd m1
+            else hr-st m1 (hr-va m1 (hv2-val a1)) #0 (λ m2 → hr-free-var m2 (hv2-val a1) (λ m3 → km (hv2-dep m3 (%wsub old #1)) b2)))))

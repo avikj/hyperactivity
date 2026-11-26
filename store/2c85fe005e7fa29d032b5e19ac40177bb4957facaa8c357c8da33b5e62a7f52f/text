@@ -1,0 +1,11 @@
+hr-oper : Word → Word → Word → (Word → Step W Word) → Step W Word
+hr-oper m a b k =
+  scmd (w-load (hr-na m (hv2-val b))) (λ w →
+  hr-free-node m (hv2-val b) (λ m0 →
+  hr-enter m0 (hv2-snd w) (λ b2 →
+  let b1 = hv2-fst w
+  in if %weq (hv2-tag b1) hv2-NUM
+     then hr-ln (hv2-keep m0 b2) (hv2-port hv2-NUM (hv2-operate (hv2-val a) (hv2-val b1))) b2 k
+     else hr-new-node (hv2-keep m0 b2) (λ n0 →
+          hr-st m0 (hr-na m0 n0) (hv2-pair a b2) (λ m1 →
+          hr-ln m1 b1 (hv2-port hv2-OPR n0) k)))))

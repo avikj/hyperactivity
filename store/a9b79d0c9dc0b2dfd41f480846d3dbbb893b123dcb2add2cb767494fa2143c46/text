@@ -1,0 +1,12 @@
+hv2-step : List Hv2Def → Hv2Net → Hv2Net
+hv2-step book (hv2net ns vs nil nn nv it) = hv2net ns vs nil nn nv it
+hv2-step book (hv2net ns vs (cons rx rb) nn nv it) =
+  let net = hv2net ns vs rb nn nv (%wsucc it)
+      a0 = hv2-fst rx
+      b0 = hv2-snd rx
+      root = andB (%weq (hv2-tag a0) hv2-REF) (%weq b0 hv2-root)
+      sw = andB (not root) (%wlt (hv2-tag b0) (hv2-tag a0))
+      a = if sw then b0 else a0
+      b = if sw then a0 else b0
+      r = if root then hv2-CALL else hv2-rule (hv2-tag a) (hv2-tag b)
+  in hv2-do book r net a b
