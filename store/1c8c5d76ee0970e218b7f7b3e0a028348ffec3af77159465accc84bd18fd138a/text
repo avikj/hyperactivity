@@ -1,0 +1,9 @@
+-- src/run.c readback_tup: at most n elements of right-nested pairs
+hio-tup : Nat → HioE → Word → Word → List Word → (Word → List Word → Step W Word) → Step W Word
+hio-tup zero e m port acc k = k m (hio-rev (cons port acc) nil)
+hio-tup (suc n) e m port acc k =
+  if hio-iscon port
+  then scmd (w-load (hr-na m (hv2-val port))) (λ w →
+       hio-expand e m (hv2-fst w) (λ m1 x →
+       hio-expand e m1 (hv2-snd w) (λ m2 y → hio-tup n e m2 y (cons x acc) k)))
+  else k m (hio-rev (cons port acc) nil)

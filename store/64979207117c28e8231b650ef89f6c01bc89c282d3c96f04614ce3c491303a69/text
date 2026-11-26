@@ -1,0 +1,12 @@
+-- src/run.c readback_bytes: a λ-encoded list, normalized one cell at a time; each byte the low
+-- eight bits of its number
+hio-bytes : Nat → HioE → Word → Word → List Word → (Word → List Word → Step W Word) → Step W Word
+hio-bytes zero e m port acc k = k m (hio-rev acc nil)
+hio-bytes (suc f) e m port acc k =
+  hio-run e m (λ m1 →
+  hr-peek m1 port (λ pp →
+  hio-ctr e m1 pp (λ m2 tag args →
+  if andB (%weq tag #1) (andB (%weq (cli-len args) #2) (hio-isnum (hio-at #0 args)))
+  then hio-boot m2 (hio-at #1 args) hv2-root (λ m3 →
+       hio-bytes f e m3 hv2-root (cons (%wand (hio-u24 (hio-at #0 args)) #255) acc) k)
+  else k m2 (hio-rev acc nil))))

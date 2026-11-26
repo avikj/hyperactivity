@@ -1,0 +1,19 @@
+hio-fn-seek : HioE → Word → Word → (Word → Step W Word) → Step W Word
+hio-fn-seek e m argm k =
+  hio-tup (toNat #2) e m argm nil (λ m1 tup →
+  if not (%weq (cli-len tup) #3) then hio-err-type m1 k
+  else (let fp = hio-at #0 tup
+            off = hio-u24 (hio-at #1 tup)
+            wh = hio-u24 (hio-at #2 tup)
+        in if not (hio-isnum fp) then hio-err-no m1 #9 k
+           else if %wlt #2 wh then hio-err-type m1 k
+           else if %wlt (hio-u24 fp) #3 then hio-err-no m1 #0 k
+           else hio-rec m1 (hio-u24 fp) (λ r →
+                if %weq r #0 then hio-err-no m1 #9 k
+                else scmd (w-load (%wadd r #16)) (λ len → scmd (w-load (%wadd r #24)) (λ pos →
+                     let base = if %weq wh #0 then #0 else if %weq wh #1 then pos else len
+                         neg = hv2-sgn off
+                         mag = if neg then hv2-neg off else off
+                     in if andB neg (%wlt base mag) then hio-err-no (hv2-kp m1 len) #0 k
+                        else scmd (w-store (%wadd r #24) (if neg then %wsub base mag else %wadd base mag)) (λ u →
+                             hio-ok (hv2-u m1 u) hio-era k))))))

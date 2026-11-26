@@ -1,0 +1,13 @@
+-- the definition's redexes, then its root against the other side of the call, as links
+hr-cd-rb : List Word → Word → Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+hr-cd-rb nil m nb vb root b k =
+  scmd (w-load (hr-cd-ta m nb vb root)) (λ q →
+  scmd (w-load (%wadd m #48)) (λ t →
+  scmd (w-store (hr-lsa m t) (hv2-pair (hr-cd-adj root q) b)) (λ u →
+  scmd (w-store (%wadd (hv2-u m u) #48) (%wsucc t)) (λ u2 → k (hv2-u m u2)))))
+hr-cd-rb (cons rx r) m nb vb root b k =
+  scmd (w-load (hr-cd-ta m nb vb (hv2-fst rx))) (λ q1 →
+  scmd (w-load (hr-cd-ta m nb vb (hv2-snd rx))) (λ q2 →
+  scmd (w-load (%wadd m #48)) (λ t →
+  scmd (w-store (hr-lsa m t) (hv2-pair (hr-cd-adj (hv2-fst rx) q1) (hr-cd-adj (hv2-snd rx) q2))) (λ u →
+  scmd (w-store (%wadd (hv2-u m u) #48) (%wsucc t)) (λ u2 → hr-cd-rb r (hv2-u m u2) nb vb root b k)))))

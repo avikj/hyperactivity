@@ -1,0 +1,22 @@
+hio-fn-read : HioE → Word → Word → (Word → Step W Word) → Step W Word
+hio-fn-read e m argm k =
+  hio-tup (toNat #1) e m argm nil (λ m1 tup →
+  if not (%weq (cli-len tup) #2) then hio-err-type m1 k
+  else (let fp = hio-at #0 tup
+            n = hio-u24 (hio-at #1 tup)
+        in if not (hio-isnum fp) then hio-err-no m1 #9 k
+           else if %wlt (hio-u24 fp) #3
+           then scmd (w-alloc (%wadd n #1)) (λ buf →
+                hio-readn (toNat #16777216) (hio-u24 fp) buf n #0 (λ got er →
+                if %weq er #1 then hio-err-no (hv2-kp m1 got) #1 k
+                else hio-peek (toNat got) buf nil (λ bs →
+                     scmd (w-free buf) (λ u → hio-bytes-in (hv2-u m1 u) bs (λ p → hio-ok (hv2-kp m1 p) p k)))))
+           else hio-rec m1 (hio-u24 fp) (λ r →
+                if %weq r #0 then hio-err-no m1 #9 k
+                else scmd (w-load (%wadd r #32)) (λ md →
+                     if %weq (%wand md #1) #0 then hio-err-no (hv2-kp m1 md) #1 k
+                     else scmd (w-load r) (λ buf → scmd (w-load (%wadd r #16)) (λ len → scmd (w-load (%wadd r #24)) (λ pos →
+                          let got = if %wlt len pos then #0 else (if %wlt (%wsub len pos) n then %wsub len pos else n)
+                          in hio-peek (toNat got) (%wadd buf pos) nil (λ bs →
+                             scmd (w-store (%wadd r #24) (%wadd pos got)) (λ u →
+                             hio-bytes-in (hv2-u m1 u) bs (λ p → hio-ok (hv2-kp m1 p) p k))))))))))
