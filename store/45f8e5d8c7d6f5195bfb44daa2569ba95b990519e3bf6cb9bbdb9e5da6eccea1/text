@@ -1,0 +1,130 @@
+# Handoff: reproducing `hx cm` (lib/hx-cm) as a running program, 2026-11-26
+
+Knowledge-work session; no core, library or store mechanism changed. Each finding has the commands
+run and the lines read. What to change is Avik's.
+
+## What was run
+
+- `./build/cubical lib/hx-cm.hypercubical`: 891 passed, 0 failed.
+- The program: `./hyperactive view in lib/hx-cm.hypercubical hcm-c` (the module's own value,
+  `emit-c-cli (code hcm-main)`), and `emit-c-cli-opt (code hcm-main)` viewed in a file importing
+  `lib/native-opt.hypercubical` and `lib/hx-cm.hypercubical`. Both compile with gcc 13 and clang 18,
+  0 errors.
+- Corpus: the Silesia corpus (`dickens` 10,192,446 B, `xml` 5,345,280 B), cloned from
+  github.com/MiloszKrajewski/SilesiaCorpus. Machine: x86-64 Linux, 2 cores, 8 GB.
+
+## Finding 1: `hcm-c` is emitted with the runtime that has no raw file I/O
+
+`hcm-read-raw` / `hcm-write-raw` / `hcm-enc-file` call `w-sys #904` (file size), `#902` (raw read),
+`#903` (raw write) and `#900`/`#901` (mark/rewind). `emit-c-cli` (lib/native) passes these to the
+kernel's `syscall()`, which answers ENOSYS (-38). `fsz` becomes 2^64 − 38; `hcm-enc-file` then
+computes `%wmul n #2`, which the runtime's checked `hy_mul` refuses: abort, no output, on every input.
+`emit-c-cli-opt` (lib/native-opt, `ce-opt-posix-sys`) implements 900–904. So `hcm-c` is the wrong
+emitter for this module; `emit-c-cli-opt (code hcm-main)` is the one that runs.
+
+## Finding 2: `hy_rewind` frees the slab that holds the live continuation
+
+With `emit-c-cli-opt`, inputs up to 654,589 B of `dickens` round-trip; from about 655,000 B the
+encoder segfaults in `hy_app` (heap address, not stack). `hy_rewind` (#901, called every 256 bytes)
+frees every slab after the marked one, and the continuation `k` of the #901 command itself was
+allocated after the mark; when it sits in a later slab, `hy_run_step` applies a freed closure. A
+`hy_rewind` that resets `hy_cur/hy_at/hy_end` to the mark and keeps the later slabs (which
+`hy_alloc` already reuses through `hy_cur->next`) removes the fault: 2,000,000 B of `dickens` and
+all of `xml` then encode.
+
+## Finding 3: the encoder's stack grows with the input
+
+The per-byte loop (`hcm-enc-loop2` and its helpers) is emitted as direct calls between functions of
+15–24 arguments. gcc and clang do not make these sibling calls on x86-64 (6 argument registers), so
+every byte nests frames: 484 MB of stack after 3 s on a 2 MB input (gcc), 721 MB (clang). With the
+stack unlimited, `xml` encodes and its decode is killed for memory; `dickens` (10 MB) encode is
+killed for memory. On ARM64 the register budget is 8, still below these arities. A loop emitted for
+a self tail call, or the loop state packed into ≤ 6 (x86-64) / ≤ 8 (ARM64) words as the module's
+header intends ("<= 8 args in x0..x7"), makes the stack constant.
+
+## Measured (round trip bit-exact, `cmp` equal), bits per byte
+
+| input | hx cm | xz -9e | bzip2 -9 | gzip -9 |
+|---|---|---|---|---|
+| dickens, first 100,000 B | 2.5597 | 2.8544 | 2.6298 | 3.1166 |
+| dickens, first 2,000,000 B | 2.2198 | 2.3469 | 2.2204 | 3.0278 |
+| xml, first 2,000,000 B | 0.7936 | 0.8629 | 0.7704 | — |
+| xml, whole (encode only; decode killed for memory) | 0.6639 | 0.6508 | 0.6602 | — |
+
+Encode speed: 2,000,000 B in 5.5 s (about 0.36 MB/s). zstd is not installed on this machine.
+
+## Where the README's 1.6305 bits/byte comes from
+
+No module holds the number or the corpus it was measured on. Measured here on text (dickens), hx cm
+matches bzip2 -9 and beats xz -9e; on xml it is between them. The comparison that would place it is
+the whole of Silesia and enwik8 against zstd -19, xz -9e, and a context-mixing coder (paq8/cmix),
+which needs Findings 1–3 resolved to run at full size.
+
+## Addendum, same night: lib/hx-hxp and lib/hx-llmzip-v3
+
+### lib/hx-hxp: the benchmark program, run on x86-64 Linux
+
+`hxp-main` writes four files; the C11 one is `hxp-emit-c11 hxp-default-ir`, read here with
+`./hyperactive view in lib/hx-hxp.hypercubical "hxp-emit-c11 hxp-default-ir"` (19,228 B). It calls
+macOS `sysctlbyname` for the CPU name, core count and cache line; on Linux a stub returning -1 was put
+in a copy (the only change). Built with `gcc -O2 -pthread`; it exits 0 (all its own checks pass):
+
+| line | measured here | what the code measures (read in `hx_hxp.c`) |
+|---|---|---|
+| 1. TCP + Connection: close | 53,495.7 ns/exchange | connect, send, receive, close on loopback, 1,000 times |
+| 2. TCP_NODELAY stream | 37,325.0 ns/rtt | one persistent loopback connection |
+| 3. HXP 64 B datagram | 2,685.94 ns/cell | UDP sendmsg on loopback (`sendmsg_x` absent on Linux) |
+| 4. HoL: TCP vs HXP | 315,000.1 µs vs 0.142 µs | the TCP figure is computed, not measured: `*tcp_hol_us = 63.0 * 5000.0 + *hxp_hol_us` |
+| 5. mmap arena vs POSIX VFS | 1.83 ns vs 987.0 ns (541×) | arena: a probe of a 2,048-slot open-addressed table holding 1,024 keys, in memory; VFS: `open` + `read` 64 B + `close` of a file, 4,000 times |
+| 6. SeqLock coalescer | 0.88 ns/update | single-writer sequence lock, 4,000,000 updates |
+| 7. 128 B ring RTT | 383.28 ns | two threads ping-ponging one acquire/release word |
+| 8. hexagram cuts | 6.82 ns/cut (146.61 M/s) | 16,000,000 64 B slots through a shared ring to one consumer thread |
+
+The README's 1.12 ns / 8,221.5 ns / 7,308× and 75.47 ns are this program's lines 5 and 7 on another
+machine. Line 5 compares an in-memory hash probe against three system calls on a file; line 4's TCP
+side is a constant (63 × 5 ms plus the measured HXP time).
+
+### lib/hx-llmzip-v3: no program to run
+
+The module (246 definitions, all pass) is the codec's model and its theorems (`lz3-thm-codec-lossless`,
+`lz3-thm-gemv-hom`, the rotation bijection, the dense/escape split). It defines no C, Metal or main;
+`lib/silicon/hx-llm-zip.hypercubical` is the other module of that name. The 145.4 → 103.4 GB
+(1.4068×) and 4,629.9 GB/s figures are not produced by anything in the store, and the Qwen2.5-72B
+weights are not reachable from this machine. What the ratio means in bits: 16 / 1.4068 = 11.37 bits
+per BF16 weight, so 3.37 bits per weight for the exponent and escapes on top of the 8 kept bits of
+sign and mantissa.
+
+### lib/hx-cm, stack growth (Finding 3) tested further
+
+gcc 13 and clang 18 at -O2 both nest frames per byte (484 MB and 721 MB of stack after 3 s on a 2 MB
+input). The cycle is a chain of functions of 15 to 24 arguments; on x86-64 a sibling call is made only
+when the callee's stack arguments fit in the caller's, and they do not along this chain. Patching the
+emitted C cannot fix it short of rewriting the loop; the fix is in the emitter (a self tail call
+emitted as a loop, or calls through a trampoline) or in hx-cm (loop state in at most 6 words for
+x86-64, 8 for ARM64, as its header intends). Whole `dickens` (10 MB) needs about 11 GB at the measured
+rate and was not run on this 8 GB machine.
+
+## Changes made through `hyperactive` (branch claude/hx-cm-runs, on main 838a49756)
+
+- `emit-c-cli-opt-program` (lib/native-opt): `hy_rewind` returns the allocator to the mark and keeps
+  the slabs after it (`hy_alloc` reuses them through `hy_cur->next`) instead of freeing them; this
+  removes Finding 2. Written with `./hyperactive write emit-c-cli-opt-program`; it checked.
+- `lib/hx-cm-opt.hypercubical` (new): `hcm-c-opt = emit-c-cli-opt (code hcm-main)`, the program that
+  runs (Finding 1). `hcm-c` is kept as it was. A rewrite of lib/hx-cm's import line through
+  `write lib/hx-cm.hypercubical` was refused ("declared again"), so the emitter choice lives beside it.
+- Checked by running: `./hyperactive view in lib/hx-cm-opt.hypercubical hcm-c-opt`, clang -O2, round
+  trips bit-exact on dickens and xml 2 MB prefixes (554,972 B and 198,416 B, as before).
+
+## Finding 3, tested on copies of the emitted C (not changed in the store)
+
+Each of these left the output byte-identical and the stack still growing (VmStk after 3 s on 2 MB):
+every generated function given one arity (24) — 570 MB; that plus `musttail` on every tail call
+between generated functions, statement expressions and switch arms rewritten as returns — 658 MB;
+`hy_app`'s saturated-call array made thread-local so the call into the closure has no escaping local —
+453 MB; both together — 379 MB. Two hops stay non-tail: the closure wrapper `wN(const uint64_t *a)`
+calls `gN(a[0], …)` with up to 24 arguments from a one-register frame, and recursions on a Nat are
+emitted as `if (n == 0) r = …; else r = …; return r;`. A constant stack needs the continuation call
+(`hy_app` → `wN` → `gN`) to be one convention end to end: either every generated function and closure
+entry takes its arguments the same way (e.g. one pointer to an argument block the callee copies
+before its first call), so every tail call can be `musttail`, or continuation calls return to the
+`hy_run_step` loop instead of nesting.

@@ -1,0 +1,26 @@
+-- hy_rewind returns the allocator to the mark and keeps the slabs after it for reuse (hy_alloc takes
+-- them through hy_cur->next): the continuation of the #901 command itself is allocated after the
+-- mark, and freeing its slab made hy_run_step apply a freed closure (lib/hx-cm from about 655 KB of
+-- input, 2026-11-26).
+emit-c-cli-opt-program : Word → Defs → List Word
+emit-c-cli-opt-program m defs =
+  let ars = x-arities defs
+      pre =
+        list-append "#include <stdint.h>" (list-append ce-nl
+        (list-append "#include <stdio.h>" (list-append ce-nl
+        (list-append "#include <stdlib.h>" (list-append ce-nl
+        (list-append ce-slab-alloc
+        (list-append "static const uint64_t hy_c0[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};" (list-append ce-nl
+        (list-append "static hy_slab *hy_mcur; static uint64_t *hy_mat, *hy_mend; static uint64_t hy_mark(void) { hy_mcur = hy_cur; hy_mat = hy_at; hy_mend = hy_end; return hy_bytes; } static uint64_t hy_rewind(void) { if (!hy_mcur) { hy_reset(); return hy_slabs; } hy_cur = hy_mcur; hy_at = hy_mat; hy_end = hy_mend; return hy_slabs; }" (list-append ce-nl
+        (list-append "static uint64_t hy_bad(void) { abort(); }" (list-append ce-nl
+        (list-append "static uint64_t hy_bad2(uint64_t a, uint64_t b) { abort(); }" (list-append ce-nl
+        (list-append "static uint64_t hy_add(uint64_t a, uint64_t b) { uint64_t r; if (__builtin_add_overflow(a, b, &r)) abort(); return r; }" (list-append ce-nl
+        (list-append "static uint64_t hy_mul(uint64_t a, uint64_t b) { uint64_t r; if (__builtin_mul_overflow(a, b, &r)) abort(); return r; }" (list-append ce-nl
+        (list-append "static uint64_t hy_sub(uint64_t a, uint64_t b) { return a > b ? a - b : 0; }" (list-append ce-nl
+        (list-append "static uint64_t hy_con(uint64_t tag, uint64_t n, const uint64_t *f) { if (!n && tag < 16) return (uint64_t)(uintptr_t)&hy_c0[tag]; uint64_t *p = hy_alloc((n + 1) * sizeof *p); p[0] = tag; for (uint64_t i = 0; i < n; i++) p[i + 1] = f[i + 1]; return (uint64_t)p; }" (list-append ce-nl
+        (list-append "static uint64_t hy_eq(uint64_t a, uint64_t b) { return (uint64_t)(uintptr_t)&hy_c0[a == b ? 0 : 1]; }" (list-append ce-nl
+        (list-append "static uint64_t hy_lt(uint64_t a, uint64_t b) { return (uint64_t)(uintptr_t)&hy_c0[a < b ? 0 : 1]; }" ce-nl)))))))))))))))))))))))))
+  in list-append ce-world-inc (list-append pre (list-append ce-opt-prelude2
+       (list-append ce-opt-world-helpers (list-append ce-opt-posix-sys (list-append ce-world-run
+         (list-append (list-append "#undef syscall" ce-nl)
+           (ce-protos defs (ce-wraps defs (ce-cli-wfns ars defs (ce-cli-main m))))))))))
