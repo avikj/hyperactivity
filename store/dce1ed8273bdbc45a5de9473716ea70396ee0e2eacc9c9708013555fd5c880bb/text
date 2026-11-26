@@ -1,0 +1,61 @@
+# Handoff: reproducing `hx cm` (lib/hx-cm) as a running program, 2026-11-26
+
+Knowledge-work session; no core, library or store mechanism changed. Each finding has the commands
+run and the lines read. What to change is Avik's.
+
+## What was run
+
+- `./build/cubical lib/hx-cm.hypercubical`: 891 passed, 0 failed.
+- The program: `./hyperactive view in lib/hx-cm.hypercubical hcm-c` (the module's own value,
+  `emit-c-cli (code hcm-main)`), and `emit-c-cli-opt (code hcm-main)` viewed in a file importing
+  `lib/native-opt.hypercubical` and `lib/hx-cm.hypercubical`. Both compile with gcc 13 and clang 18,
+  0 errors.
+- Corpus: the Silesia corpus (`dickens` 10,192,446 B, `xml` 5,345,280 B), cloned from
+  github.com/MiloszKrajewski/SilesiaCorpus. Machine: x86-64 Linux, 2 cores, 8 GB.
+
+## Finding 1: `hcm-c` is emitted with the runtime that has no raw file I/O
+
+`hcm-read-raw` / `hcm-write-raw` / `hcm-enc-file` call `w-sys #904` (file size), `#902` (raw read),
+`#903` (raw write) and `#900`/`#901` (mark/rewind). `emit-c-cli` (lib/native) passes these to the
+kernel's `syscall()`, which answers ENOSYS (-38). `fsz` becomes 2^64 − 38; `hcm-enc-file` then
+computes `%wmul n #2`, which the runtime's checked `hy_mul` refuses: abort, no output, on every input.
+`emit-c-cli-opt` (lib/native-opt, `ce-opt-posix-sys`) implements 900–904. So `hcm-c` is the wrong
+emitter for this module; `emit-c-cli-opt (code hcm-main)` is the one that runs.
+
+## Finding 2: `hy_rewind` frees the slab that holds the live continuation
+
+With `emit-c-cli-opt`, inputs up to 654,589 B of `dickens` round-trip; from about 655,000 B the
+encoder segfaults in `hy_app` (heap address, not stack). `hy_rewind` (#901, called every 256 bytes)
+frees every slab after the marked one, and the continuation `k` of the #901 command itself was
+allocated after the mark; when it sits in a later slab, `hy_run_step` applies a freed closure. A
+`hy_rewind` that resets `hy_cur/hy_at/hy_end` to the mark and keeps the later slabs (which
+`hy_alloc` already reuses through `hy_cur->next`) removes the fault: 2,000,000 B of `dickens` and
+all of `xml` then encode.
+
+## Finding 3: the encoder's stack grows with the input
+
+The per-byte loop (`hcm-enc-loop2` and its helpers) is emitted as direct calls between functions of
+15–24 arguments. gcc and clang do not make these sibling calls on x86-64 (6 argument registers), so
+every byte nests frames: 484 MB of stack after 3 s on a 2 MB input (gcc), 721 MB (clang). With the
+stack unlimited, `xml` encodes and its decode is killed for memory; `dickens` (10 MB) encode is
+killed for memory. On ARM64 the register budget is 8, still below these arities. A loop emitted for
+a self tail call, or the loop state packed into ≤ 6 (x86-64) / ≤ 8 (ARM64) words as the module's
+header intends ("<= 8 args in x0..x7"), makes the stack constant.
+
+## Measured (round trip bit-exact, `cmp` equal), bits per byte
+
+| input | hx cm | xz -9e | bzip2 -9 | gzip -9 |
+|---|---|---|---|---|
+| dickens, first 100,000 B | 2.5597 | 2.8544 | 2.6298 | 3.1166 |
+| dickens, first 2,000,000 B | 2.2198 | 2.3469 | 2.2204 | 3.0278 |
+| xml, first 2,000,000 B | 0.7936 | 0.8629 | 0.7704 | — |
+| xml, whole (encode only; decode killed for memory) | 0.6639 | 0.6508 | 0.6602 | — |
+
+Encode speed: 2,000,000 B in 5.5 s (about 0.36 MB/s). zstd is not installed on this machine.
+
+## Where the README's 1.6305 bits/byte comes from
+
+No module holds the number or the corpus it was measured on. Measured here on text (dickens), hx cm
+matches bzip2 -9 and beats xz -9e; on xml it is between them. The comparison that would place it is
+the whole of Silesia and enwik8 against zstd -19, xz -9e, and a context-mixing coder (paq8/cmix),
+which needs Findings 1–3 resolved to run at full size.
