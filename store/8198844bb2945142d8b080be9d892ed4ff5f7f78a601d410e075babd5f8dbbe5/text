@@ -1,0 +1,17 @@
+-- THEOREM 3: EXACT 256-BIT (`>2^128` PRODUCT) RESERVE & ATOMIC FLASH-SETTLEMENT PROOF (`refl`!):
+--   1. Base Uniswap V2 WETH reserve exceeds `2^64 - 1`, AND 50 WETH -> 18-dec DAI intermediate `ry * dxf`
+--      strictly exceeds `2^128 - 1` (`u128` overflows, proving 4-limb `U256` is mandatory!),
+--   2. Exact spot prices on snapshot are `$1683.11` (`#168311` cents) vs `$1681.11` (`#168111` cents),
+--   3. On real 30+30 bps V2 pools, 11.9 bps spread < 60 bps fee -> atomic revert holds (`#0` profit, `#0` loss),
+--   4. Counterfactual 1+1 bps fee simulation (`#9999`) yields positive net return while preserving `k1 >= k0`!
+tr-thm-live-base-256bit-exact :
+  andB (%wlt tr-u64-max tr-live-univ2-weth-wei)
+  (andB (%wlt tr-u128-max (%wmul tr-deep-dai-wei (%wmul tr-50weth-wei #9970)))
+  (andB (%weq (%wdiv (%wmul tr-live-univ2-usdc-u6 #100000000000000) tr-live-univ2-weth-wei) #168311)
+  (andB (%weq (%wdiv (%wmul tr-live-baseswap-usdc-u6 #100000000000000) tr-live-baseswap-weth-wei) #168111)
+  (andB (%weq (tr-flash-net-profit tr-live-baseswap-weth-wei tr-live-baseswap-usdc-u6 #9970
+                                   tr-live-univ2-weth-wei tr-live-univ2-usdc-u6 #9970 #2200000 #400) #0)
+  (andB (%wlt #0 (tr-flash-net-profit tr-live-baseswap-weth-wei tr-live-baseswap-usdc-u6 #9999
+                                      tr-live-univ2-weth-wei tr-live-univ2-usdc-u6 #9999 #2200000 #400))
+        (tr-amm-k-ok tr-live-univ2-weth-wei tr-deep-dai-wei tr-50weth-wei #9970)))))) ≡ true
+tr-thm-live-base-256bit-exact = refl

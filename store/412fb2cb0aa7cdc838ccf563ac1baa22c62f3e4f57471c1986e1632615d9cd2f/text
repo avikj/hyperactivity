@@ -1,0 +1,8 @@
+-- THEOREM 6: PoUW CLEARINGHOUSE + SOVEREIGN WATERFALL EXACT GLOBAL CONSERVATION!
+tr-thm-pouw-treasury-conserved : {E : Type} → (chk : E → Bool) → (art : E) → (ext : Pool E) →
+  (st : PouwState E) → (founder : Word) → (chain : List Word) →
+  plus (tr-nat-sum (tr-waterfall (fst st) (cons founder chain))) (fst (snd st))
+    ≡ pouw-total (pouw-settle chk art ext st)
+tr-thm-pouw-treasury-conserved chk art ext st founder chain =
+  fio-trans (fio-cong (λ x → plus x (fst (snd st))) (tr-thm-waterfall-zero-dust (fst st) founder chain))
+            (fio-sym (pouw-conserved chk art ext st))

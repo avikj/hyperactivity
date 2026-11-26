@@ -1,0 +1,27 @@
+-- Interactive CLI --expr "<spec>" "<impl>" checker (exact 6-var truth table + 65,536 algebraic vectors + minimal CEX)
+vir-c5 : List Word → List Word
+vir-c5 tail =
+  hw-ln "static int cmd_verify_expr(const char* spec_s, const char* impl_s){"
+  (hw-ln "  uint64_t z[8]={0}; uint32_t sm=0,sa=0,so=0,im=0,ia=0,io=0; int es=0,ei=0;"
+  (hw-ln "  (void)eval_expr(spec_s,z,&sm,&sa,&so,&es); (void)eval_expr(impl_s,z,&im,&ia,&io,&ei);"
+  (hw-ln (vir-pf "  if(es||ei){ fprintf(stderr," "PARSE_ERROR spec_err=%d impl_err=%d" ",es,ei); return 2; }")
+  (hw-ln "  for(uint32_t m=0; m<64u; m++){"
+  (hw-ln "    uint64_t bv[8]={0}; for(int k=0;k<6;k++) bv[k]=(m>>k)&1u;"
+  (hw-ln "    uint64_t ys=eval_expr(spec_s,bv,NULL,NULL,NULL,&es), yi=eval_expr(impl_s,bv,NULL,NULL,NULL,&ei);"
+  (hw-ln "    if(ys!=yi){"
+  (hw-ln (vir-pf "      printf(" "[hx verify] VERDICT: MISMATCH (REFUTED BY MINIMAL COUNTEREXAMPLE) | x=(%llu,%llu,%llu,%llu,%llu,%llu) -> spec=%llu != impl=%llu" ",(unsigned long long)bv[0],(unsigned long long)bv[1],(unsigned long long)bv[2],(unsigned long long)bv[3],(unsigned long long)bv[4],(unsigned long long)bv[5],(unsigned long long)ys,(unsigned long long)yi);")
+  (hw-ln "      return 1;"
+  (hw-ln "    }"
+  (hw-ln "  }"
+  (hw-ln "  uint64_t st=0x9e3779b97f4a7c15ull;"
+  (hw-ln "  for(uint32_t t=0; t<65536u; t++){"
+  (hw-ln "    uint64_t v[8]; for(int k=0;k<8;k++){ st^=st<<13; st^=st>>7; st^=st<<17; v[k]=st ^ ((uint64_t)t*(uint64_t)(k+1u)); }"
+  (hw-ln "    uint64_t ys=eval_expr(spec_s,v,NULL,NULL,NULL,&es), yi=eval_expr(impl_s,v,NULL,NULL,NULL,&ei);"
+  (hw-ln "    if(ys!=yi){"
+  (hw-ln (vir-pf "      printf(" "[hx verify] VERDICT: MISMATCH (WORD COUNTEREXAMPLE) | x0=0x%llx x1=0x%llx x2=0x%llx -> spec=0x%llx != impl=0x%llx" ",(unsigned long long)v[0],(unsigned long long)v[1],(unsigned long long)v[2],(unsigned long long)ys,(unsigned long long)yi);")
+  (hw-ln "      return 1;"
+  (hw-ln "    }"
+  (hw-ln "  }"
+  (hw-ln (vir-pf "  printf(" "[hx verify] VERDICT: MATCH (64/64 Boolean + 65,536 64b Word Fibers OK) | spec(muls=%u,ands=%u,ops=%u) -> impl(muls=%u,ands=%u,ops=%u)" ",sm,sa,so,im,ia,io);")
+  (hw-ln "  return 0;"
+  (hw-ln "}" tail)))))))))))))))))))))))

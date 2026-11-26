@@ -1,0 +1,18 @@
+po-genesis-metal : List PolyOptCert → List F2OptCert → List Word
+po-genesis-metal rcs fcs =
+  hw-ln "// Mechanically lowered from GenesisCrystal (Apple Metal — identical AST to C11, CUDA, SV, WASM!)"
+  (hw-ln "#include <metal_stdlib>"
+  (hw-ln "using namespace metal;"
+  (po-lower-rings-cand kt-metal rcs
+  (po-lower-f2s-cand   kt-metal fcs
+  (hw-ln "kernel void genesis_metal_kernel(device const uint* in [[buffer(0)]], device uint* out [[buffer(1)]], uint tid [[thread_position_in_grid]]) {"
+  (hw-ln "  uint x0=in[tid*4u], x1=in[tid*4u+1u], x2=in[tid*4u+2u], x3=in[tid*4u+3u];"
+  (hw-ln "  uint x4=x0^0x9e3779b9u, x5=x1^0x85ebca6bu, x6=x2^0xc2b2ae35u, x7=x3^0x27d4eb2fu;"
+  (hw-ln "  uint q[4], e[1], h[4], fr[3], kc[5];"
+  (hw-ln "  opt_howell8_quat(x0,x1,x2,x3,x4,x5,x6,x7,q);"
+  (hw-ln "  opt_euler_4sq(x0,x1,x2,x3,x4,x5,x6,x7,e);"
+  (hw-ln "  opt_adelic_hadamard(x0,x1,x2,x3,h);"
+  (hw-ln "  opt_fredkin_1and(x0,x1,x2,fr);"
+  (hw-ln "  opt_keccak_chi5(x0,x1,x2,x3,x4,kc);"
+  (hw-ln "  out[tid] = q[0] ^ q[1] ^ q[2] ^ q[3] ^ e[0] ^ h[0] ^ h[1] ^ fr[1] ^ fr[2] ^ kc[0] ^ kc[4];"
+  (hw-ln "}" nil)))))))))))))))

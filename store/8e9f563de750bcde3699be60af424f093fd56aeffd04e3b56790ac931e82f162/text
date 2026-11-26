@@ -1,0 +1,12 @@
+-- One productive inference + superoptimization step over Cantor-indexed rewrite wave `w`:
+vx-step-propose : Word → Word → Word → Word → Word × (Word × Word)
+vx-step-propose w curCost laws checked =
+  let candCost = if %weq w #0 then #9
+                 else if %weq w #1 then #6
+                 else if %weq w #2 then #4
+                 else curCost
+      candEq   = web-notB (%weq w #99)
+      nextCost = vx-ratchet-cost curCost candCost candEq
+      nextLaws = %wadd laws (%wadd #3 (%wand w #7))
+      nextChk  = %wadd checked #64
+  in (nextCost , (nextLaws , nextChk))

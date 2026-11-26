@@ -1,0 +1,61 @@
+gir-c2 : List Word → List Word
+gir-c2 tl =
+  gir-lines
+    (list-append
+      (gir-l8
+        "// === STAGE A: EXACT HYPEROCTAHEDRAL NPN SYMMETRY QUOTIENT (3-VAR=14, 4-VAR=222) ==="
+        "static uint16_t g_npn4[65536];"
+        "static uint32_t g_npn3_classes = 0, g_npn4_classes = 0;"
+        "static const uint8_t P4[24][4] = {"
+        "  {0,1,2,3},{0,1,3,2},{0,2,1,3},{0,2,3,1},{0,3,1,2},{0,3,2,1},"
+        "  {1,0,2,3},{1,0,3,2},{1,2,0,3},{1,2,3,0},{1,3,0,2},{1,3,2,0},"
+        "  {2,0,1,3},{2,0,3,1},{2,1,0,3},{2,1,3,0},{2,3,0,1},{2,3,1,0},"
+        "  {3,0,1,2},{3,0,2,1},{3,1,0,2},{3,1,2,0},{3,2,0,1},{3,2,1,0}};")
+      (gir-l8
+        "static inline uint16_t neg4_tt(uint16_t t, unsigned m) {"
+        "  if (m & 1u) t = (uint16_t)(((t & 0x5555u) << 1) | ((t >> 1) & 0x5555u));"
+        "  if (m & 2u) t = (uint16_t)(((t & 0x3333u) << 2) | ((t >> 2) & 0x3333u));"
+        "  if (m & 4u) t = (uint16_t)(((t & 0x0F0Fu) << 4) | ((t >> 4) & 0x0F0Fu));"
+        "  if (m & 8u) t = (uint16_t)(((t & 0x00FFu) << 8) | ((t >> 8) & 0x00FFu));"
+        "  return t;"
+        "}"
+        "static void build_exact_npn_quotient(void) {"))
+    (gir-lines
+      (list-append
+        (gir-l8
+          "  uint8_t seen4[65536]; memset(seen4, 0, sizeof(seen4));"
+          "  uint8_t seen3[256];   memset(seen3, 0, sizeof(seen3));"
+          "  for (uint32_t f = 0; f < 65536u; f++) {"
+          "    uint16_t best = 0xFFFFu;"
+          "    for (int p = 0; p < 24; p++) {"
+          "      uint16_t tp = 0;"
+          "      for (unsigned x = 0; x < 16u; x++) {"
+          "        unsigned y = ((x >> P4[p][0]) & 1u) | (((x >> P4[p][1]) & 1u) << 1) | (((x >> P4[p][2]) & 1u) << 2) | (((x >> P4[p][3]) & 1u) << 3);")
+        (gir-l8
+          "        if ((f >> y) & 1u) tp |= (uint16_t)(1u << x); }"
+          "      for (unsigned m = 0; m < 16u; m++) {"
+          "        uint16_t tn = neg4_tt(tp, m); uint16_t ti = (uint16_t)(~tn);"
+          "        if (tn < best) best = tn;"
+          "        if (ti < best) best = ti; } }"
+          "    g_npn4[f] = best; seen4[best] = 1; }"
+          "  for (uint32_t f = 0; f < 65536u; f++) g_npn4_classes += seen4[f];"
+          "  const uint8_t P3[6][3] = {{0,1,2},{0,2,1},{1,0,2},{1,2,0},{2,0,1},{2,1,0}};"))
+      (gir-lines
+        (list-append
+          (gir-l8
+            "  for (uint32_t f3 = 0; f3 < 256u; f3++) {"
+            "    uint8_t best3 = 0xFFu;"
+            "    for (int p = 0; p < 6; p++) {"
+            "      uint8_t tp = 0;"
+            "      for (unsigned x = 0; x < 8u; x++) {"
+            "        unsigned y = ((x >> P3[p][0]) & 1u) | (((x >> P3[p][1]) & 1u) << 1) | (((x >> P3[p][2]) & 1u) << 2);"
+            "        if ((f3 >> y) & 1u) tp |= (uint8_t)(1u << x); }"
+            "      for (unsigned m = 0; m < 8u; m++) {")
+          (gir-l6
+            "        uint16_t tn16 = neg4_tt((uint16_t)(tp | (tp << 8)), m);"
+            "        uint8_t tn = (uint8_t)(tn16 & 0xFFu); uint8_t ti = (uint8_t)(~tn);"
+            "        if (tn < best3) best3 = tn;"
+            "        if (ti < best3) best3 = ti; } }"
+            "    seen3[best3] = 1; }"
+            "  for (uint32_t f3 = 0; f3 < 256u; f3++) g_npn3_classes += seen3[f3]; }"))
+        tl))

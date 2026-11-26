@@ -1,0 +1,13 @@
+-- THEOREM 3: EXACT REFUTATION SOUNDNESS (Any distinguishing trace `cex` refutes ALL simulations!)
+vx-thm-cex-refutes : {S1 S2 I O : Type} →
+  (s10 : S1) → (stp1 : S1 → I → O × S1) → (c1 : Word) →
+  (s20 : S2) → (stp2 : S2 → I → O × S2) → (c2 : Word) →
+  (cex : List I) →
+  ((vx-run (mk-vxsys s10 stp1 c1) cex ≡ vx-run (mk-vxsys s20 stp2 c2) cex) → Empty) →
+  (R : S1 → S2 → Type) →
+  R s10 s20 →
+  ((s1 : S1) → (s2 : S2) → (x : I) → R s1 s2 →
+    (fst (stp1 s1 x) ≡ fst (stp2 s2 x)) × R (snd (stp1 s1 x)) (snd (stp2 s2 x))) →
+  Empty
+vx-thm-cex-refutes s10 stp1 c1 s20 stp2 c2 cex hneq R h0 hstep =
+  hneq (vx-thm-sim-sound s10 stp1 c1 s20 stp2 c2 R h0 hstep cex)

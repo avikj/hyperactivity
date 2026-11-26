@@ -1,0 +1,13 @@
+vir-mh2 : List Word → List Word
+vir-mh2 tail =
+  hw-ln "static uint32_t vx_cpu_sig(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3) {"
+  (hw-ln "  uint32_t x4=x0^0x9e3779b9u, x5=x1^0x85ebca6bu, x6=x2^0xc2b2ae35u, x7=x3^0x27d4eb2fu;"
+  (hw-ln "  uint32_t c0[4], c1[1], c2[3], c3[1];"
+  (hw-ln "  opt_vx_lfsr_jump4(x0,x1,x2,x3,x4,x5,x6,x7,c0);"
+  (hw-ln "  opt_vx_mux_pipe4(x0,x1,x2,x3,x4,c1);"
+  (hw-ln "  opt_vx_coupled_eigen(x0,x1,x2,x3,x4,x5,x6,x7,c2);"
+  (hw-ln "  opt_vx_horner_deg3(x0,x1,x2,x3,x4,c3);"
+  (hw-ln "  uint32_t p0=0u, p1=0u, p2=0u, xs[4]={x0,x1,x2,x3};"
+  (hw-ln "  for(int k=0;k<4;k++){ uint32_t u=xs[k]; p0=3u*u+p1; p1=5u*u+p2; p2=7u*u; }"
+  (hw-ln "  return c0[0] ^ c1[0] ^ c2[0] ^ c3[0] ^ p0;"
+  (hw-ln "}" tail))))))))))

@@ -1,0 +1,28 @@
+vir-metal-shader : List PolyOptCert → List F2OptCert → List Word
+vir-metal-shader rcs fcs =
+  hw-ln "#include <metal_stdlib>"
+  (hw-ln "using namespace metal;"
+  (po-lower-rings-both kt-metal rcs
+  (po-lower-f2s-both   kt-metal fcs
+  (hw-ln "kernel void vx_verify_miter_kernel(device const uint* inBuf [[buffer(0)]], device uint* outErr [[buffer(1)]], device uint* outSig [[buffer(2)]], uint tid [[thread_position_in_grid]]) {"
+  (hw-ln "  uint b = tid * 4u;"
+  (hw-ln "  uint x0=inBuf[b], x1=inBuf[b+1u], x2=inBuf[b+2u], x3=inBuf[b+3u];"
+  (hw-ln "  uint x4=x0^0x9e3779b9u, x5=x1^0x85ebca6bu, x6=x2^0xc2b2ae35u, x7=x3^0x27d4eb2fu;"
+  (hw-ln "  uint s0[4], c0[4], s1[1], c1[1], s2[3], c2[3], s3[1], c3[1];"
+  (hw-ln "  spec_vx_lfsr_jump4(x0,x1,x2,x3,x4,x5,x6,x7,s0); opt_vx_lfsr_jump4(x0,x1,x2,x3,x4,x5,x6,x7,c0);"
+  (hw-ln "  spec_vx_mux_pipe4(x0,x1,x2,x3,x4,s1); opt_vx_mux_pipe4(x0,x1,x2,x3,x4,c1);"
+  (hw-ln "  spec_vx_coupled_eigen(x0,x1,x2,x3,x4,x5,x6,x7,s2); opt_vx_coupled_eigen(x0,x1,x2,x3,x4,x5,x6,x7,c2);"
+  (hw-ln "  spec_vx_horner_deg3(x0,x1,x2,x3,x4,s3); opt_vx_horner_deg3(x0,x1,x2,x3,x4,c3);"
+  (hw-ln "  uint miter = (s0[0]^c0[0]) | (s0[1]^c0[1]) | (s0[2]^c0[2]) | (s0[3]^c0[3]) | (s1[0]^c1[0]) | (s2[0]^c2[0]) | (s2[1]^c2[1]) | (s2[2]^c2[2]) | (s3[0]^c3[0]);"
+  (hw-ln "  // 4-step streaming Direct-Form vs Transposed-Systolic filter miter on GPU"
+  (hw-ln "  uint h1=0u, h2=0u, h3=0u, p0=0u, p1=0u, p2=0u;"
+  (hw-ln "  uint xs[4] = { x0, x1, x2, x3 };"
+  (hw-ln "  for (uint k = 0u; k < 4u; k++) {"
+  (hw-ln "    uint u = xs[k];"
+  (hw-ln "    uint ys = 2u*u + 3u*h1 + 5u*h2 + 7u*h3, yi = 2u*u + p0;"
+  (hw-ln "    miter |= (ys ^ yi);"
+  (hw-ln "    h3=h2; h2=h1; h1=u; p0=3u*u+p1; p1=5u*u+p2; p2=7u*u;"
+  (hw-ln "  }"
+  (hw-ln "  outErr[tid] = miter;"
+  (hw-ln "  outSig[tid] = c0[0] ^ c1[0] ^ c2[0] ^ c3[0] ^ p0;"
+  (hw-ln "}" nil)))))))))))))))))))))))))

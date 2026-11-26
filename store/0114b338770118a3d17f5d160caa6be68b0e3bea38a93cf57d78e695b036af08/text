@@ -1,0 +1,15 @@
+vx-bfs-mealy :
+  (Word → Word → Word × Word) →
+  (Word → Word → Word × Word) →
+  Nat → Nat →
+  List (Word × Word) → List ((Word × Word) × List Word) →
+  VxMealyVerdict
+vx-bfs-mealy stp1 stp2 nI zero vis q = vx-proved vis
+vx-bfs-mealy stp1 stp2 nI (suc fuel) vis nil = vx-proved vis
+vx-bfs-mealy stp1 stp2 nI (suc fuel) vis (cons item rest) =
+  let q1 = fst (fst item)
+      q2 = snd (fst item)
+      tr = snd item
+  in case vx-expand-inputs stp1 stp2 q1 q2 tr nI #0 vis rest of
+       inl cex  → vx-refuted cex
+       inr next → vx-bfs-mealy stp1 stp2 nI fuel (fst next) (snd next)

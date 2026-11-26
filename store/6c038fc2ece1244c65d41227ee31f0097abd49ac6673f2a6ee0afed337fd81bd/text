@@ -1,0 +1,7 @@
+-- THEOREM 6: EVERY PRODUCTIVE TICK t : Nat OF `vx-prod-fix` TERMINATES WITH `tc-exact ≡ true`!
+vx-thm-prodfix-always-exact : (n : Nat) → (w c l k : Word) →
+  vx-tc-exact (vx-obs-at n (vx-prod-fix w c l k)) ≡ true
+vx-thm-prodfix-always-exact zero    w c l k = refl
+vx-thm-prodfix-always-exact (suc n) w c l k =
+  let nxt = vx-step-propose w c l k
+  in vx-thm-prodfix-always-exact n (%wadd w #1) (fst nxt) (fst (snd nxt)) (snd (snd nxt))

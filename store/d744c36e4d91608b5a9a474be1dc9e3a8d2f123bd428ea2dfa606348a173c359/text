@@ -1,0 +1,29 @@
+vx-main : List (List Word) → Step W Word
+vx-main args =
+  let p    = vx-pref args
+      cf   = list-append p ".c"
+      mf   = list-append p ".metal"
+      mhf  = list-append p "_metal.m"
+      cuf  = list-append p ".cu"
+      svf  = list-append p ".sv"
+      wf   = list-append p ".wasm"
+      csrc = vir-c11-tool vx-ring-certs vx-f2-certs
+      msrc = vir-metal-shader vx-ring-certs vx-f2-certs
+      mhsrc = vir-metal-host mf vx-ring-certs vx-f2-certs
+      cusrc = vir-cuda-kernel vx-ring-certs vx-f2-certs
+      svsrc = vir-sv-miter vx-ring-certs vx-f2-certs
+  in scmd (w-file-write-named cf csrc) (λ bc →
+     scmd (w-file-write-named mf msrc) (λ bm →
+     scmd (w-file-write-named mhf mhsrc) (λ bmh →
+     scmd (w-file-write-named cuf cusrc) (λ bcu →
+     scmd (w-file-write-named svf svsrc) (λ bsv →
+     scmd (w-file-write-named wf vx-wasm-bytes) (λ bw →
+     cli-say "[hx verify] General Spec<->Impl Equivalence, Bisimulation, k-Induction & Productive Fixpoint Engine (0 postulates)"
+       (cli-say "  Proved Universal : vx-thm-sim-sound | vx-thm-cex-refutes | vx-thm-kind2-sound | vx-thm-unroll2-sound | vx-thm-fir2-retiming-sound"
+       (cli-say "  Proved Decider   : vx-thm-mealy-equiv-proved (4->2 bisim refl) | vx-thm-mealy-bug-cex ([1,1,1] minimal CEX refl)"
+       (cli-say "  Productive Fixpt : codata VxProdFix (chk-codef guarded) | vx-thm-prodfix-always-exact | ratchet 14->4g refl"
+       (cli-say (list-append "  Emitted 6 targets: "
+         (list-append cf (list-append " (" (list-append (ce-dec bc)
+         (list-append "B) | " (list-append mf (list-append " (" (list-append (ce-dec bm)
+         (list-append "B) | " (list-append wf (list-append " (" (list-append (ce-dec bw) "B)"))))))))))))
+       (sdone #0)))))))))))

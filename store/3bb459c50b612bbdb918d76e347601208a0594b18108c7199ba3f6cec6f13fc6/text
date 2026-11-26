@@ -1,0 +1,12 @@
+hxp-clebsch-step : Word → Word → Word
+hxp-clebsch-step u v =
+  let d = %wand (%wxor u v) #15 in
+  if %weq d #0 then u
+  else if hxp-or (%weq d #1) (hxp-or (%weq d #2) (hxp-or (%weq d #4) (hxp-or (%weq d #8) (%weq d #15))))
+       then v
+  else if %weq (hxp-pop4 d) #2 then
+       let b = if %weq (%wand d #1) #1 then #1
+               else if %weq (%wand d #2) #2 then #2
+               else if %weq (%wand d #4) #4 then #4 else #8
+       in %wxor u b
+  else %wxor u #15

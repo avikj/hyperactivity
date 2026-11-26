@@ -1,0 +1,22 @@
+-- Hash-consed 6-input NAND2 DAG + Productive Tick Superoptimizer (Shannon + CSE + Sub-Cone Atlas Rewrite)
+vir-c7 : List Word → List Word
+vir-c7 tail =
+  hw-ln "typedef struct { int a, b; uint64_t tt; } GNode;"
+  (hw-ln "typedef struct { GNode nd[2048]; int n; } GDag;"
+  (hw-ln "static void gd_init(GDag* g){"
+  (hw-ln "  const uint64_t V6[6]={0xAAAAAAAAAAAAAAAAull,0xCCCCCCCCCCCCCCCCull,0xF0F0F0F0F0F0F0F0ull,0xFF00FF00FF00FF00ull,0xFFFF0000FFFF0000ull,0xFFFFFFFF00000000ull};"
+  (hw-ln "  g->n=8; for(int i=0;i<6;i++) g->nd[i]=(GNode){-1,-1,V6[i]};"
+  (hw-ln "  g->nd[6]=(GNode){-1,-1,0ull}; g->nd[7]=(GNode){-1,-1,~0ull};"
+  (hw-ln "}"
+  (hw-ln "static int gd_nand(GDag* g, int a, int b, int cse){"
+  (hw-ln "  if(a>b){ int t=a; a=b; b=t; }"
+  (hw-ln "  uint64_t tt = ~(g->nd[a].tt & g->nd[b].tt);"
+  (hw-ln "  if(cse){ for(int i=0;i<g->n;i++) if(g->nd[i].tt==tt) return i; }"
+  (hw-ln "  else { if(tt==0ull) return 6; if(tt==~0ull) return 7; for(int i=8;i<g->n;i++) if(g->nd[i].a==a&&g->nd[i].b==b) return i; }"
+  (hw-ln "  int id=g->n++; g->nd[id]=(GNode){a,b,tt}; return id;"
+  (hw-ln "}"
+  (hw-ln "static int gd_u4(GDag* g, uint16_t t4, int cse){"
+  (hw-ln "  if(t4==0x0000u) return 6; if(t4==0xFFFFu) return 7;"
+  (hw-ln "  if(t4==0xAAAAu) return 0; if(t4==0xCCCCu) return 1; if(t4==0xF0F0u) return 2; if(t4==0xFF00u) return 3;"
+  (hw-ln "  return gd_nand(g, gd_u4(g,u4_lhs[t4],cse), gd_u4(g,u4_rhs[t4],cse), cse);"
+  (hw-ln "}" tail))))))))))))))))))

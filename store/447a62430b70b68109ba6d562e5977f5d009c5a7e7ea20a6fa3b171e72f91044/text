@@ -1,0 +1,8 @@
+-- INFINITE-STATE HARDWARE CASE STUDY: Direct-Form vs Transposed-Systolic 2-Tap Volterra/FIR Filter
+-- Holds for ANY arbitrary linear or nonlinear tap operators `f1 f2 : Word → Word`!
+-- Spec holds raw input history `(x1, x2)` and computes `x + (f1(x1) + f2(x2))` on the critical path;
+-- Transposed Impl holds pre-accumulated partial sums `(p0, p1)` where `p0 = f1(x1) + f2(x2)`, `p1 = f2(x1)`,
+-- cutting critical-path combinational depth in HALF across an INFINITE `Word × Word` state space!
+vx-fir2-spec-step : (Word → Word) → (Word → Word) → (Word × Word) → Word → Word × (Word × Word)
+vx-fir2-spec-step f1 f2 st x =
+  (%wadd x (%wadd (f1 (fst st)) (f2 (snd st))) , (x , fst st))

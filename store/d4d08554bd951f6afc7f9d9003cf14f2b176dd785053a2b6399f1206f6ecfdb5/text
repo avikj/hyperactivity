@@ -1,0 +1,12 @@
+-- Universal theorem over ALL arbitrary tap functions `f1, f2 : Word → Word`, ALL initial histories, and ALL input streams `tr`!
+vx-thm-fir2-retiming-sound : (f1 f2 : Word → Word) → (x10 x20 : Word) → (tr : List Word) →
+  vx-run (mk-vxsys (x10 , x20) (vx-fir2-spec-step f1 f2) #4) tr ≡
+  vx-run (mk-vxsys (%wadd (f1 x10) (f2 x20) , f2 x10) (vx-fir2-impl-step f1 f2) #2) tr
+vx-thm-fir2-retiming-sound f1 f2 x10 x20 tr =
+  vx-thm-sim-sound
+    (x10 , x20) (vx-fir2-spec-step f1 f2) #4
+    (%wadd (f1 x10) (f2 x20) , f2 x10) (vx-fir2-impl-step f1 f2) #2
+    (vx-fir2-rel f1 f2)
+    (refl , refl)
+    (vx-fir2-step-lemma f1 f2)
+    tr

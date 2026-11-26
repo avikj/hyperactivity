@@ -1,0 +1,36 @@
+tir-sol-6 : List Word → List Word
+tir-sol-6 tl =
+  tir-ln "  function executeFlashArb(FlashParams calldata fp, uint256 borrowMidAmt, address[] calldata chain) external nonReentrant {"
+  (tir-ln (list-append "    require(borrowMidAmt > 0 && fp.minProfit > 0, " (list-append (tir-qq "ZERO_FLASH_PARAMS") ");"))
+  (tir-ln "    uint256 preBal = IERC20Minimal(fp.repayToken).balanceOf(address(this));"
+  (tir-ln "    _activeBorrowPool = fp.borrowPool;"
+  (tir-ln "    uint256 a0 = fp.borrowToken0 ? borrowMidAmt : 0;"
+  (tir-ln "    uint256 a1 = fp.borrowToken0 ? 0 : borrowMidAmt;"
+  (tir-ln "    IUniV2Pair(fp.borrowPool).swap(a0, a1, address(this), abi.encode(fp));"
+  (tir-ln "    _activeBorrowPool = address(0);"
+  (tir-ln "    uint256 postBal = IERC20Minimal(fp.repayToken).balanceOf(address(this));"
+  (tir-ln (list-append "    require(postBal >= preBal + fp.minProfit, " (list-append (tir-qq "ATOMIC_NO_PROFIT_REVERT") ");"))
+  (tir-ln "    uint256 netProfit = postBal - preBal;"
+  (tir-ln "    uint256 fPaid = distributeTokenWaterfall(IERC20Minimal(fp.repayToken), netProfit, chain);"
+  (tir-ln "    emit FlashArbExecuted(msg.sender, fp.repayToken, netProfit, fPaid);"
+  (tir-ln "  }"
+  (tir-ln ""
+  (tir-ln "  function uniswapV2Call(address sender, uint256 amount0, uint256 amount1, bytes calldata data) external {"
+  (tir-ln (list-append "    require(_locked == 2 && msg.sender == _activeBorrowPool && sender == address(this), " (list-append (tir-qq "BAD_V2_CALLBACK") ");"))
+  (tir-ln "    _activeBorrowPool = address(0); // Single-shot callback lock prevents sellPool callback re-entry"
+  (tir-ln "    FlashParams memory fp = abi.decode(data, (FlashParams));"
+  (tir-ln "    uint256 borrowed = fp.borrowToken0 ? amount0 : amount1;"
+  (tir-ln "    (uint112 br0, uint112 br1, ) = IUniV2Pair(fp.borrowPool).getReserves();"
+  (tir-ln "    uint256 rInBorrow  = fp.borrowToken0 ? uint256(br1) : uint256(br0);"
+  (tir-ln "    uint256 rOutBorrow = fp.borrowToken0 ? uint256(br0) : uint256(br1);"
+  (tir-ln "    uint256 repayIn = ((rInBorrow * borrowed * 1000) / ((rOutBorrow - borrowed) * 997)) + 1;"
+  (tir-ln "    (uint112 sr0, uint112 sr1, ) = IUniV2Pair(fp.sellPool).getReserves();"
+  (tir-ln "    uint256 rInSell  = fp.sellMidIs0 ? uint256(sr0) : uint256(sr1);"
+  (tir-ln "    uint256 rOutSell = fp.sellMidIs0 ? uint256(sr1) : uint256(sr0);"
+  (tir-ln "    uint256 sellOut  = ((borrowed * 997) * rOutSell) / (rInSell * 1000 + (borrowed * 997));"
+  (tir-ln (list-append "    require(sellOut >= repayIn + fp.minProfit, " (list-append (tir-qq "SPREAD_BELOW_FEES") ");"))
+  (tir-ln "    require(IERC20Minimal(fp.midToken).transfer(fp.sellPool, borrowed));"
+  (tir-ln "    IUniV2Pair(fp.sellPool).swap(fp.sellMidIs0 ? 0 : sellOut, fp.sellMidIs0 ? sellOut : 0, address(this), new bytes(0));"
+  (tir-ln "    require(IERC20Minimal(fp.repayToken).transfer(fp.borrowPool, repayIn));"
+  (tir-ln "  }"
+  (tir-ln "}" tl)))))))))))))))))))))))))))))))))

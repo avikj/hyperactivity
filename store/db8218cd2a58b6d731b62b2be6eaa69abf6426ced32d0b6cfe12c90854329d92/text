@@ -1,0 +1,11 @@
+tr-eval-gates : Word → List Word → Word → List (Word × Word) → Word × Bool
+tr-eval-gates idx wires last nil = (last , true)
+tr-eval-gates idx wires last (cons g gs) =
+  let a = fst g
+      b = snd g
+  in if andB (%wlt a idx) (%wlt b idx)
+     then let va  = tr-nth-wire a wires
+              vb  = tr-nth-wire b wires
+              out = tr-nand64 va vb
+          in tr-eval-gates (%wadd idx #1) (list-append wires (cons out nil)) out gs
+     else (#0 , false)

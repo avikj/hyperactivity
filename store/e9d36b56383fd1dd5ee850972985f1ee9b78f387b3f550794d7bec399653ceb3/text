@@ -1,0 +1,39 @@
+vir-c11 : List Word → List Word
+vir-c11 tail =
+  hw-ln "int main(int argc, char** argv){"
+  (hw-ln (list-append "  if(argc>=4 && strcmp(argv[1]," (list-append (vir-qq "--expr") ")==0) return cmd_verify_expr(argv[2], argv[3]);"))
+  (hw-ln (list-append "  if(argc>=3 && strcmp(argv[1]," (list-append (vir-qq "--superopt") ")==0){"))
+  (hw-ln "    int err=0; uint32_t a=0,o=0; uint64_t tt=bool_tt6(argv[2],&a,&o,&err);"
+  (hw-ln (vir-pf "    if(err){ fprintf(stderr," "PARSE_ERROR" "); return 2; }")
+  (hw-ln "    int waves = (argc>=4) ? atoi(argv[3]) : 6;"
+  (hw-ln "    uint32_t g = productive_superopt_64(argv[2], tt, waves, 1);"
+  (hw-ln "    return (g<99999u) ? 0 : 1;"
+  (hw-ln "  }"
+  (hw-ln "  uint32_t err=0u, s[8], c[8]; uint64_t rng=0x243f6a8885a308d3ull;"
+  (hw-ln "  for(uint32_t i=0;i<200000u;i++){"
+  (hw-ln "    rng^=rng<<13; rng^=rng>>7; rng^=rng<<17;"
+  (hw-ln "    uint32_t x0=(uint32_t)rng, x1=(uint32_t)(rng>>8), x2=(uint32_t)(rng>>16), x3=(uint32_t)(rng>>24);"
+  (hw-ln "    uint32_t x4=(uint32_t)(rng>>32), x5=(uint32_t)(rng>>40), x6=x0^0x9e3779b9u, x7=x4+i*2654435761u;"
+  (hw-ln "    spec_vx_lfsr_jump4(x0,x1,x2,x3,x4,x5,x6,x7,s); opt_vx_lfsr_jump4(x0,x1,x2,x3,x4,x5,x6,x7,c);"
+  (hw-ln "    if(s[0]!=c[0]||s[1]!=c[1]||s[2]!=c[2]||s[3]!=c[3]) err++;"
+  (hw-ln "    spec_vx_mux_pipe4(x0,x1,x2,x3,x4,s); opt_vx_mux_pipe4(x0,x1,x2,x3,x4,c);"
+  (hw-ln "    if(s[0]!=c[0]) err++;"
+  (hw-ln "    spec_vx_coupled_eigen(x0,x1,x2,x3,x4,x5,x6,x7,s); opt_vx_coupled_eigen(x0,x1,x2,x3,x4,x5,x6,x7,c);"
+  (hw-ln "    if(s[0]!=c[0]||s[1]!=c[1]||s[2]!=c[2]) err++;"
+  (hw-ln "    spec_vx_horner_deg3(x0,x1,x2,x3,x4,s); opt_vx_horner_deg3(x0,x1,x2,x3,x4,c);"
+  (hw-ln "    if(s[0]!=c[0]) err++;"
+  (hw-ln "  }"
+  (hw-ln (vir-pf "  printf(" "[Regime 1 | Algebraic & F2 Macro-Steps] 4/4 cubical refl certs x 200,000 vectors = 800,000 miters | err=%u" ", err);")
+  (hw-ln "  err += run_coalgebra_suite();"
+  (hw-ln "  err += run_kinduction_inference_suite();"
+  (hw-ln "  const uint64_t V6[6]={0xAAAAAAAAAAAAAAAAull,0xCCCCCCCCCCCCCCCCull,0xF0F0F0F0F0F0F0F0ull,0xFF00FF00FF00FF00ull,0xFFFF0000FFFF0000ull,0xFFFFFFFF00000000ull};"
+  (hw-ln "  uint64_t t_ch_maj = ((V6[0]&V6[1])^(~V6[0]&V6[2])) ^ ((V6[3]&V6[4])^(V6[3]&V6[5])^(V6[4]&V6[5]));"
+  (hw-ln "  uint64_t t_cla6   = (V6[0]&V6[1]) | ((V6[0]^V6[1]) & ((V6[2]&V6[3]) | ((V6[2]^V6[3]) & (V6[4]&V6[5]))));"
+  (hw-ln "  uint64_t t_par6   = V6[0]^V6[1]^V6[2]^V6[3]^V6[4]^V6[5];"
+  (hw-ln (list-append "  uint32_t g1 = productive_superopt_64(" (list-append (vir-qq "SHA256_CH_XOR_MAJ6") ", t_ch_maj, 4, 0);"))
+  (hw-ln (list-append "  uint32_t g2 = productive_superopt_64(" (list-append (vir-qq "ALU_CLA6_CARRY") ", t_cla6, 4, 0);"))
+  (hw-ln (list-append "  uint32_t g3 = productive_superopt_64(" (list-append (vir-qq "PARITY6_EXACT") ", t_par6, 4, 0);"))
+  (hw-ln "  if(g1>=99999u||g2>=99999u||g3>=99999u) err++;"
+  (hw-ln (vir-pf "  printf(" "[Regime 4 | Productive Fixpoint Superopt] 65,536/65,536 u4_atlas + %u laws | CH^MAJ6=%ug CLA6=%ug PAR6=%ug | total_err=%u" ", u4_laws, g1, g2, g3, err);")
+  (hw-ln "  return err ? 1 : 0;"
+  (hw-ln "}" tail))))))))))))))))))))))))))))))))))))

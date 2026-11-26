@@ -1,0 +1,33 @@
+gir-c6 : List Word → List Word
+gir-c6 tl =
+  gir-lines
+    (list-append
+      (gir-l8
+        "static void build_12_cryptic_targets(const uint64_t v_plain[6], Tgt6 tgts[12]) {"
+        "  uint64_t par6 = v_plain[0]^v_plain[1]^v_plain[2]^v_plain[3]^v_plain[4]^v_plain[5];"
+        "  uint64_t maj5 = 0ull, ex3 = 0ull, add3_c = 0ull, add3_s2 = 0ull, ge3 = 0ull, mux4 = 0ull, inet6 = 0ull;"
+        "  for (unsigned m = 0; m < 64u; m++) {"
+        "    unsigned w5 = pop16((uint16_t)(m & 31u)), w6 = pop16((uint16_t)m);"
+        "    if (w5 >= 3u) maj5 |= (1ull << m);"
+        "    if (w6 == 3u) ex3  |= (1ull << m);"
+        "    unsigned a3 = m & 7u, b3 = (m >> 3) & 7u;")
+      (gir-l8
+        "    if (a3 + b3 >= 8u) add3_c |= (1ull << m);"
+        "    if (((a3 + b3) >> 2) & 1u) add3_s2 |= (1ull << m);"
+        "    if (a3 >= b3) ge3 |= (1ull << m);"
+        "    unsigned sel = (m >> 4) & 3u; if ((m >> sel) & 1u) mux4 |= (1ull << m);"
+        "    unsigned fc = (0xeee0u >> (m & 15u)) & 1u, an = (0x2002u >> (m & 15u)) & 1u;"
+        "    if (!fc && (an ^ ((m >> 4) & 1u) ^ ((m >> 5) & 1u))) inet6 |= (1ull << m);"
+        "  }"
+        "  uint64_t sha_cm = ((v_plain[0]&v_plain[1]) ^ ((~v_plain[0])&v_plain[2])) ^ ((v_plain[3]&v_plain[4]) ^ (v_plain[3]&v_plain[5]) ^ (v_plain[4]&v_plain[5]));"))
+    (gir-lines
+      (gir-l8
+        "  uint64_t chi6  = (v_plain[0] ^ ((~v_plain[1]) & v_plain[2])) ^ (v_plain[3] ^ ((~v_plain[4]) & v_plain[5]));"
+        "  uint64_t y1    = v_plain[1] ^ (v_plain[0] & (v_plain[1] ^ v_plain[2]));"
+        "  uint64_t fred6 = y1 ^ (v_plain[3] & (y1 ^ v_plain[4])) ^ v_plain[5];"
+        "  uint64_t bent6 = (v_plain[0] & v_plain[1]) ^ (v_plain[2] & v_plain[3]) ^ (v_plain[4] & v_plain[5]);"
+        (gir-s3 "  const char* nm[12] = {" gir-tgt-names "};")
+        "  const uint64_t tts[12] = { par6, maj5, ex3, sha_cm, add3_c, add3_s2, ge3, mux4, inet6, chi6, fred6, bent6 };"
+        "  for (int i = 0; i < 12; i++) { tgts[i].name = nm[i]; tgts[i].plain_tt = tts[i]; tgts[i].cry_tt = gauge_enc64(tts[i]); tgts[i].cry_inv_tt = gauge_enc64(~tts[i]); tgts[i].best_gates = 99u; tgts[i].wave_hit = 0u; }"
+        "}")
+      tl)

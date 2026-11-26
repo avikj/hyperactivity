@@ -1,0 +1,19 @@
+-- Compile body lines (`x = expr` local bindings + `return expr`)
+py-compile-body : List (List Word) → List (List Word) → Code
+py-compile-body _ nil = cwlit #0
+py-compile-body env (cons ln rest) =
+  let ts = py-lex ln
+  in if py-is-kw "return" ts then
+       py-parse-expr env (py-tail-tok ts)
+     else case ts of
+       nil → py-compile-body env rest
+       cons t r →
+         case t of
+           tk-id v →
+             (case r of
+               nil → py-compile-body env rest
+               cons t2 rhs →
+                 case t2 of
+                   tk-eq → clet (py-parse-expr env rhs) (py-compile-body (cons v env) rest)
+                   _     → py-compile-body env rest)
+           _ → py-compile-body env rest
