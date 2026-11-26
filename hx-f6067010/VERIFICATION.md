@@ -17,3 +17,10 @@
 - `hx hf` under ASan: 0 reports (2 use-after-free reports before the fix).
 - `hx zip` / `hx unzip` are unchanged from hx-974476df: they hold the whole input as lists and exhaust
   memory above about 16 KB of input.
+
+## hx synth TT (custom truth table)
+`hs-id` searches netlists of at most 6 NAND2 gates (lib/hx-synth.hypercubical, "up to 6 NAND2 gates").
+TT=255 → 2 gates, VERIFIED=1; TT=150 (XOR3), 105, 23 → VERIFIED=0 (no netlist of ≤ 6 gates).
+TT=0 prints OPT_NAND2=0 VERIFIED=1 with an empty netlist: `hs-exec-go` returns its initial `last = #0`
+for zero gates, which equals the target 0, so the constant-0 function is reported as realized by no
+gate although no wire carries it.
