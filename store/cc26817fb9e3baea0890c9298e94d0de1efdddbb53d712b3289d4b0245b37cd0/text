@@ -1,0 +1,8 @@
+b2-fexpv : Word → Word
+b2-fexpv x =
+  if ief-isnan x then x
+  else if ief-isinf x then (if %weq (ief-sgn x) #0 then x else #0)
+  else if ief-iszero x then #1065353216
+  else (let zs = b2-fxfix x
+        in if bg-ge zs (bg-shl (bg-of #110) ief-P) then (if %weq (ief-sgn x) #0 then ief-INF else #0)
+           else ief-expfix (if bg-is0 zs then #0 else ief-sgn x , zs))
