@@ -1,0 +1,11 @@
+ga-factor-sound : (env : Nat → Bool) → (e : GaGuard) → ga-eval env (ga-factor e) ≡ ga-eval env e
+ga-factor-sound env (ga-k b)     = refl
+ga-factor-sound env (ga-v i)     = refl
+ga-factor-sound env (ga-not a)   =
+  ga-trans (ga-lem-mk-not env (ga-factor a)) (λ i → ga-notB (ga-factor-sound env a i))
+ga-factor-sound env (ga-and a b) =
+  ga-trans (ga-lem-mk-and env (ga-factor a) (ga-factor b))
+            (λ i → ga-andB (ga-factor-sound env a i) (ga-factor-sound env b i))
+ga-factor-sound env (ga-ite c t f) =
+  ga-trans (ga-lem-mk-ite env (ga-factor c) (ga-factor t) (ga-factor f))
+            (λ i → ga-iteB (ga-factor-sound env c i) (ga-factor-sound env t i) (ga-factor-sound env f i))

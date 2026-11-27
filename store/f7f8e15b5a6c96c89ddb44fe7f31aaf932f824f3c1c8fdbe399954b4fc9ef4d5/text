@@ -1,0 +1,12 @@
+-- THEOREM 1 (UNIVERSAL TELESCOPING HOMEOMORPHIC CONJUGATION FOR ALL TYPES X & STEPS n : Nat):
+-- Executing the non-interpretable conjugated operator `E o F o D` for `n` steps equals `E o F^n`,
+-- so internal `D(E(s)) == s` cancels at compile time with ZERO runtime overhead and ZERO drift!
+boc-thm-conj-iter :
+  {X : Type} → (c : BocCodec X) → (f : X → X) → (n : Nat) → (x : X) →
+  boc-iter n (boc-conj c f) (bc-enc c x) ≡ bc-enc c (boc-iter n f x)
+boc-thm-conj-iter c f zero    x = refl
+boc-thm-conj-iter c f (suc n) x =
+  let ih = boc-thm-conj-iter c f n x
+      s1 = boc-cong (boc-conj c f) ih
+      s2 = boc-cong (λ z → bc-enc c (f z)) (bc-ret c (boc-iter n f x))
+  in boc-trans s1 s2

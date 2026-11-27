@@ -1,0 +1,9 @@
+-- UNIVERSAL THEOREM 2 (ALL-`n` SEMANTIC SOUNDNESS + MONOTONE COST CONTRACTION = `CanonStep`):
+ue-thm-contract-iter-sound : (n : Nat) → (env : Nat → Nat) → (e : UeExpr) →
+  ue-eval-nat env (ue-contract-iter n e) ≡ ue-eval-nat env e
+ue-thm-contract-iter-sound zero    env e = refl
+ue-thm-contract-iter-sound (suc n) env e =
+  let mid = ue-contract-iter n e
+      c   = ue-contract1 mid
+      s1  = ue-step-sound-at env mid c (ue-le (ue-cost-nat c) (ue-cost-nat mid)) (ue-thm-contract1-sound env mid)
+  in ue-trans s1 (ue-thm-contract-iter-sound n env e)

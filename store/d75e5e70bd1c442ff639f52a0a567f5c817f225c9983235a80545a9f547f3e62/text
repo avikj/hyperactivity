@@ -1,0 +1,89 @@
+-- Export 10: hx_bf16_modal7_zip(src_ptr=0, n_bf16=1, dst_ptr=2, key=3) -> out_bytes
+tir-wf-m7zip : List Word
+tir-wf-m7zip =
+  let locHdr  = the (List Word) (cons #1 (cons #9 (cons #127 nil)))
+      initH   = list-append (list-append (pw-c #0) (pw-set #4))
+                  (tir-blk-loop
+                    (pw-cat
+                      (cons (tir-brif-exit (pw-bin #79 (pw-get #4) (pw-c #1024)))
+                      (cons (tir-st32 (pw-bin #106 (pw-c #4096) (pw-get #4)) (pw-c #1))
+                      (cons (list-append (pw-bin #106 (pw-get #4) (pw-c #4)) (pw-set #4))
+                      (cons tir-br-cont nil))))))
+      initL   = list-append (list-append (pw-c #0) (pw-set #4))
+                  (tir-blk-loop
+                    (pw-cat
+                      (cons (tir-brif-exit (pw-bin #79 (pw-get #4) (pw-c #256)))
+                      (cons (tir-st32 (pw-bin #106 (pw-c #5120) (pw-get #4)) (pw-c #117901063))
+                      (cons (list-append (pw-bin #106 (pw-get #4) (pw-c #4)) (pw-set #4))
+                      (cons tir-br-cont nil))))))
+      cntLp   = list-append (list-append (pw-c #0) (pw-set #4))
+                  (tir-blk-loop
+                    (pw-cat
+                      (cons (tir-brif-exit (pw-bin #79 (pw-get #4) (pw-get #1)))
+                      (cons (list-append (pw-bin #113 (pw-bin #118 (tir-ld16 (pw-bin #106 (pw-get #0) (pw-bin #116 (pw-get #4) (pw-c #1)))) (pw-c #7)) (pw-c #255)) (pw-set #8))
+                      (cons (list-append (pw-bin #106 (pw-c #4096) (pw-bin #116 (pw-get #8) (pw-c #2))) (pw-set #9))
+                      (cons (tir-st32 (pw-get #9) (pw-bin #106 (tir-ld32 (pw-get #9)) (pw-c #1)))
+                      (cons (list-append (pw-bin #106 (pw-get #4) (pw-c #1)) (pw-set #4))
+                      (cons tir-br-cont nil))))))))
+      palIn   = tir-blk-loop
+                  (pw-cat
+                    (cons (tir-brif-exit (pw-bin #79 (pw-get #8) (pw-c #256)))
+                    (cons (list-append (tir-ld32 (pw-bin #106 (pw-c #4096) (pw-bin #116 (pw-get #8) (pw-c #2)))) (pw-set #9))
+                    (cons (tir-if-else (pw-bin #73 (pw-get #7) (pw-get #9))
+                            (list-append (list-append (pw-get #9) (pw-set #7)) (list-append (pw-get #8) (pw-set #6)))
+                            nil)
+                    (cons (list-append (pw-bin #106 (pw-get #8) (pw-c #1)) (pw-set #8))
+                    (cons tir-br-cont nil))))))
+      palLp   = list-append (list-append (pw-c #0) (pw-set #5))
+                  (tir-blk-loop
+                    (pw-cat
+                      (cons (tir-brif-exit (pw-bin #79 (pw-get #5) (pw-c #7)))
+                      (cons (list-append (pw-get #5) (pw-set #6))
+                      (cons (list-append (pw-c #0) (pw-set #7))
+                      (cons (list-append (pw-c #0) (pw-set #8))
+                      (cons palIn
+                      (cons (tir-st32 (pw-bin #106 (pw-c #4096) (pw-bin #116 (pw-get #6) (pw-c #2))) (pw-c #0))
+                      (cons (tir-st8 (pw-bin #106 (pw-c #5120) (pw-get #6)) (pw-get #5))
+                      (cons (tir-st8 (pw-bin #106 (pw-get #2) (pw-get #5)) (pw-bin #113 (pw-bin #115 (pw-get #6) (pw-bin #106 (pw-get #3) (pw-bin #108 (pw-get #5) (pw-c #37)))) (pw-c #255)))
+                      (cons (list-append (pw-bin #106 (pw-get #5) (pw-c #1)) (pw-set #5))
+                      (cons tir-br-cont nil))))))))))))
+      encInit = pw-cat
+                  (cons (list-append (pw-bin #118 (pw-bin #106 (pw-get #1) (pw-c #7)) (pw-c #3)) (pw-set #10))
+                  (cons (list-append (pw-bin #106 (pw-bin #106 (pw-c #7) (pw-bin #108 (pw-get #10) (pw-c #3))) (pw-get #1)) (pw-set #11))
+                  (cons (list-append (pw-c #0) (pw-set #4)) nil)))
+      slotBd  = tir-if-else (pw-bin #73 (pw-get #6) (pw-get #1))
+                  (pw-cat
+                    (cons (list-append (tir-ld16 (pw-bin #106 (pw-get #0) (pw-bin #116 (pw-get #6) (pw-c #1)))) (pw-set #7))
+                    (cons (list-append (pw-bin #113 (pw-bin #118 (pw-get #7) (pw-c #7)) (pw-c #255)) (pw-set #8))
+                    (cons (list-append (pw-bin #114 (pw-bin #116 (pw-bin #113 (pw-get #7) (pw-c #127)) (pw-c #1)) (pw-bin #113 (pw-bin #118 (pw-get #7) (pw-c #15)) (pw-c #1))) (pw-set #9))
+                    (cons (tir-st8 (pw-bin #106 (pw-bin #106 (pw-get #2) (pw-c #7)) (pw-bin #106 (pw-bin #108 (pw-get #10) (pw-c #3)) (pw-get #6)))
+                                   (pw-bin #115 (pw-get #9) (pw-bin #106 (pw-bin #118 (pw-get #3) (pw-c #8)) (pw-bin #108 (pw-get #6) (pw-c #13)))))
+                    (cons (list-append (tir-ld8 (pw-bin #106 (pw-c #5120) (pw-get #8))) (pw-set #9))
+                    (cons (list-append (pw-bin #114 (pw-get #12) (pw-bin #116 (pw-get #9) (pw-bin #108 (pw-get #5) (pw-c #3)))) (pw-set #12))
+                    (cons (tir-if-else (pw-bin #70 (pw-get #9) (pw-c #7))
+                            (pw-cat
+                              (cons (tir-st8 (pw-bin #106 (pw-get #2) (pw-get #11)) (pw-bin #115 (pw-get #8) (pw-bin #106 (pw-bin #118 (pw-get #3) (pw-c #16)) (pw-get #11))))
+                              (cons (list-append (pw-bin #106 (pw-get #11) (pw-c #1)) (pw-set #11)) nil)))
+                            nil) nil))))))))
+                  nil
+      slotLp  = tir-blk-loop
+                  (pw-cat
+                    (cons (tir-brif-exit (pw-bin #79 (pw-get #5) (pw-c #8)))
+                    (cons (list-append (pw-bin #106 (pw-bin #116 (pw-get #4) (pw-c #3)) (pw-get #5)) (pw-set #6))
+                    (cons slotBd
+                    (cons (list-append (pw-bin #106 (pw-get #5) (pw-c #1)) (pw-set #5))
+                    (cons tir-br-cont nil))))))
+      encLp   = tir-blk-loop
+                  (pw-cat
+                    (cons (tir-brif-exit (pw-bin #79 (pw-get #4) (pw-get #10)))
+                    (cons (list-append (pw-c #0) (pw-set #12))
+                    (cons (list-append (pw-c #0) (pw-set #5))
+                    (cons slotLp
+                    (cons (list-append (pw-bin #115 (pw-get #12) (pw-bin #106 (pw-get #3) (pw-bin #108 (pw-get #4) (pw-c #73244475)))) (pw-set #9))
+                    (cons (list-append (pw-bin #106 (pw-bin #106 (pw-get #2) (pw-c #7)) (pw-bin #108 (pw-get #4) (pw-c #3))) (pw-set #6))
+                    (cons (tir-st8 (pw-get #6) (pw-get #9))
+                    (cons (tir-st8 (pw-bin #106 (pw-get #6) (pw-c #1)) (pw-bin #118 (pw-get #9) (pw-c #8)))
+                    (cons (tir-st8 (pw-bin #106 (pw-get #6) (pw-c #2)) (pw-bin #118 (pw-get #9) (pw-c #16)))
+                    (cons (list-append (pw-bin #106 (pw-get #4) (pw-c #1)) (pw-set #4))
+                    (cons tir-br-cont nil))))))))))))
+  in pw-cat (cons locHdr (cons initH (cons initL (cons cntLp (cons palLp (cons encInit (cons encLp (cons (pw-get #11) (cons (pw-op #11) nil)))))))))

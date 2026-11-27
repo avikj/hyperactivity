@@ -1,0 +1,12 @@
+ue-url-decode : List Word → List Word
+ue-url-decode nil = nil
+ue-url-decode (cons c cs) =
+  if weq c #43 then cons #32 (ue-url-decode cs)
+  else if weq c #37 then
+    case cs of
+      nil → nil
+      cons h1 rs1 →
+        case rs1 of
+          nil → nil
+          cons h2 rs2 → cons (%wor (%wshl (ue-hex-val h1) #4) (ue-hex-val h2)) (ue-url-decode rs2)
+  else cons c (ue-url-decode cs)

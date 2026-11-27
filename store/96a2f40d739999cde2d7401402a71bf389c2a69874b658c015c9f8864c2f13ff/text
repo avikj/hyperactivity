@@ -1,0 +1,50 @@
+-- Export 8: hx_hyperzip_mem(src_ptr=0, len=1, dst_ptr=2, key=3) -> out_len
+tir-wf-hzip : List Word
+tir-wf-hzip =
+  let locHdr  = the (List Word) (cons #1 (cons #8 (cons #127 nil)))
+      inits   = pw-cat
+                  (cons tir-clear-ctx4k
+                  (cons (list-append (pw-c #0) (pw-set #4))
+                  (cons (list-append (pw-c #0) (pw-set #5))
+                  (cons (list-append (pw-c #0) (pw-set #6))
+                  (cons (list-append (pw-c #0) (pw-set #7)) nil)))))
+      calcCtx = list-append (pw-bin #113 (pw-bin #115 (pw-bin #116 (pw-get #7) (pw-c #5)) (pw-get #6)) (pw-c #4095)) (pw-set #8)
+      loadB   = list-append (tir-ld8 (pw-bin #106 (pw-get #0) (pw-get #4))) (pw-set #9)
+      calcRes = list-append (pw-bin #115 (pw-get #9) (tir-ld8 (pw-get #8))) (pw-set #10)
+      updCtx  = tir-st8 (pw-get #8) (pw-get #9)
+      advState = pw-cat
+                   (cons (list-append (pw-get #6) (pw-set #7))
+                   (cons (list-append (pw-get #9) (pw-set #6))
+                   (cons (list-append (pw-bin #106 (pw-get #4) (pw-c #1)) (pw-set #4)) nil)))
+      incOut  = list-append (pw-bin #106 (pw-get #5) (pw-c #1)) (pw-set #5)
+      nzBr    = list-append
+                  (tir-st8 (pw-bin #106 (pw-get #2) (pw-get #5)) (pw-bin #115 (pw-get #10) (tir-mask-at #5)))
+                  incOut
+      runLp   = tir-blk-loop
+                  (pw-cat
+                    (cons (tir-brif-exit (pw-bin #79 (pw-get #4) (pw-get #1)))
+                    (cons (tir-brif-exit (pw-bin #79 (pw-get #11) (pw-c #255)))
+                    (cons calcCtx
+                    (cons loadB
+                    (cons (tir-brif-exit (pw-bin #71 (pw-get #9) (tir-ld8 (pw-get #8))))
+                    (cons advState
+                    (cons (list-append (pw-bin #106 (pw-get #11) (pw-c #1)) (pw-set #11))
+                    (cons tir-br-cont nil)))))))))
+      zBr     = pw-cat
+                  (cons (list-append (pw-c #1) (pw-set #11))
+                  (cons runLp
+                  (cons (tir-st8 (pw-bin #106 (pw-get #2) (pw-get #5)) (tir-mask-at #5))
+                  (cons incOut
+                  (cons (tir-st8 (pw-bin #106 (pw-get #2) (pw-get #5)) (pw-bin #115 (pw-get #11) (tir-mask-at #5)))
+                  (cons incOut nil))))))
+      mainLp  = tir-blk-loop
+                  (pw-cat
+                    (cons (tir-brif-exit (pw-bin #79 (pw-get #4) (pw-get #1)))
+                    (cons calcCtx
+                    (cons loadB
+                    (cons calcRes
+                    (cons updCtx
+                    (cons advState
+                    (cons (tir-if-else (pw-get #10) nzBr zBr)
+                    (cons tir-br-cont nil)))))))))
+  in pw-cat (cons locHdr (cons inits (cons mainLp (cons (pw-get #5) (cons (pw-op #11) nil)))))

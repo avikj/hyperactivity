@@ -1,0 +1,45 @@
+s-net-pulse : List Word → Proc W (List Word)
+s-net-pulse st =
+  bind (h-read (list-append st "/net-pulse.json")) (λ rpushed →
+  let pushed = s-or nil rpushed in
+  if andB (h-not (h-null pushed)) (h-prefix "{" pushed)
+  then ret {lzero} {W} (s-response "application/json" pushed)
+  else bind (h-read "/tmp/hx_agent_bus/net-pulse.json") (λ rnp →
+       let np = s-or nil rnp in
+       if andB (h-not (h-null np)) (h-prefix "{" np)
+       then ret {lzero} {W} (s-response "application/json" np)
+       else bind (h-read "/tmp/hx_agent_bus/agent_diamond_hfke_2b7c3400_state.json") (λ rdh →
+            bind (h-read "/tmp/hy_out/hx_diamond/realtime_sensor_actuator.json") (λ rsa0 →
+            bind (h-read "/tmp/hx_agent_bus/base_live_ops_telemetry.json") (λ rtb →
+            bind (h-read "/tmp/hy_out/hyperoperator/live_brainnet_state.json") (λ rbn →
+            let sa = if h-null (s-or nil rdh) then s-or nil rsa0 else s-or nil rdh
+                tb = s-or nil rtb
+                bn = s-or nil rbn
+                tk = s-jnum "tick" sa (s-jnum "tick" tb "641")
+                bb = s-jnum "block" tb (s-jnum "base_8453_block" bn "62143279")
+                eb = s-jnum "eth_l1_block" bn "26490637"
+                ab = s-jnum "arbitrum_42161_block" bn "527352898"
+                ss = s-jnum "solana_slot" bn "473658928"
+                uu = s-jnum "base_univ3_uusd" sa (s-jnum "base_univ3_eth_usdc6" bn "1657480537")
+                su = s-jnum "base_slipstream_uusd" sa (s-jnum "base_slipstream_eth_usdc6" bn "1657182810")
+                hu = s-jnum "hl_eth_uusd" sa "1658150000"
+                mm = s-jnum "morpho_0bps_usd_m" sa (s-jnum "morpho_0bps_usdc_millions" bn "526")
+                mw = s-jnum "morpho_0bps_weth" bn "88890"
+                ti = s-jnum "turbines_in_range" tb "3"
+                tTot = s-jnum "turbines_total" tb "3"
+                ac = s-jnum "pos_hits" tb (s-jnum "actuations_fired" sa "44")
+                fields = cons (s-dht-kv "tick" tk)
+                         (cons (s-dht-kv "base_block" bb)
+                         (cons (s-dht-kv "eth_block" eb)
+                         (cons (s-dht-kv "arb_block" ab)
+                         (cons (s-dht-kv "sol_slot" ss)
+                         (cons (s-dht-kv "uni_uusd" uu)
+                         (cons (s-dht-kv "slip_uusd" su)
+                         (cons (s-dht-kv "hl_uusd" hu)
+                         (cons (s-dht-kv "morpho_m" mm)
+                         (cons (s-dht-kv "morpho_weth" mw)
+                         (cons (s-dht-kv "turbines_in" ti)
+                         (cons (s-dht-kv "turbines_tot" tTot)
+                         (cons (s-dht-kv "actuations" ac) nil))))))))))))
+                js = h-concat (cons "{" (cons (s-commas fields) (cons "}" nil)))
+            in ret {lzero} {W} (s-response "application/json" js)))))))

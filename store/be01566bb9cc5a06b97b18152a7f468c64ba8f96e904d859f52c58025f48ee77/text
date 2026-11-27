@@ -1,0 +1,19 @@
+this-post-with-model : List Word → List Word → List Word → Proc W (List Word)
+this-post-with-model model sysPrefix reqBody =
+  let qRaw   = this-json-raw-field "question" reqBody
+      sRaw   = this-json-raw-field "steer" reqBody
+      effQ   = the (List Word) (if h-null qRaw then sRaw else qRaw)
+      rRaw   = this-json-raw-field "route" reqBody
+      qtRaw  = this-json-raw-field "quote" reqBody
+      hRaw   = this-extract-hist-snippet reqBody
+      fullQt = the (List Word) (if h-null hRaw then qtRaw else h-concat (cons qtRaw (cons " | Recent dialogue: " (cons (this-esc-json hRaw) nil))))
+      m1     = this-select-mod1 rRaw effQ
+      m2     = this-select-mod2 rRaw effQ
+      reqP   = this-req-path (h-concat (cons rRaw (cons "|" (cons effQ (cons "|" (cons fullQt nil))))))
+  in if h-null effQ then
+       ret {lzero} {W} (h-concat (cons "{" (cons (this-kv "error" "empty steering vector") (cons "}" nil))))
+     else
+       bind (this-gather-live-ctx m1 m2) (λ liveCtx →
+       bind (h-write reqP (this-build-payload sysPrefix liveCtx effQ rRaw fullQt)) (λ ok →
+       bind (h-capture (this-curl-args-for reqP)) (λ res →
+         ret {lzero} {W} (this-format-response model m1 m2 (snd res)))))

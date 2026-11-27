@@ -1,0 +1,19 @@
+ue-run-or-cache : List Word → List Word → List Word → List Word → List Word → Sum Unit (List Word) → Sum Unit (List Word) → Proc W UeRunRes
+ue-run-or-cache binPath cDir fOut fBaseX fullSrc (inr cOut) mCachedX =
+  ret {lzero} {W} (the UeRunRes (true , (ue-cached-x mCachedX , (#1 , cOut))))
+ue-run-or-cache binPath cDir fOut fBaseX fullSrc (inl u) mCachedX =
+  bind (sys-call #39 #0 #0 #0 #0 #0 #0) (λ pid →
+  let tmpF = list-append cDir (list-append "/eval_" (list-append (h-decimal pid) ".hypercubical"))
+      cub  = if h-null binPath then the (List Word) "./build/cubical" else binPath
+  in bind (h-write tmpF (h-take (toNat #65536) fullSrc)) (λ wr →
+     bind (h-capture (cons "/bin/sh" (cons "-c" (cons "IFS=; CUBICAL_WORKERS=1; export CUBICAL_WORKERS; ulimit -t 6 2>/dev/null; exec $1 --read --with hx_eval_task.hypercubical $2 hx_eval_task.hypercubical" (cons "_" (cons cub (cons tmpF nil))))))) (λ res →
+     bind (h-unlink tmpF) (λ ul →
+       let outTxt  = snd res
+           passedN = ue-max-w #1 (ue-num-before " passed," outTxt)
+           stepsY0 = ue-max-w #1 (ue-num-before " interaction steps performed" outTxt)
+           cellsN  = ue-num-before " cells live" outTxt
+           baseX   = ue-max-w (%wadd stepsY0 #100) (%wadd (%wmul passedN #1400) (%wadd (%wmul stepsY0 #4) cellsN))
+           okRun   = weq (fst res) #0
+       in bind (if okRun then h-write fOut outTxt else ret {lzero} {W} false) (λ w1 →
+          bind (if okRun then h-write fBaseX (h-decimal baseX) else ret {lzero} {W} false) (λ w2 →
+          ret {lzero} {W} (the UeRunRes (false , (baseX , (stepsY0 , outTxt))))))))))

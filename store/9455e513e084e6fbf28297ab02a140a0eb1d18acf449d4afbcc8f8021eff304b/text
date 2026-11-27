@@ -1,0 +1,10 @@
+-- Read raw JSON string body (already JSON-escaped!) up to unescaped closing quote #34
+this-take-jstr : List Word → List Word
+this-take-jstr nil = nil
+this-take-jstr (cons c r) =
+  if %weq c #34 then nil
+  else if %weq c #92 then
+    (case r of
+      nil → nil
+      cons c2 r2 → cons #92 (cons c2 (this-take-jstr r2)))
+  else cons c (this-take-jstr r)

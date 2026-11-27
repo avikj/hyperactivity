@@ -1,0 +1,7 @@
+s-net-pulse-post : List Word → List Word → Proc W (List Word)
+s-net-pulse-post st body =
+  let clean = h-take (toNat #8192) body in
+  if h-prefix "{" clean
+  then bind (h-write (list-append st "/net-pulse.json") clean) (λ w →
+       ret {lzero} {W} (s-response "application/json" (h-concat (cons "{" (cons (s-dht-kv "ok" "true") (cons "}" nil))))))
+  else ret {lzero} {W} (s-respond "400 Bad Request" "text/plain" "expected json object")

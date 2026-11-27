@@ -1,0 +1,11 @@
+-- Export 5: hx_vidzip_rot1(pal_enc=0, rot_sm=1, slot=2, key=3) -> i32
+tir-wf-vidrot1 : List Word
+tir-wf-vidrot1 =
+  let locHdr = the (List Word) (cons #1 (cons #2 (cons #127 nil)))
+      msk    = pw-bin #113 (pw-bin #106 (pw-get #3) (pw-bin #108 (pw-get #2) (pw-c #17))) (pw-c #255)
+      rawEb  = pw-bin #113 (pw-bin #115 (pw-get #0) msk) (pw-c #255)
+      isEsc  = pw-bin #70 (pw-bin #113 (pw-get #2) (pw-c #15)) (pw-c #15)
+      setEb  = list-append (tir-sel (pw-c #0) rawEb isEsc) (pw-set #4)
+      setV   = list-append (pw-bin #114 (pw-bin #116 (pw-get #4) (pw-c #8)) (pw-bin #113 (pw-get #1) (pw-c #255))) (pw-set #5)
+      res    = pw-bin #113 (pw-bin #114 (pw-bin #118 (pw-get #5) (pw-c #1)) (pw-bin #116 (pw-get #5) (pw-c #15))) (pw-c #65535)
+  in pw-cat (cons locHdr (cons setEb (cons setV (cons res (cons (pw-op #11) nil)))))

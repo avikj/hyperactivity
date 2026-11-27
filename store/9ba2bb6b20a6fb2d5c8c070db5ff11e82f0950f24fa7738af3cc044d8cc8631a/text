@@ -1,0 +1,10 @@
+ue-peep-pls-At : (env : Nat → Nat) → (a1 a2 : UeExpr) → (k1 k2 : Nat) → (fl : Bool) →
+  ue-nat-eq k1 k2 ≡ fl →
+  ue-eval-nat env (if fl then ue-tim (ue-pls a1 a2) (ue-var k1) else ue-pls (ue-tim a1 (ue-var k1)) (ue-tim a2 (ue-var k2))) ≡
+  ue-add (ue-mul (ue-eval-nat env a1) (env k1)) (ue-mul (ue-eval-nat env a2) (env k2))
+ue-peep-pls-At env a1 a2 k1 k2 false h = refl
+ue-peep-pls-At env a1 a2 k1 k2 true  h =
+  let kp = ue-nat-eq-sound k1 k2 h
+  in ue-trans
+       (ue-mul-dist-r (ue-eval-nat env a1) (ue-eval-nat env a2) (env k1))
+       (cong (λ z → ue-add (ue-mul (ue-eval-nat env a1) (env k1)) (ue-mul (ue-eval-nat env a2) (env z))) kp)

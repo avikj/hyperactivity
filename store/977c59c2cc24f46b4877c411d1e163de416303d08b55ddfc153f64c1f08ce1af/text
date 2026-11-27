@@ -1,0 +1,16 @@
+ga-lem-and-guard : (env : Nat → Bool) → (a b : GaGuard) →
+  ga-eval env (if ga-eq b (ga-not a) then ga-k false else if ga-eq a (ga-not b) then ga-k false else ga-and a b)
+  ≡ ga-andB (ga-eval env a) (ga-eval env b)
+ga-lem-and-guard env a b =
+  let e1 = ga-eq b (ga-not a)
+      e2 = ga-eq a (ga-not b)
+  in (case e1 return (λ z → (ga-eq b (ga-not a) ≡ z) →
+        ga-eval env (if z then ga-k false else if e2 then ga-k false else ga-and a b) ≡ ga-andB (ga-eval env a) (ga-eval env b)) of
+        true  → λ h1 → ga-trans (ga-sym (ga-lem-and-compl (ga-eval env a)))
+                         (λ i → ga-andB (ga-eval env a) (ga-eval env (ga-eq-sound b (ga-not a) h1 (~ i))))
+        false → λ h1 →
+          (case e2 return (λ w → (ga-eq a (ga-not b) ≡ w) →
+             ga-eval env (if w then ga-k false else ga-and a b) ≡ ga-andB (ga-eval env a) (ga-eval env b)) of
+             true  → λ h2 → ga-trans (ga-sym (ga-lem-and-compl-l (ga-eval env b)))
+                              (λ i → ga-andB (ga-eval env (ga-eq-sound a (ga-not b) h2 (~ i))) (ga-eval env b))
+             false → λ h2 → refl) refl) refl

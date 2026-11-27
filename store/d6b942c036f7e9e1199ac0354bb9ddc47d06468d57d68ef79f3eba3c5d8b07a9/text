@@ -1,0 +1,13 @@
+x4-rpc-receipt : List Word → Proc W (List Word)
+x4-rpc-receipt tx0x =
+  let body = h-concat
+               (cons "{" (cons (x4-qstr "jsonrpc") (cons ":" (cons (x4-qstr "2.0")
+               (cons "," (cons (x4-qstr "id") (cons ":1,"
+               (cons (x4-qstr "method") (cons ":" (cons (x4-qstr "eth_getTransactionReceipt")
+               (cons "," (cons (x4-qstr "params") (cons ":[" (cons (x4-qstr tx0x) (cons "]}" nil)))))))))))))))
+  in bind (h-capture
+       (cons "/usr/bin/curl"
+       (cons "-sS" (cons "--max-time" (cons "6"
+       (cons "-H" (cons "Content-Type: application/json"
+       (cons "-d" (cons body (cons "https://mainnet.base.org" nil)))))))))) (λ r →
+       if %weq (fst r) #0 then ret {lzero} {W} (snd r) else ret {lzero} {W} nil)

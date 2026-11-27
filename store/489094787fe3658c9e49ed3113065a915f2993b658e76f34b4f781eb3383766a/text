@@ -1,0 +1,12 @@
+tir-micro-scan : Nat → Word → Word → Word
+tir-micro-scan zero    lo hi = tir-thin-profit lo
+tir-micro-scan (suc k) lo hi =
+  let span = %wsub hi lo
+      step = %wdiv span #4
+      m1   = %wadd lo (if %weq step #0 then #1 else step)
+      m2   = %wsub hi (if %weq step #0 then #1 else step)
+      g1   = %wadd (%wmul m1 #12) (%wdiv (%wmul m2 m2) #15)
+      g2   = %wadd (%wmul m2 #12) (%wdiv (%wmul m1 m1) #15)
+  in if %wlt g1 g2
+     then tir-micro-scan k m1 hi
+     else tir-micro-scan k lo m2

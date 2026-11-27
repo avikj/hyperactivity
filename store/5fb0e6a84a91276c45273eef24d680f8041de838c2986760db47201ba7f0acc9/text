@@ -1,0 +1,22 @@
+-- Concurrency-safe per-request curl invocation (reads reqPath, then unlinks reqPath!)
+this-curl-cmd : List Word → List Word
+this-curl-cmd reqPath =
+  list-append "test -n "
+  (list-append this-q
+  (list-append "$GEMINI_API_KEY"
+  (list-append this-q
+  (list-append " || exit 2; res=$(curl -sS --max-time 45 -X POST -H 'Content-Type: application/json' -H "
+  (list-append this-q
+  (list-append "x-goog-api-key: $GEMINI_API_KEY"
+  (list-append this-q
+  (list-append " --data-binary @"
+  (list-append reqPath
+  (list-append " "
+  (list-append this-q
+  (list-append "https://generativelanguage.googleapis.com/v1beta/models/${HX_GEMINI_MODEL:-gemini-4-neon}:generateContent"
+  (list-append this-q
+  (list-append "); rm -f "
+  (list-append reqPath
+  (list-append "; printf '%s' "
+  (list-append this-q
+  (list-append "$res" this-q))))))))))))))))))

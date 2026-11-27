@@ -1,0 +1,12 @@
+-- Func 2: hx_link(rtt_ms=0, syn_gain=1, hol_err=2, deg=3) -> i32
+-- Topological P2P mesh evolution operator: rewards synergy, penalizes RTT/degree, annihilates hol_err != 0!
+boc-wasm-f2 : List Word
+boc-wasm-f2 =
+  let gainE = pw-bin #106 (pw-c #4096) (pw-bin #116 (pw-bin #113 (pw-get #1) (pw-c #1023)) (pw-c #5))
+      penE  = pw-bin #106
+                (pw-bin #116 (pw-bin #113 (pw-get #0) (pw-c #1023)) (pw-c #1))
+                (pw-bin #116 (pw-bin #113 (pw-get #3) (pw-c #15))   (pw-c #6))
+      posE  = boc-sel (pw-bin #107 gainE penE) (pw-c #1) (pw-bin #75 gainE penE)
+      flatE = boc-un #69 (pw-get #2) -- 1 iff Stokes hol_err == 0, else 0!
+      outE  = pw-bin #108 posE flatE
+  in pw-cat (cons (cons #0 nil) (cons outE (cons (pw-op #11) nil)))

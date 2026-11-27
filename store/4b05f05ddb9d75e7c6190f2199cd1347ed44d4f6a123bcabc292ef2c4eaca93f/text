@@ -1,0 +1,9 @@
+ue-thm-contract-iter-monotone : (n : Nat) → (e : UeExpr) →
+  ue-le (ue-cost-nat (ue-contract-iter n e)) (ue-cost-nat e) ≡ true
+ue-thm-contract-iter-monotone zero    e = ue-le-refl (ue-cost-nat e)
+ue-thm-contract-iter-monotone (suc n) e =
+  let mid = ue-contract-iter n e
+      c   = ue-contract1 mid
+      s1  = ue-step-cost-at mid c (ue-le (ue-cost-nat c) (ue-cost-nat mid)) refl
+      ih  = ue-thm-contract-iter-monotone n e
+  in ue-le-trans (ue-cost-nat (ue-guarded-step mid)) (ue-cost-nat mid) (ue-cost-nat e) s1 ih

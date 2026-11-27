@@ -1,0 +1,14 @@
+usf-thm-superopt-sound : (n : UsfNode) → usf-emit-node (usf-superopt n) ≡ usf-emit-node n
+usf-thm-superopt-sound usf-empty = refl
+usf-thm-superopt-sound (usf-seq a b) =
+  let iha = usf-thm-superopt-sound a
+      ihb = usf-thm-superopt-sound b
+      st1 = usf-drop-r-sound (usf-superopt a) (usf-superopt b)
+      st2 = λ i → list-append (iha i) (ihb i)
+  in usf-trans st1 st2
+usf-thm-superopt-sound (usf-nav p)         = refl
+usf-thm-superopt-sound (usf-splash t s w)  = refl
+usf-thm-superopt-sound usf-portal          = refl
+usf-thm-superopt-sound (usf-section i l p) = refl
+usf-thm-superopt-sound (usf-benches i l b) = refl
+usf-thm-superopt-sound usf-footer          = refl

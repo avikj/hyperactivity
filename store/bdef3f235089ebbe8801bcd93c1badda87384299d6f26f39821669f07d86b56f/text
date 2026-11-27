@@ -1,0 +1,10 @@
+ga-thm-superopt-empty-fiber :
+  (n : Nat) → (eBad : GaGuard) → ga-superopt n eBad ≡ ga-k false →
+  ((env : Nat → Bool) × (ga-eval env eBad ≡ true)) → Empty
+ga-thm-superopt-empty-fiber n eBad hOpt w =
+  ga-bool-contra3
+    (ga-eval (fst w) (ga-superopt n eBad))
+    (ga-eval (fst w) eBad)
+    (ga-eval-false (fst w) (ga-superopt n eBad) hOpt)
+    (ga-thm-superopt-sound n (fst w) eBad)
+    (snd w)

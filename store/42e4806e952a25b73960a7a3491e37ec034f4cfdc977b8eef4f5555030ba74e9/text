@@ -1,0 +1,12 @@
+s-trace-get : List Word → List Word → Proc W (List Word)
+s-trace-get st qs =
+  let tf    = list-append st "/trace.jsonl"
+      sp    = s-param "since" qs
+      since = if h-null sp then #0 else h-number sp
+  in bind (h-read tf) (λ r →
+    let body  = the (List Word) (case r of inl _ → nil ; inr b → b)
+        lns   = s-trace-nonempty (h-lines body)
+        tot   = s-trace-count lns
+        delta = if %wlt since tot then h-drop-n (toNat since) lns else nil
+        arr   = s-trace-read-lines delta
+    in ret {lzero} {W} (s-response "application/json" (h-concat (cons "{" (cons (s-cj-str "next") (cons ":" (cons (h-decimal tot) (cons "," (cons (s-cj-str "trace") (cons ":[" (cons arr (cons "]}" nil))))))))))))

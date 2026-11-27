@@ -1,0 +1,18 @@
+boc-emit-all : Proc W Unit
+boc-emit-all =
+  let mfile = the (List Word) "/tmp/hy_out/boc_periodic_latch.metal"
+  in bind (h-mkdir "/tmp/hy_out") (λ d0 →
+     bind (h-mkdir "/tmp/hx_agent_bus") (λ d1 →
+     bind (h-write "/tmp/hy_out/boc_blackbox.wasm" boc-blackbox-wasm) (λ w0 →
+     bind (h-write "/tmp/hy_out/boc_wasm_check.mjs" boc-wasm-harness-js) (λ w0b →
+     bind (h-write "/tmp/hy_out/boc_periodic_latch_sm90a.ptx" boc-sm90a-ptx) (λ w1 →
+     bind (h-write mfile boc-metal-src) (λ w2 →
+     bind (h-write "/tmp/hy_out/boc_periodic_latch_host.m" (boc-host-src mfile)) (λ w3 →
+     bind (h-write "/tmp/hy_out/boc_verify_c11.c" boc-c11-src) (λ w4 →
+     bind (h-write "/tmp/hx_agent_bus/beast_omni_cryptic.hxsv" boc-hxsv-32b) (λ w5 →
+     bind (h-read "/tmp/hx_agent_bus/outbox.jsonl") (λ prev →
+     bind (h-write "/tmp/hx_agent_bus/outbox.jsonl" (list-append (boc-or-nil prev) boc-bus-json)) (λ w6 →
+     bind (h-write "/tmp/hx_agent_bus/agent_beast_omni_f714739b_state.json" boc-bus-json) (λ w7 →
+     h-out (boc-ln (list-append "[HX-BEAST-OMNI-CRYPTIC] Emitted blackbox.wasm="
+             (list-append (h-decimal (fromNat (list-length boc-blackbox-wasm)))
+             "B + SM_90a PTX + Metal + C11 + 32B HXSV + HFKE outbox!")) nil)))))))))))))

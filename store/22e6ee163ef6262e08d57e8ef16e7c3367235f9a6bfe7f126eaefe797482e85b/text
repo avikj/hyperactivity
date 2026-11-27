@@ -1,0 +1,13 @@
+ue-thm-contract1-sound : (env : Nat → Nat) → (e : UeExpr) →
+  ue-eval-nat env (ue-contract1 e) ≡ ue-eval-nat env e
+ue-thm-contract1-sound env (ue-lit v)   = refl
+ue-thm-contract1-sound env (ue-var k)   = refl
+ue-thm-contract1-sound env (ue-pls a b) =
+  ue-trans
+    (ue-lem-peep-pls-sound env (ue-contract1 a) (ue-contract1 b))
+    (ue-cong2 ue-add (ue-thm-contract1-sound env a) (ue-thm-contract1-sound env b))
+ue-thm-contract1-sound env (ue-tim a b) =
+  ue-trans
+    (ue-lem-peep-tim-sound env (ue-contract1 a) (ue-contract1 b))
+    (ue-cong2 ue-mul (ue-thm-contract1-sound env a) (ue-thm-contract1-sound env b))
+ue-thm-contract1-sound env (ue-d01 x)   = refl

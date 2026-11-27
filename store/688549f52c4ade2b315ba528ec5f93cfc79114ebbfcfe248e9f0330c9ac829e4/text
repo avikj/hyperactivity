@@ -1,0 +1,10 @@
+tir-thm-meta-ratchet-monotone :
+  {S : Type} → (cost : S → Nat) → (evolve : S → S) → (n : Nat) → (st : S) →
+  tir-le-nat (cost (tir-meta-iter n cost evolve st)) (cost st) ≡ true
+tir-thm-meta-ratchet-monotone cost evolve zero    st = tir-le-refl (cost st)
+tir-thm-meta-ratchet-monotone cost evolve (suc k) st =
+  let mid  = tir-meta-iter k cost evolve st
+      cand = evolve mid
+      s1   = tir-step-le-at cost mid cand (tir-le-nat (cost cand) (cost mid)) refl
+      ih   = tir-thm-meta-ratchet-monotone cost evolve k st
+  in tir-le-trans (cost (tir-meta-step cost evolve mid)) (cost mid) (cost st) s1 ih

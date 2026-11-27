@@ -1,0 +1,34 @@
+ga-eq-sound : (a b : GaGuard) → ga-eq a b ≡ true → a ≡ b
+ga-eq-sound (ga-k a)          (ga-k b)          h = λ i → ga-k (ga-eqB-sound a b h i)
+ga-eq-sound (ga-k a)          (ga-v j)          h = ga-false-absurd h
+ga-eq-sound (ga-k a)          (ga-not b)        h = ga-false-absurd h
+ga-eq-sound (ga-k a)          (ga-and b1 b2)    h = ga-false-absurd h
+ga-eq-sound (ga-k a)          (ga-ite c2 t2 f2) h = ga-false-absurd h
+ga-eq-sound (ga-v i)          (ga-k b)          h = ga-false-absurd h
+ga-eq-sound (ga-v i)          (ga-v j)          h = λ k → ga-v (ga-eq-nat-sound i j h k)
+ga-eq-sound (ga-v i)          (ga-not b)        h = ga-false-absurd h
+ga-eq-sound (ga-v i)          (ga-and b1 b2)    h = ga-false-absurd h
+ga-eq-sound (ga-v i)          (ga-ite c2 t2 f2) h = ga-false-absurd h
+ga-eq-sound (ga-not a)        (ga-k b)          h = ga-false-absurd h
+ga-eq-sound (ga-not a)        (ga-v j)          h = ga-false-absurd h
+ga-eq-sound (ga-not a)        (ga-not b)        h = λ i → ga-not (ga-eq-sound a b h i)
+ga-eq-sound (ga-not a)        (ga-and b1 b2)    h = ga-false-absurd h
+ga-eq-sound (ga-not a)        (ga-ite c2 t2 f2) h = ga-false-absurd h
+ga-eq-sound (ga-and a1 a2)    (ga-k b)          h = ga-false-absurd h
+ga-eq-sound (ga-and a1 a2)    (ga-v j)          h = ga-false-absurd h
+ga-eq-sound (ga-and a1 a2)    (ga-not b)        h = ga-false-absurd h
+ga-eq-sound (ga-and a1 a2)    (ga-and b1 b2)    h =
+  let p1 = ga-eq-sound a1 b1 (ga-and-true-l (ga-eq a1 b1) (ga-eq a2 b2) h)
+      p2 = ga-eq-sound a2 b2 (ga-and-true-r (ga-eq a1 b1) (ga-eq a2 b2) h)
+  in λ i → ga-and (p1 i) (p2 i)
+ga-eq-sound (ga-and a1 a2)    (ga-ite c2 t2 f2) h = ga-false-absurd h
+ga-eq-sound (ga-ite c1 t1 f1) (ga-k b)          h = ga-false-absurd h
+ga-eq-sound (ga-ite c1 t1 f1) (ga-v j)          h = ga-false-absurd h
+ga-eq-sound (ga-ite c1 t1 f1) (ga-not b)        h = ga-false-absurd h
+ga-eq-sound (ga-ite c1 t1 f1) (ga-and b1 b2)    h = ga-false-absurd h
+ga-eq-sound (ga-ite c1 t1 f1) (ga-ite c2 t2 f2) h =
+  let rest = ga-and-true-r (ga-eq c1 c2) (ga-andB (ga-eq t1 t2) (ga-eq f1 f2)) h
+      pc   = ga-eq-sound c1 c2 (ga-and-true-l (ga-eq c1 c2) (ga-andB (ga-eq t1 t2) (ga-eq f1 f2)) h)
+      pt   = ga-eq-sound t1 t2 (ga-and-true-l (ga-eq t1 t2) (ga-eq f1 f2) rest)
+      pf   = ga-eq-sound f1 f2 (ga-and-true-r (ga-eq t1 t2) (ga-eq f1 f2) rest)
+  in λ i → ga-ite (pc i) (pt i) (pf i)

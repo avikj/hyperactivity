@@ -1,0 +1,4 @@
+-- Rotate oldest peer entry when bounded rendezvous directory reaches 64 slots (never stalls globally!)
+s-p2p-evict-one : List Word → List (List Word) → Proc W Unit
+s-p2p-evict-one dir nil = ret {lzero} {W} unit
+s-p2p-evict-one dir (cons old _) = bind (h-unlink (list-append dir (list-append "/" old))) (λ _ → ret {lzero} {W} unit)

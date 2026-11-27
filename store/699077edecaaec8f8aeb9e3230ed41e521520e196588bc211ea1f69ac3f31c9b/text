@@ -1,0 +1,17 @@
+-- Exact cold-verification predicate for a single EVM receipt log:
+-- Credits `paidU6` iff:
+--   1. `statusOk == true` (`receipt.status == 0x1` on Base Mainnet `8453`),
+--   2. `notReplayed == true` (`txHash` not yet in `/tmp/hx_x402_ledger/`),
+--   3. `logAddr` is canonical Base native `USDC` (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`),
+--   4. `topic0` is ERC-20 `Transfer(address,address,uint256)` (`0xddf252ad...`),
+--   5. `topic2` is Founder Coinbase (`0x0000000000000000000000004a50fbf0128e2679c42466a8cc1a9d230b08a26f`),
+--   6. `paidU6 >= minU6`!
+x4-verify-transfer-log : Bool → Bool → List Word → List Word → List Word → Word → Word → Word
+x4-verify-transfer-log statusOk notReplayed logAddr topic0 topic2 paidU6 minU6 =
+  let okAddr = h-eq (x4-lower logAddr) x4-usdc-base-lc
+      okT0   = h-eq (x4-lower topic0)  x4-transfer-topic0-lc
+      okT2   = h-eq (x4-lower topic2)  x4-founder-topic32-lc
+      okAmt  = h-not (%wlt paidU6 minU6)
+  in if andB statusOk (andB notReplayed (andB okAddr (andB okT0 (andB okT2 okAmt))))
+     then paidU6
+     else #0

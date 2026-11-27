@@ -1,0 +1,16 @@
+-- Export 1: hx_golay_chord(src11=0, dst11=1) -> i32
+tir-wf-golay : List Word
+tir-wf-golay =
+  let locHdr = the (List Word) (cons #1 (cons #1 (cons #127 nil)))
+      sClean = pw-bin #113 (pw-get #0) (pw-c #2047)
+      dClean = pw-bin #113 (pw-get #1) (pw-c #2047)
+      setDel = list-append (pw-bin #115 sClean dClean) (pw-set #2)
+      anti   = pw-bin #115 sClean (pw-c #2047)
+      lsb    = pw-bin #113 (pw-get #2) (pw-bin #107 (pw-c #0) (pw-get #2))
+      step   = pw-bin #113 (pw-bin #115 sClean lsb) (pw-c #2047)
+      popDel = list-append (pw-get #2) (pw-op #105)
+      isFar  = pw-bin #73 (pw-c #5) popDel
+      hop    = tir-sel anti step isFar
+      isEq   = pw-bin #70 (pw-get #2) (pw-c #0)
+      out    = tir-sel sClean hop isEq
+  in pw-cat (cons locHdr (cons setDel (cons out (cons (pw-op #11) nil))))

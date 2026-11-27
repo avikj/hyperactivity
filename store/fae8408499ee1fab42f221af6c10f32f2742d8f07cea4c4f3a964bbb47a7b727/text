@@ -1,0 +1,7 @@
+s-allowed : Bool → Sum Unit (List Word) → List Word → Bool
+s-allowed pub (inl u) req = h-not pub
+s-allowed pub (inr tok) req =
+  andB (h-not (h-null tok))
+    (orB (s-tok-eq (um-header "x-token" req) tok)
+    (orB (s-tok-eq (s-bearer-tok (um-header "authorization" req)) tok)
+         (s-tok-eq (s-cookie-tok (um-header "cookie" req)) tok)))

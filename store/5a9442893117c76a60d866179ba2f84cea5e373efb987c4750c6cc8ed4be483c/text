@@ -1,0 +1,10 @@
+this-format-response : List Word → List Word → List Word → List Word → List Word
+this-format-response model m1 m2 raw =
+  let ans = this-extract-gemini-answer raw in
+  if h-not (h-null ans) then
+    h-concat (cons "{" (cons (this-kv "answer" ans) (cons ","
+      (cons (this-kv "meta" (h-concat (cons "THIS · live " (cons (this-esc-json model) (cons " · KG[" (cons (this-esc-json m1) (cons ", " (cons (this-esc-json m2) (cons "]" nil))))))))) (cons "}" nil)))))
+  else
+    let errMsg = this-extract-gemini-err raw
+        shown  = the (List Word) (if h-null errMsg then "THIS upstream returned no candidate (check GEMINI_API_KEY and HX_GEMINI_MODEL on Render)" else errMsg)
+    in h-concat (cons "{" (cons (this-kv "error" shown) (cons "}" nil)))

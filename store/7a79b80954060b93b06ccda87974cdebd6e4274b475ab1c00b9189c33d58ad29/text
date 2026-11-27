@@ -1,0 +1,23 @@
+boc-metal-p2 : List Word
+boc-metal-p2 =
+  boc-ln "  for (uint b = 0u; b < batches; b++) {"
+  (boc-ln "    uint idx = base + b;"
+  (boc-ln "    uint ia = idx & 7u, ib = (idx >> 3u) & 7u, rx = 140u + ((idx >> 6u) & 1u) * 80u;"
+  (boc-ln "    uint qa = Q_A[ia], qb = Q_B[ib], qx = (rx == 140u) ? 6u : 3u;"
+  (boc-ln "    uint sax = R_A[ia] + rx, sbx = R_B[ib] + rx;"
+  (boc-ln "    uint sqA = sax * sax, sqB = sbx * sbx;"
+  (boc-ln "    bool p_ok = (qa + qb == qx) && (32u * sqB <= 25u * sqA) && (100u * sqA <= 229u * sqB) && (2u * rx * rx <= sqB);"
+  (boc-ln "    if (p_ok) ph++;"
+  (boc-ln "    // Latch.bio + Covalent Oncology + Cryptic RAF dual-gauge verification:"
+  (boc-ln "    uint kmer = (idx * 2654435761u) ^ 0xA5C39F17u;"
+  (boc-ln "    uint wc_plain = ~kmer;"
+  (boc-ln "    uint wc_crypt = (~(kmer ^ KEY)) ^ KEY;"
+  (boc-ln "    if (wc_plain != wc_crypt) cok = 0u;"
+  (boc-ln "    uint wt = 110u + (idx & 31u), mut = 72u + ((idx >> 5u) & 31u);"
+  (boc-ln "    if (mut + 25u < wt && ((wc_plain & 3u) == 2u)) lh++;"
+  (boc-ln "    // 64-lane ULOP3 cone contraction witness:"
+  (boc-ln "    uint c0 = (kmer & wc_plain) ^ ((~kmer) & idx);"
+  (boc-ln "    if ((c0 & 63u) == 42u) ch++;"
+  (boc-ln "  }"
+  (boc-ln "  out[gid] = { ph, lh, ch, cok };"
+  (boc-ln "}" nil))))))))))))))))))))
