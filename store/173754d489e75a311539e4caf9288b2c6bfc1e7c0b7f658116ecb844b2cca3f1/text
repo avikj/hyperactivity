@@ -1,0 +1,7 @@
+-- an inner region (a batch, a scan) marks only past the first 8 in its outer region (a book
+-- item, a definition's check, an IO step): the closure mark is one slot, and an inner mark
+-- moves the outer region's rewind past what it made before (an IO step of a few batches then
+-- kept them all)
+b2-inner : Word → (Word → Step W Word) → Step W Word
+b2-inner mm_ kq_ =
+  scmd (w-load ((b2-HR mm_ #31))) (λ n → let mm_3430 = b2-dep mm_ n in if (%wlt n #8) then (scmd (w-store ((b2-HR mm_3430 #31)) ((%wsucc n))) (λ uu_3431 → let mm_3432 = hv2-u mm_3430 uu_3431 in kq_ (h4-depl mm_3432 (#0)))) else (kq_ (h4-depl mm_3430 (#1))))
