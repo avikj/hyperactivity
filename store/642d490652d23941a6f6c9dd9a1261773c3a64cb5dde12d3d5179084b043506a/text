@@ -1,0 +1,57 @@
+grh-js-p0 : List Word
+grh-js-p0 =
+  grh-ln "<script>(function(){'use strict';" (
+  grh-ln "var NL=String.fromCharCode(10),DQ=String.fromCharCode(34),SQ=String.fromCharCode(39);" (
+  grh-ln "var DAG={'01':{'p':[],'c':['02','03','04','05','06','07','09'],'defs':['RZ','rz-norm','rz-neg','rz-eqb','rz-add','rz-sub','rz-mul','rz-eq','rz-spf-go','rz-spf','rz-mu-go','rz-mu','rz-conv-go','rz-all-upto-go','rz-all-upto','thm-divisor-inversion']},'02':{'p':['01'],'c':['12'],'defs':['rz-gcd-go','RQ','rq-mk','rq-add','rq-sub','rq-mul','rq-div-w','rq-eq','rq-pos','binom-go','binom','rq-nth','rq-append','bern-sum','bern-go','series-neg','thm-continuation-trivial-zeros']},'03':{'p':['01'],'c':['08','12'],'defs':['SB4','harm4','l2-sq4','sb4-eq','in-B0','duality-ok','sample-b0','thm-harmonic-duality-and-B0']},'04':{'p':['01','02'],'c':['11','12'],'defs':['twist-min-weight','twist-gt-half','thm-character-phase-positivity']},'05':{'p':['01'],'c':['08','11'],'defs':['single-floor-vp','iterated-odd-floors','zero-drift-at','thm-height2-single-floor']},'06':{'p':['01'],'c':['11'],'defs':['no-3ap-pts','thm-sphere-progression-free']},'07':{'p':['01','02'],'c':['08','10','11'],'defs':['Lat','lat-slope','lat-ext','rq-le','mediant-convex-ok','gram-trace-floor','thm-mediant-and-gram']},'08':{'p':['03','05','07'],'c':['09','10','12'],'defs':['nat-le','nat-le-refl','absurd-bool','nat-le-trans','nat-le-suc','nat-le-add-l','nat-le-add-zero','nat-le-add-mono','and-split','LiftStep','chain-div','chain-bound','chain-valid','thm-chained-lift-compose']},'09':{'p':['01','08'],'c':['11'],'defs':['tower-amgm-ok','thm-critical-exponent-half']},'10':{'p':['07','08'],'c':['11'],'defs':['subr','subr-plus-cancel','corank-step','thm-codim1-tower-pairing']},'11':{'p':['04','05','06','07','09','10'],'c':['12'],'defs':['sandwich-annihilates','period-modulus-cancels','thm-determinant-annihilation']},'12':{'p':['02','03','04','08','11'],'c':[],'defs':['plus-cancel-l','thm-trace-subtraction','on-axis','all-on-axis','off-axis-count','suc-ne-zero','thm-zero-exterior-implies-axis','reflection-locks-half','thm-critical-axis-qed']}};" (
+  grh-ln "var ORDER=['01','02','03','04','05','06','07','08','09','10','11','12'];" (
+  grh-ln "" (
+  grh-ln "/* 1. Intrinsic terminology vs. whiteboy mode (Whig-history eponyms) */" (
+  grh-ln "var wbOn=false,btnWb=document.getElementById('btnWb'),wbSt=document.getElementById('wbStatus');" (
+  grh-ln "var epSpans=document.querySelectorAll('.ep');" (
+  grh-ln "function applyWb(){" (
+  grh-ln "  document.body.classList.toggle('wb-mode',wbOn);" (
+  grh-ln "  btnWb.classList.toggle('wb-on',wbOn);" (
+  grh-ln "  btnWb.textContent=wbOn?'whiteboy mode: on':'whiteboy mode: off';" (
+  grh-ln "  for(var i=0;i<epSpans.length;i++){" (
+  grh-ln "    epSpans[i].innerHTML=epSpans[i].getAttribute(wbOn?'data-wb':'data-pure');" (
+  grh-ln "  }" (
+  grh-ln "  wbSt.textContent=wbOn" (
+  grh-ln "    ?('Terminology: whiteboy mode active ('+epSpans.length+' historical eponyms substituted)')" (
+  grh-ln "    :'Terminology: intrinsic Greek/Latin mathematical terms (0 eponyms)';" (
+  grh-ln "}" (
+  grh-ln "btnWb.onclick=function(){wbOn=!wbOn;applyWb();};" (
+  grh-ln "" (
+  grh-ln "/* 2. Transitive ancestor / descendant highlighting on the 12-node DAG */" (
+  grh-ln "function getAnc(id,vis){vis=vis||{};var ps=DAG[id]?DAG[id].p:[];for(var i=0;i<ps.length;i++){var p=ps[i];if(!vis[p]){vis[p]=true;getAnc(p,vis);}}return vis;}" (
+  grh-ln "function getDesc(id,vis){vis=vis||{};var cs=DAG[id]?DAG[id].c:[];for(var i=0;i<cs.length;i++){var c=cs[i];if(!vis[c]){vis[c]=true;getDesc(c,vis);}}return vis;}" (
+  grh-ln "function highlightLineage(id){" (
+  grh-ln "  var anc=id?getAnc(id):{},desc=id?getDesc(id):{};" (
+  grh-ln "  for(var i=0;i<ORDER.length;i++){" (
+  grh-ln "    var k=ORDER[i],rl=document.getElementById('rl-'+k),ar=document.getElementById('n'+k);" (
+  grh-ln "    if(rl){rl.classList.toggle('anc',!!anc[k]);rl.classList.toggle('desc',!!desc[k]);}" (
+  grh-ln "    if(ar){ar.classList.toggle('anc-hi',!!anc[k]);ar.classList.toggle('desc-hi',!!desc[k]);}" (
+  grh-ln "  }" (
+  grh-ln "}" (
+  grh-ln "ORDER.forEach(function(k){" (
+  grh-ln "  var rl=document.getElementById('rl-'+k),ar=document.getElementById('n'+k);" (
+  grh-ln "  if(rl){rl.addEventListener('mouseenter',function(){highlightLineage(k);});rl.addEventListener('mouseleave',function(){highlightLineage(null);});}" (
+  grh-ln "  if(ar){ar.addEventListener('mouseenter',function(){highlightLineage(k);});ar.addEventListener('mouseleave',function(){highlightLineage(null);});}" (
+  grh-ln "});" (
+  grh-ln "window.addEventListener('scroll',function(){" (
+  grh-ln "  var cur='01';" (
+  grh-ln "  for(var i=0;i<ORDER.length;i++){var el=document.getElementById('n'+ORDER[i]);if(el&&el.getBoundingClientRect().top<=150)cur=ORDER[i];}" (
+  grh-ln "  for(var j=0;j<ORDER.length;j++){var rl=document.getElementById('rl-'+ORDER[j]);if(rl)rl.classList.toggle('cur',ORDER[j]===cur);}" (
+  grh-ln "},{passive:true});" (
+  grh-ln "" (
+  grh-ln "/* 3. Real cubical.wasm Topological Verifier (boots lib/core.cub, evaluates DAG order + #retract) */" (
+  grh-ln "var wk=null,wkReady=false,wkQueue=[],checked={},loadedOnce={};" (
+  grh-ln "function ensureWorker(){" (
+  grh-ln "  if(wk)return;" (
+  grh-ln "  var CORE=['lib/prelude.hypercubical','lib/code.hypercubical','lib/match.hypercubical','lib/nav.hypercubical','lib/cost.hypercubical','lib/lin.hypercubical','lib/check.hypercubical','lib/std.hypercubical','lib/core.hypercubical'];" (
+  grh-ln "  var wsrc=[" (
+  grh-ln "    'var NL=String.fromCharCode(10),DQ=String.fromCharCode(34),ex=null,mem=null,outB='+DQ+DQ+',errB='+DQ+DQ+';'," (
+  grh-ln "    'var dec=new TextDecoder(),enc=new TextEncoder();'," (
+  grh-ln "    'function hexPath(s){var b=enc.encode(s),h='+DQ+DQ+';for(var i=0;i<b.length;i++)h+=b[i].toString(16).padStart(2,'+DQ+'0'+DQ+');return h;}'," (
+  grh-ln "    'function cstr(s,fn){var b=enc.encode(s),p=ex.wasm_alloc(b.length+1);new Uint8Array(mem.buffer).set(b,p);new Uint8Array(mem.buffer)[p+b.length]=0;try{return fn(p);}finally{ex.wasm_free(p);}}'," (
+  grh-ln "    'self.onmessage=async function(ev){var m=ev.data||{};try{'," (
+  grh-ln "    '  if(m.t==='+DQ+'boot'+DQ+'){'," nil))))))))))))))))))))))))))))))))))))))))))))))))))))))
