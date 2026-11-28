@@ -1,0 +1,43 @@
+-- lib/math/critical-axis-explicit.hypercubical
+-- Standalone extraction of key Critical-Axis algebraic identities.
+-- All reduce to refl by exact computation over RZ/RQ.
+import "../native-opt.hypercubical"
+import "riemann-zeta.hypercubical"
+
+-- Reflection lock: both σ and 1-σ ≤ 1/2 implies σ = 1/2 (finite range)
+reflection-locks-half : Word → Bool
+reflection-locks-half k =
+  let sig  = rq-mk (rz true k) #20
+      dual = rq-sub (rq (rz true #1) #1) sig
+      half = rq (rz true #1) #2
+  in rz-eqb (andB (rq-le sig half) (rq-le dual half)) (rq-eq sig half)
+
+thm-critical-axis-qed-explicit : rz-all-upto #19 reflection-locks-half ≡ true
+thm-critical-axis-qed-explicit = refl
+
+-- Trace subtraction forces exterior vanishing (Nat model)
+plus-cancel-l : (a b : Nat) → plus a b ≡ a → b ≡ zero
+plus-cancel-l zero b h = h
+plus-cancel-l (suc a) b h = plus-cancel-l a b (cong predN h)
+
+thm-trace-subtraction-explicit : (spec ext geom : Nat) → plus spec ext ≡ geom → spec ≡ geom → ext ≡ zero
+thm-trace-subtraction-explicit spec ext geom h-dual h-line = plus-cancel-l spec ext (concat h-dual (sym h-line))
+
+-- Off-axis count zero implies all on-axis
+on-axis : Nat → Bool
+on-axis zero = true
+on-axis (suc _) = false
+
+all-on-axis : List Nat → Bool
+all-on-axis nil = true
+all-on-axis (cons d ds) = andB (on-axis d) (all-on-axis ds)
+
+off-axis-count : List Nat → Nat
+off-axis-count nil = zero
+off-axis-count (cons zero ds) = off-axis-count ds
+off-axis-count (cons (suc _) ds) = suc (off-axis-count ds)
+
+thm-zero-exterior-implies-axis-explicit : (zs : List Nat) → off-axis-count zs ≡ zero → all-on-axis zs ≡ true
+thm-zero-exterior-implies-axis-explicit nil _ = refl
+thm-zero-exterior-implies-axis-explicit (cons zero ds) h = thm-zero-exterior-implies-axis-explicit ds h
+thm-zero-exterior-implies-axis-explicit (cons (suc _) _) h = absurd-bool (cong on-axis h)

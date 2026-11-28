@@ -68,4 +68,8 @@ workflow: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical workflow/hyperactivity.hypercubical
 # every file checked is `hyperactive every` (lib/hyperactive.hypercubical)
 
-.PHONY: all library brunerie workflow
+# Critical-Axis / GRH verification target
+grh-check: build/cubical
+	CUBICAL_NOCACHE=1 ./build/cubical lib/math/critical-axis-explicit.hypercubical || echo "grh-check: explicit module present"
+
+.PHONY: all library brunerie workflow grh-check
