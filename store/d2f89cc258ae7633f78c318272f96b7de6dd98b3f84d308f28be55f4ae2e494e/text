@@ -1,0 +1,16 @@
+-- ── 1. Universal Skew-Symmetric Gyrator / Symplectic Power Conservation ─────
+-- For ANY 2x2 skew-symmetric operator J(g) = [[0, g], [-g, 0]] and state (x1, x2):
+--   x^T J(g) x = x1*(g*x2) + x2*(-g*x1) == 0 identically over Q!
+-- Unifies:
+--   • LQG symmetric extrinsic curvature K = [H_E, V] with g = b*(v2 - v1)
+--   • Thiele-Small electromechanical transducer gyrator with g = Bl
+--   • Cochlear Hopf oscillator symplectic rotation with g = -omega_0
+-- Variables (0..2): g, x1, x2.
+one-field-gyrator-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+one-field-gyrator-poly A ad mu q vs =
+  (λ g sub _ →
+    let k = g 0; x1 = g 1; x2 = g 2
+        negK = sub (q (fn-q 0 1)) k
+        lhs  = ad (mu x1 (mu k x2)) (mu x2 (mu negK x1))
+    in (lhs , q (fn-q 0 1)))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)
