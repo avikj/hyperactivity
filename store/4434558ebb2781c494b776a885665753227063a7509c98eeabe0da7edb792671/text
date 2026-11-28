@@ -1,0 +1,85 @@
+# Handoff from the livestream session (2026-11-26 to 2026-11-28)
+
+Session 01WfrbRuXCnyYYHPs54qKThv, branch claude/sleepy-galileo-rh97ek. Avik asked for the P2P realtime link of
+hyperactivity.ai to be subscribed to and streamed, then for a continuous Instagram livestream of it. This
+document is everything the session found that is worth keeping. The code the session wrote is not kept, and
+§4 says why. Statements about code name the definition and its key on main at c2429aa38. Statements about the
+live site name the request made and when. Inferences are marked as such.
+
+## 1. State
+
+| object | address |
+|---|---|
+| main when this was written | c2429aa38 |
+| what this branch adds to main | this document only |
+| code written and removed | tools/hx-live (Python, Dockerfile, render.yaml; d3a23ddc0) and lib/ir/hx-live.hypercubical (330592820). Neither is in this branch's history. |
+| deployed | nothing. No Render service was created; the one attempt was refused by the permission check. Nothing ever streamed to any platform. |
+| writes this session made to the live site | 2026-11-26: one presence entry `probe` (GET /api/live/pulse?id=probe&node=/), and about 75 s of heartbeats and SDP offers as `rad2520_4e96` from a headless /collab tab. On 2026-11-28 neither remained: the presence list (GET /api/live/pulse with no id, which writes nothing) was empty, and the mailbox did not hold `rad2520_4e96`. |
+
+## 2. The live P2P link, as found
+
+- The realtime link is on /collab (and /collablink): WebRTC data channels, rendezvous through
+  GET/POST /api/p2p/signal, ICE servers STUN only (stun.l.google.com:19302), no TURN. /hyperfactor also polls
+  /api/p2p/signal.
+- The home page loads no mesh script. GET /hx-mesh.js, /docs/hx-mesh.js and /hx/hx-mesh.js are 404 (2026-11-26
+  and 2026-11-28), although the store holds docs/hx-mesh.js (HxMesh, mounted as window.hxMesh).
+- /collab polls GET /api/swarm/stream every 2.5 s. It is 404 on the live site (2026-11-26, 2026-11-28). On
+  2026-11-26 the only paths in the store mentioning it were lib/ir/hx-collablink, lib/ir/hx-collaborator-node,
+  lib/ir/hyperos-studio-server and docs/CANON-UNIVALENT-DIAMOND-TRACE.md; lib/server.hypercubical has no handler
+  for it. That feed on /collab is dead in production.
+- Observed traffic: on 2026-11-26 the mailbox held `node_agent_f714739b` (role primary_swarm_42xHopper) and five
+  `rad2520_*` browser_collab tabs, all with heartbeats 184 to 316 s old, offers addressed to each other and none
+  answered. A headless Chromium in /collab for 75 s opened no data channel. Its ICE gathered only host (mDNS)
+  candidates because the cloud container blocks UDP, so that run says nothing about the link between two
+  ordinary browsers. On 2026-11-28 the mailbox held three `hx_*` `hello` entries, 446 s old.
+
+## 3. Defects found in the server and the bridge (not fixed here; for the sessions on the infrastructure)
+
+1. A read with an id evicts a peer. s-p2p-signal-body (key 65d295215397): when the directory holds more than 63
+   entries and the request's id is non-empty and new, s-p2p-evict-one runs before the write is decided; the
+   write happens only when there is a payload. So GET /api/p2p/signal?id=X with no msg removes a slot and adds
+   nothing. Reading with no id at all neither writes nor evicts.
+2. "Evict the oldest" evicts the first listed. s-p2p-evict-one (key bf0e024daa3a) unlinks the head of the
+   directory listing; the comment above it says oldest. Inference, not measured: the listing's order is the
+   filesystem's, not age.
+3. A GET writes presence. s-live-pulse (key 736a54e17cf3) writes /live/<id> on GET, so any crawler or prefetch
+   of /api/live/pulse?id=… creates presence. This session created one this way (§1).
+4. Figures shown publicly come from fallbacks. cl-bridge-c-4 (key cac27976d010) builds the node heartbeat with
+   founder_coinbase_usdc_u6 defaulting to 4325962 and morpho_pool_liquidity_usd_m to 526 when
+   /tmp/hx_agent_bus/netpos_maxlev_live.json is absent. The live mailbox on 2026-11-26 showed exactly
+   "Base8453 $4.33 settled · $526M 0bp Morpho". Inference: those figures were the fallbacks, not a reading.
+5. No TURN. With STUN alone, peers behind symmetric NAT or UDP-blocking networks cannot connect.
+
+## 4. The livestream: what was learned, and why the code was removed
+
+Platform facts, from search on 2026-11-26 (sources: about.instagram.com Live Producer note;
+support.restream.io article 18180232; streamyard.com multistream-to-instagram; developers.facebook.com
+Live Video API and Instagram live_media reference):
+
+- Instagram has no general API to start a live broadcast. A desktop encoder streams to
+  rtmps://live-upload.instagram.com:443/rtmp/<key>, with the key from Live Producer on instagram.com. The key
+  is new for every broadcast. Sessions are reported limited to one hour (one source says four). Meta has a
+  restricted Live API for eligible accounts, which Restream and StreamYard use and which avoids the
+  per-broadcast key. So a continuous Instagram stream is a chain of sessions, each with a new key, unless the
+  account qualifies for that API.
+- YouTube (rtmp://a.rtmp.youtube.com/live2/<key>) and Twitch (rtmp://live.twitch.tv/app/<key>) keys persist and
+  allow 24/7 streaming. Facebook issues its stream URL through POST /<id>/live_videos.
+- ffmpeg's tee muxer with onfail=ignore sends one encode to several RTMP(S) targets and drops a failing one
+  without stopping the rest. Tested to file only.
+
+The renderer the session wrote (each peer as a 64-bit word drawn as an 8x8 table and a hexagram, sounded at a
+pitch from its hexagram, encoded 720x1280 H.264 and AAC) ran and produced valid video. It was removed because
+about 26 of its choices were the session's own and not Avik's: the hash (FNV-1a, where the store's identity is
+SHA-256), rehashing a peer at each heartbeat, the pentatonic pitch map, every decay, gain, colour and layout
+constant, and the encoder settings. By the rules of this repository an agent realizes algorithms Avik states;
+it does not supply them. The only result of it worth keeping is the mechanism already in §3.1: a subscriber
+that reads with no query never writes to or evicts from the mailbox.
+
+## 5. What a successor needs before any livestream
+
+The specification is Avik's: what the stream shows and sounds (the content he said he supplied, which this
+session never located and should have asked for), and the mapping from the link to picture and sound. Given
+that, the remaining work is mechanical:
+- a key per Instagram session from Live Producer, or eligibility for Meta's Live API;
+- an always-on machine with ffmpeg and outbound TCP 443 and 1935;
+- stream keys held only in that machine's environment.
