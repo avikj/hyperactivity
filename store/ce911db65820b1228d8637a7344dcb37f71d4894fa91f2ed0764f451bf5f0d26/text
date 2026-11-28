@@ -1,0 +1,26 @@
+vpf-ota-deploy-sh-q1 : List Word
+vpf-ota-deploy-sh-q1 =
+  vpf-lines-q
+    (cons "  SDK=`$1`; TGT=`$2`; ODIR=`$3`; OUTA=`$4`"
+    (cons "  mkdir -p `$ODIR`"
+    (cons "  for c in dnf big net lang; do"
+    (cons "    xcrun -sdk `$SDK` clang -std=gnu11 -O2 -target `$TGT` -DCUBICAL_LIB -I`$SRC_DIR` -I`$OUT` -c `$SRC_DIR/$c.c` -o `$ODIR/$c.o`"
+    (cons "  done"
+    (cons "  xcrun -sdk `$SDK` clang -std=gnu11 -O2 -target `$TGT` -DCUBICAL_LIB -I`$SRC_DIR` -I`$OUT` -c `$OUT/hx_vp_bridge.c` -o `$ODIR/bridge.o`"
+    (cons "  xcrun -sdk `$SDK` libtool -static -o `$OUTA` `$ODIR/dnf.o` `$ODIR/big.o` `$ODIR/net.o` `$ODIR/lang.o` `$ODIR/bridge.o`"
+    (cons "}"
+    (cons nil
+    (cons "echo `[1/4] Building in-process libcubical.a for macOS + visionOS (arm64-apple-xros2.0)...`"
+    (cons "build_lib macosx arm64-apple-macos14.0 `$OUT/obj_mac` `$OUT/libvp_mac.a`"
+    (cons "xcrun clang -O2 -fobjc-arc -I`$OUT` `$OUT/hx_vp_e2e_bench.m` `$OUT/libvp_mac.a` -framework Foundation -framework Metal -lpthread -lm -o `$OUT/hx_vp_e2e_bench`"
+    (cons "`$OUT/hx_vp_e2e_bench` `$OUT/HyperactivityVisionProShader.metal`"
+    (cons nil
+    (cons "if xcrun -sdk xros --show-sdk-path >/dev/null 2>&1; then"
+    (cons "  build_lib xros arm64-apple-xros2.0 `$OUT/obj_xros` `$OUT/libvp_xros.a`"
+    (cons "  build_lib xrsimulator arm64-apple-xros2.0-simulator `$OUT/obj_xrsim` `$OUT/libvp_xrsim.a`"
+    (cons nil
+    (cons "  TEAM_ID=`${HYPERACTIVE_TEAM_ID:-}`"
+    (cons "  if [ -z `$TEAM_ID` ]; then"
+    (cons "    CERT_CN=`$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*`\(Apple Development:[^`]*\)`.*/\1/p' | head -n 1)`"
+    (cons "    if [ -n `$CERT_CN` ]; then"
+    nil))))))))))))))))))))))

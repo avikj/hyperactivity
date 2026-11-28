@@ -1,0 +1,39 @@
+vph-c-impl-p1 : List Word → List Word
+vph-c-impl-p1 r =
+  sl-ln "// Generated from lib/ir/vision-pro-hypervisor.hypercubical (In-Process libcubical + Sensor/Audio Core)"
+  (sl-ln (list-append "#include " (sl-str "hx_vp_bridge.h"))
+  (sl-ln (list-append "#include " (sl-str "libcubical.h"))
+  (sl-ln "#include <math.h>"
+  (sl-ln "#include <stdio.h>"
+  (sl-ln "#include <stdlib.h>"
+  (sl-ln "#include <sys/stat.h>"
+  (sl-ln "static int g_cubical_ready = 0;"
+  (sl-ln "int hx_vp_kernel_boot(int nfiles, const char* const* files) {"
+  (sl-ln "  (void)nfiles; (void)files;"
+  (sl-ln (list-append "  const char* td = getenv(" (list-append (sl-str "TMPDIR") (list-append "); if (!td || !*td) td = " (list-append (sl-str "/tmp") ";"))))
+  (sl-ln "  char d1[512], d2[512], fp[512];"
+  (sl-ln (list-append "  snprintf(d1, sizeof d1, " (list-append (sl-str "%s/hx_vp_boot") ", td); mkdir(d1, 0777);"))
+  (sl-ln (list-append "  snprintf(d2, sizeof d2, " (list-append (sl-str "%s/hx_vp_boot/lib") ", td); mkdir(d2, 0777);"))
+  (sl-ln (list-append "  snprintf(fp, sizeof fp, " (list-append (sl-str "%s/hx_vp_boot/lib/prelude.hypercubical") ", td);"))
+  (sl-ln (list-append "  FILE* f = fopen(fp, " (list-append (sl-str "wb") ");"))
+  (sl-ln (list-append "  if (f) { fputs(" (list-append sl-q (list-append "data Bool = false | true" (list-append sl-esc-n (list-append "data Level = lzero | lsuc (a : Level)" (list-append sl-esc-n (list-append "vp-tonnetz-P t = %wxor t #1" (list-append sl-esc-n (list-append sl-q ", f); fclose(f); }")))))))))
+  (sl-ln (list-append "  setenv(" (list-append (sl-str "CUBICAL_NOCACHE") (list-append ", " (list-append (sl-str "1") ", 1);"))))
+  (sl-ln "  const char* boot[1] = { fp };"
+  (sl-ln "  int rc = cubical_init(1, boot);"
+  (sl-ln "  if (rc == 0) g_cubical_ready = 1;"
+  (sl-ln "  return rc;"
+  (sl-ln "}"
+  (sl-ln "static uint32_t schmitt_finger(uint32_t prev_bit, const float th[3], const float tip[3]) {"
+  (sl-ln "  float dx = (th[0] - tip[0]) * 1000.0f;"
+  (sl-ln "  float dy = (th[1] - tip[1]) * 1000.0f;"
+  (sl-ln "  float dz = (th[2] - tip[2]) * 1000.0f;"
+  (sl-ln "  float d2 = dx*dx + dy*dy + dz*dz;"
+  (sl-ln "  if (d2 <= 144.0f) return 1u;"
+  (sl-ln "  if (d2 >= 324.0f) return 0u;"
+  (sl-ln "  return prev_bit ? 1u : 0u;"
+  (sl-ln "}"
+  (sl-ln "static uint32_t tonnetz_next(uint32_t t, uint32_t op) {"
+  (sl-ln "  uint32_t r = t >> 1u, m = t & 1u;"
+  (sl-ln "  uint32_t r2 = (op == 0u) ? r : ((op == 1u) ? ((r + (m ? 8u : 4u)) % 12u) : ((r + (m ? 3u : 9u)) % 12u));"
+  (sl-ln "  return (r2 << 1u) | (m ^ 1u);"
+  (sl-ln "}" r))))))))))))))))))))))))))))))))))))

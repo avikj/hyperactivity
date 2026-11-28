@@ -1,0 +1,26 @@
+vpf-c-impl-q2 : List Word
+vpf-c-impl-q2 =
+  vpf-lines-q
+    (cons "static void vp_hxsv_pack(uint8_t pkt[32], uint8_t kind, uint32_t seq, uint32_t w2, uint32_t w3, uint32_t w4, uint32_t w5) {"
+    (cons "  vp_wr_be32(pkt + 0,  0x48585356u);"
+    (cons "  vp_wr_be32(pkt + 4,  ((uint32_t)kind << 24) | (seq & 0x00ffffffu));"
+    (cons "  vp_wr_be32(pkt + 8,  w2);"
+    (cons "  vp_wr_be32(pkt + 12, w3);"
+    (cons "  vp_wr_be32(pkt + 16, w4);"
+    (cons "  vp_wr_be32(pkt + 20, w5);"
+    (cons "  uint64_t mac = vp_hxsv_mac(pkt);"
+    (cons "  vp_wr_be32(pkt + 24, (uint32_t)(mac >> 32));"
+    (cons "  vp_wr_be32(pkt + 28, (uint32_t)mac);"
+    (cons "}"
+    (cons "static int vp_hxsv_ok(const uint8_t pkt[32]) {"
+    (cons "  if (vp_rd_be32(pkt) != 0x48585356u) return 0;"
+    (cons "  uint64_t mac = vp_hxsv_mac(pkt);"
+    (cons "  return vp_rd_be32(pkt + 24) == (uint32_t)(mac >> 32) && vp_rd_be32(pkt + 28) == (uint32_t)mac;"
+    (cons "}"
+    (cons nil
+    (cons "int hx_vp_kernel_boot(int nfiles, const char* const* files) {"
+    (cons "  setenv(`CUBICAL_NOCACHE`, `1`, 1);"
+    (cons "  if (nfiles > 0 && files && files[0] && files[0][0]) {"
+    (cons "    struct stat st;"
+    (cons "    if (stat(files[0], &st) == 0 && st.st_size > 0) {"
+    nil))))))))))))))))))))))

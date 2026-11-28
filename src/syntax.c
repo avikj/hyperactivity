@@ -1888,6 +1888,9 @@ static void p_decl_in(void) {
         size_t len = 0;
         for (Node *cur = grp[2]; cur->list && cur->n == 3 && !cur->it[0]->list && !strcmp(cur->it[0]->s, "lcons"); cur = cur->it[2]) { fputc((int)atol(cur->it[1]->s + 1), o); len++; }
         fclose(o); chmod(pt->s, 0755);
+#ifdef __APPLE__
+        { pid_t cpid = fork(); if (cpid == 0) { int dn = open("/dev/null", O_WRONLY); if (dn >= 0) { dup2(dn, 1); dup2(dn, 2); close(dn); } execl("/usr/bin/codesign", "codesign", "--force", "--sign", "-", pt->s, (char *)NULL); _Exit(127); } else if (cpid > 0) { int cst = 0; waitpid(cpid, &cst, 0); } }
+#endif
         passes++; printf("ok: build %s   [%s, %zu bytes, the checker's conversion, %ld steps]\n", fn->s, pt->s, len, steps);
         decl_end(); return;
     }

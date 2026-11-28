@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p24 : List Word
+hyperos-arm64-kernel-c-p24 =
+  os-lines-q
+    (cons "    uart_puts(`hyperos-el1> `);"
+    (cons "    char cmd[64]; int clen = 0;"
+    (cons "    for (;;) {"
+    (cons "        hid_poll_one(&g_vq_kbd, g_kbd_ev);"
+    (cons "        hid_poll_one(&g_vq_mse, g_mse_ev);"
+    (cons "        int ch = uart_getc_nb();"
+    (cons "        if (ch >= 0) {"
+    (cons "            if (ch == '\r' || ch == '\n') {"
+    (cons "                uart_putc('\n');"
+    (cons "                cmd[clen] = 0;"
+    (cons "                if (k_streq(cmd, `off`) || k_streq(cmd, `halt`)) return hw.psci_smc;"
+    (cons "                if (k_streq(cmd, `help`)) uart_puts(`commands: eval | status | off\n`);"
+    (cons "                else if (k_streq(cmd, `status`)) {"
+    (cons "                    uart_puts(`hid=`); uart_u64((uint64_t)g_hid_count);"
+    (cons "                    uart_puts(` keys=`); uart_u64(g_key_events);"
+    (cons "                    uart_puts(` mouse=(`); uart_u64((uint64_t)g_mouse_x); uart_putc(','); uart_u64((uint64_t)g_mouse_y);"
+    (cons "                    uart_puts(`) net_rx=`); uart_u64(g_net_rx); uart_putc('\n');"
+    (cons "                } else if (clen > 0) {"
+    (cons "                    uint64_t stp = 0, r = inet_selftest((uint64_t)clen * 7ULL, &stp);"
+    (cons "                    uart_puts(`inet => `); uart_u64(r); uart_puts(` (`); uart_u64(stp); uart_puts(` steps)\n`);"
+    (cons "                    fb_render_cockpit(r, stp);"
+    (cons "                }"
+    nil))))))))))))))))))))))

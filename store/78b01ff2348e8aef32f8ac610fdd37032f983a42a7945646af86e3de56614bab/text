@@ -1,0 +1,26 @@
+vpf-c-impl-q4 : List Word
+vpf-c-impl-q4 =
+  vpf-lines-q
+    (cons "}"
+    (cons nil
+    (cons "static int probe_http_once(const char* ip, uint16_t port) {"
+    (cons "  if (!ip || !*ip) return 0;"
+    (cons "  int s = socket(AF_INET, SOCK_STREAM, 0); if (s < 0) return 0;"
+    (cons "  struct timeval tv; tv.tv_sec = 0; tv.tv_usec = 200000;"
+    (cons "  setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);"
+    (cons "  setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);"
+    (cons "  struct sockaddr_in sa; memset(&sa, 0, sizeof sa); sa.sin_family = AF_INET; sa.sin_port = htons(port);"
+    (cons "  if (inet_pton(AF_INET, ip, &sa.sin_addr) != 1) { close(s); return 0; }"
+    (cons "  int ok = 0;"
+    (cons "  if (connect(s, (struct sockaddr*)&sa, sizeof sa) == 0) {"
+    (cons "    const char* req = `GET /api/net/pulse HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`;"
+    (cons "    (void)send(s, req, strlen(req), 0);"
+    (cons "    char buf[512]; ssize_t n = recv(s, buf, sizeof(buf) - 1, 0);"
+    (cons "    if (n > 12) { buf[n] = 0; if (strstr(buf, `200`) != NULL) ok = 1; }"
+    (cons "  }"
+    (cons "  close(s);"
+    (cons "  return ok;"
+    (cons "}"
+    (cons nil
+    (cons "static void emit_hxsv_udp(uint8_t kind, uint32_t bcmd, uint32_t act, uint32_t triad) {"
+    nil))))))))))))))))))))))

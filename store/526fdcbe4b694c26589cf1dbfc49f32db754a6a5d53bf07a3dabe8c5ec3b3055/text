@@ -1,0 +1,26 @@
+-- Live macOS End-to-End In-Process `libcubical.a` + 54-Joint + 48kHz Audio + Stereo Reverse-Z Metal Benchmark:
+vph-mac-bench-p1 : List Word → List Word
+vph-mac-bench-p1 r =
+  sl-ln "// Generated from lib/ir/vision-pro-hypervisor.hypercubical (End-to-End Sensor<->libcubical<->Metal+Audio Bench)"
+  (sl-ln "#import <Foundation/Foundation.h>"
+  (sl-ln "#import <Metal/Metal.h>"
+  (sl-ln "#include <simd/simd.h>"
+  (sl-ln "#include <stdio.h>"
+  (sl-ln "#include <sys/time.h>"
+  (sl-ln (list-append "#include " (sl-str "hx_vp_bridge.h"))
+  (sl-ln "typedef struct { simd_float4x4 vp[2]; simd_float4 head, lp, rp, desk; simd_uint4 inet; } HxVpUniforms;"
+  (sl-ln "static double now_s(void){ struct timeval tv; gettimeofday(&tv,NULL); return tv.tv_sec + tv.tv_usec*1e-6; }"
+  (sl-ln "int main(int argc, char** argv) {"
+  (sl-ln "  @autoreleasepool {"
+  (sl-ln (list-append "    const char* mpath = (argc > 1) ? argv[1] : " (list-append (sl-str "/tmp/hy_out/visionpro/HyperactivityVisionProShader.metal") ";"))
+  (sl-ln (list-append "    const char* hyfile = (argc > 2) ? argv[2] : " (list-append (sl-str "lib/ir/synesthesia-loop.hypercubical") ";"))
+  (sl-ln "    const char* files[1] = { hyfile };"
+  (sl-ln "    int boot_rc = hx_vp_kernel_boot(1, files);"
+  (sl-ln "    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();"
+  (sl-ln "    NSError* err = nil;"
+  (sl-ln "    NSString* src = [NSString stringWithContentsOfFile:[NSString stringWithUTF8String:mpath] encoding:NSUTF8StringEncoding error:&err];"
+  (sl-ln "    MTLCompileOptions* opts = [MTLCompileOptions new]; opts.mathMode = MTLMathModeSafe;"
+  (sl-ln "    id<MTLLibrary> lib = [dev newLibraryWithSource:src options:opts error:&err];"
+  (sl-ln "    if (!lib) { puts([[err localizedDescription] UTF8String]); return 1; }"
+  (sl-ln (list-append "    id<MTLComputePipelineState> pso = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@" (list-append (sl-str "hx_visionpro_spatial_hypervisor") "] error:&err];"))
+  (sl-ln "    id<MTLCommandQueue> q = [dev newCommandQueue];" r))))))))))))))))))))))

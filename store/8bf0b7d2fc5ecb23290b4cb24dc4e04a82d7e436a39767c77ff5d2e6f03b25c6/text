@@ -1,0 +1,55 @@
+ho-materialize-all : List Word → (Word → Step W Word) → Step W Word
+ho-materialize-all dir k =
+  cli-mkdir "/tmp/hy_out" (λ _ →
+  cli-mkdir dir (λ _ →
+  scmd (w-file-write-named (list-append dir "/hyperos_boot.S") hyperos-boot-asm) (λ b1 →
+  scmd (w-file-write-named (list-append dir "/hyperos.ld") hyperos-ld-script) (λ b2 →
+  scmd (w-file-write-named (list-append dir "/hyperos_kernel.c") hyperos-kernel-c) (λ b3 →
+  scmd (w-file-write-named (list-append dir "/hyperfactor_bench.c") hyperfactor-bench-c) (λ b4 →
+  scmd (w-file-write-named (list-append dir "/hyperos_boot_arm64.S") hyperos-arm64-boot-asm) (λ b5 →
+  scmd (w-file-write-named (list-append dir "/hyperos_arm64.ld") hyperos-arm64-ld) (λ b6 →
+  scmd (w-file-write-named (list-append dir "/hyperos_kernel_arm64.c") hyperos-arm64-kernel-c) (λ b7 →
+  scmd (w-file-write-named (list-append dir "/hx_arm64_mkimg.c") hyperos-arm64-mkimg-c) (λ b7m →
+  scmd (w-file-write-named (list-append dir "/hx_hypernet_mesh.c") hypernet-mesh-c) (λ b8 →
+  scmd (w-file-write-named (list-append dir "/hyperos_vz_macos.swift") hyperos-vz-swift) (λ b9 →
+  scmd (w-file-write-named (list-append dir "/hyperos_vz.entitlements") hyperos-vz-entitlements) (λ b10 →
+  scmd (w-file-write-named (list-append dir "/boot_m1n1_apple_silicon.sh") hyperos-m1n1-sh) (λ b11 →
+  scmd (w-file-write-named (list-append dir "/hx_oneclick_deploy.sh") hyperos-deploy-sh) (λ b12 →
+  cli-chmod (list-append dir "/boot_m1n1_apple_silicon.sh") #493 (λ _ →
+  cli-chmod (list-append dir "/hx_oneclick_deploy.sh") #493 (λ _ →
+    k (%wadd b5 (%wadd b7 (%wadd b7m (%wadd b8 b9))))))))))))))))))))
+
+ho-mode-of : List Word → List Word
+ho-mode-of a1 =
+  if cli-eq a1 nil then "all"
+  else if cli-eq a1 "emit" then "emit"
+  else if cli-eq a1 "baremetal" then "baremetal"
+  else if cli-eq a1 "mesh" then "mesh"
+  else if cli-eq a1 "daemon" then "daemon"
+  else if cli-eq a1 "visionpro" then "visionpro"
+  else if cli-eq a1 "all" then "all"
+  else "emit"
+
+ho-dir-of : List Word → List Word → List Word → List Word
+ho-dir-of a1 a2 mode =
+  if cli-eq a1 nil then "/tmp/hy_out/hyperos"
+  else if cli-eq a2 nil then
+    (if cli-eq mode "emit" then
+       (if cli-eq a1 "emit" then "/tmp/hy_out/hyperos" else a1)
+     else "/tmp/hy_out/hyperos")
+  else a2
+
+hyperos-cli-main : List (List Word) → Step W Word
+hyperos-cli-main args =
+  let a1   = ho-arg1 args
+      a2   = ho-arg2 args
+      mode = ho-mode-of a1
+      dir  = ho-dir-of a1 a2 mode
+  in ho-materialize-all dir (λ totB →
+       if cli-eq mode "emit" then
+         cli-say (list-append "[HX-HYPEROS] Materialized Dual-Arch ARM64+x86-64 Bare-Metal Hyperkernel + VZ + m1n1 + HXSV Mesh ("
+           (list-append (ce-dec totB) (list-append "B) -> " dir)))
+           (sdone #0)
+       else
+         cli-system (list-append "/bin/sh " (list-append dir (list-append "/hx_oneclick_deploy.sh " (list-append mode (list-append " " (list-append dir " ."))))))
+           (λ rc → sdone rc))

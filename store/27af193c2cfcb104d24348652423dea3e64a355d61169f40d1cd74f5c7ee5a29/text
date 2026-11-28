@@ -1,0 +1,13 @@
+fl-stream-step : (Word → Word) → FlowStream → FlowTok → FlowStream
+fl-stream-step _ st ft-word = st
+fl-stream-step env st tok =
+  let buf2  = list-append (fs-buf st) (cons tok nil)
+      ar    = fl-tok-arity tok
+      open2 = %wsub (%wadd (fs-open st) ar) #1
+  in if %weq open2 #0 then
+       let ans = case fl-parse buf2 of
+                   inl _ → #0
+                   inr e → fl-eval env e
+       in FlowStream { fs-buf = nil ; fs-open = #1 ; fs-answers = list-append (fs-answers st) (cons ans nil) }
+     else
+       FlowStream { fs-buf = buf2 ; fs-open = open2 ; fs-answers = fs-answers st }

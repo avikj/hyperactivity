@@ -1,0 +1,21 @@
+vph-swift-p2 : List Word → List Word
+vph-swift-p2 r =
+  sl-ln "  static func startBinauralEngine(statePtr: UnsafeMutablePointer<HxVpFrameOut>) -> AVAudioEngine? {"
+  (sl-ln "    let engine = AVAudioEngine()"
+  (sl-ln "    guard let fmt = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2) else { return nil }"
+  (sl-ln "    var phase: UInt32 = 0"
+  (sl-ln "    let srcNode = AVAudioSourceNode(format: fmt) { _, _, frameCount, audioBufferList -> OSStatus in"
+  (sl-ln "      let abl = UnsafeMutableAudioBufferListPointer(audioBufferList)"
+  (sl-ln "      guard abl.count >= 2,"
+  (sl-ln "            let outL = abl[0].mData?.assumingMemoryBound(to: Float.self),"
+  (sl-ln "            let outR = abl[1].mData?.assumingMemoryBound(to: Float.self) else { return noErr }"
+  (sl-ln "      let tr = statePtr.pointee.tonnetz_triad"
+  (sl-ln "      let az = statePtr.pointee.r_chord % 6"
+  (sl-ln "      hx_vp_render_binaural_48k(tr, az, &phase, outL, outR, frameCount)"
+  (sl-ln "      return noErr"
+  (sl-ln "    }"
+  (sl-ln "    engine.attach(srcNode)"
+  (sl-ln "    engine.connect(srcNode, to: engine.mainMixerNode, format: fmt)"
+  (sl-ln "    try? engine.start()"
+  (sl-ln "    return engine"
+  (sl-ln "  }" r))))))))))))))))))

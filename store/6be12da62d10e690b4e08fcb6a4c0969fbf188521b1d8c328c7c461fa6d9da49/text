@@ -1,0 +1,36 @@
+-- Case split for (g1 > n2) with g1 = n2 + suc d1 and (g2 <= n3) with n3 = g2 + d2:
+-- Compare (suc d1) vs d2 to prove both sides equal identically!
+fl-assoc-gt-le : (n1 n2 g2 d1 d2 g3 : Nat) →
+  fl-comp (vm n1 (fl-add (suc d1) g2)) (vm (fl-add g2 d2) g3) ≡
+  fl-comp (vm n1 (fl-add n2 (suc d1))) (vm (fl-add n2 d2) g3)
+fl-assoc-gt-le n1 n2 g2 d1 d2 g3 =
+  case fl-cmp (suc d1) d2 of
+    inl pk →
+      let k   = fst pk
+          eqk = fst (snd pk)
+          eL : fl-add g2 d2 ≡ fl-add (fl-add (suc d1) g2) k
+          eL = fl-trans (fl-cong (fl-add g2) eqk)
+                (fl-trans (fl-sym (fl-add-assoc g2 (suc d1) k))
+                          (fl-cong (λ z → fl-add z k) (fl-add-comm g2 (suc d1))))
+          hL : fl-le (fl-add (suc d1) g2) (fl-add g2 d2) ≡ true
+          hL = fl-trans (fl-cong (fl-le (fl-add (suc d1) g2)) eL) (fl-le-add-self (fl-add (suc d1) g2) k)
+          eR : fl-add n2 d2 ≡ fl-add (fl-add n2 (suc d1)) k
+          eR = fl-trans (fl-cong (fl-add n2) eqk) (fl-sym (fl-add-assoc n2 (suc d1) k))
+          hR : fl-le (fl-add n2 (suc d1)) (fl-add n2 d2) ≡ true
+          hR = fl-trans (fl-cong (fl-le (fl-add n2 (suc d1))) eR) (fl-le-add-self (fl-add n2 (suc d1)) k)
+      in fl-trans (fl-comp-eq-le n1 (fl-add (suc d1) g2) (fl-add g2 d2) g3 k eL hL)
+                  (fl-sym (fl-comp-eq-le n1 (fl-add n2 (suc d1)) (fl-add n2 d2) g3 k eR hR))
+    inr pk →
+      let k   = fst pk
+          eqk = fst (snd pk)
+          eL : fl-add (suc d1) g2 ≡ fl-add (fl-add g2 d2) (suc k)
+          eL = fl-trans (fl-add-comm (suc d1) g2)
+                (fl-trans (fl-cong (fl-add g2) eqk) (fl-sym (fl-add-assoc g2 d2 (suc k))))
+          hL : fl-le (fl-add (suc d1) g2) (fl-add g2 d2) ≡ false
+          hL = fl-trans (fl-cong (λ z → fl-le z (fl-add g2 d2)) eL) (fl-gt-self-top (fl-add g2 d2) k)
+          eR : fl-add n2 (suc d1) ≡ fl-add (fl-add n2 d2) (suc k)
+          eR = fl-trans (fl-cong (fl-add n2) eqk) (fl-sym (fl-add-assoc n2 d2 (suc k)))
+          hR : fl-le (fl-add n2 (suc d1)) (fl-add n2 d2) ≡ false
+          hR = fl-trans (fl-cong (λ z → fl-le z (fl-add n2 d2)) eR) (fl-gt-self-top (fl-add n2 d2) k)
+      in fl-trans (fl-comp-eq-gt n1 (fl-add (suc d1) g2) (fl-add g2 d2) g3 k eL hL)
+                  (fl-sym (fl-comp-eq-gt n1 (fl-add n2 (suc d1)) (fl-add n2 d2) g3 k eR hR))

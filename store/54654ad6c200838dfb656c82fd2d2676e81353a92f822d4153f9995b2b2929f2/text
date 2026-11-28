@@ -1,0 +1,10 @@
+-- Exact evaluator for FlowExpr
+fl-eval : (Word → Word) → FlowExpr → Word
+fl-eval _ (fe-lit n) = n
+fl-eval env (fe-var v) = env v
+fl-eval env (fe-dbl a) = %wmul #2 (fl-eval env a)
+fl-eval env (fe-sq a)  = let x = fl-eval env a in %wmul x x
+fl-eval env (fe-add a b) = %wadd (fl-eval env a) (fl-eval env b)
+fl-eval env (fe-mul a b) = %wmul (fl-eval env a) (fl-eval env b)
+fl-eval env (fe-sub a b) = %wsub (fl-eval env a) (fl-eval env b)
+fl-eval env (fe-ifz c t e) = if %weq (fl-eval env c) #0 then fl-eval env t else fl-eval env e

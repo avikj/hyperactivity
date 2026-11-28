@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p14 : List Word
+hyperos-arm64-kernel-c-p14 =
+  os-lines-q
+    (cons "    for (int i = 0; i < 6; i++) {"
+    (cons "        pkt[i*4+0] = (uint8_t)(ws[i]>>24); pkt[i*4+1] = (uint8_t)(ws[i]>>16);"
+    (cons "        pkt[i*4+2] = (uint8_t)(ws[i]>>8);  pkt[i*4+3] = (uint8_t)ws[i];"
+    (cons "    }"
+    (cons "    uint64_t mac = hxsv_mac32(pkt);"
+    (cons "    uint32_t mh = (uint32_t)(mac >> 32), ml = (uint32_t)mac;"
+    (cons "    pkt[24]=(uint8_t)(mh>>24); pkt[25]=(uint8_t)(mh>>16); pkt[26]=(uint8_t)(mh>>8); pkt[27]=(uint8_t)mh;"
+    (cons "    pkt[28]=(uint8_t)(ml>>24); pkt[29]=(uint8_t)(ml>>16); pkt[30]=(uint8_t)(ml>>8); pkt[31]=(uint8_t)ml;"
+    (cons "}"
+    (cons "static int hxsv_verify32(const uint8_t pkt[32]) {"
+    (cons "    if (be32(pkt) != 0x48585356u) return 0;"
+    (cons "    uint64_t mac = hxsv_mac32(pkt);"
+    (cons "    return be32(pkt + 24) == (uint32_t)(mac >> 32) && be32(pkt + 28) == (uint32_t)mac;"
+    (cons "}"
+    (cons nil
+    (cons "/* ---- Linear Framebuffer + VirtIO-MMIO Display / Magic Keyboard+Mouse / Net ---- */"
+    (cons "#define FB_W 800"
+    (cons "#define FB_H 480"
+    (cons "static uint32_t g_fb_ram[FB_W * FB_H] __attribute__((aligned(4096)));"
+    (cons "static uint32_t *g_fb;"
+    (cons "static uint32_t g_fb_w = FB_W, g_fb_h = FB_H, g_fb_pitch = FB_W;"
+    (cons nil
+    nil))))))))))))))))))))))

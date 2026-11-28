@@ -1,0 +1,24 @@
+vp-host-p1 : List Word → List Word
+vp-host-p1 r =
+  sl-ln "// Generated from lib/ir/vision-pro-metal.hypercubical (Stereo Foveated Metal Latency Benchmark)"
+  (sl-ln "#import <Foundation/Foundation.h>"
+  (sl-ln "#import <Metal/Metal.h>"
+  (sl-ln "#include <simd/simd.h>"
+  (sl-ln "#include <stdio.h>"
+  (sl-ln "#include <stdint.h>"
+  (sl-ln "#include <sys/time.h>"
+  (sl-ln "typedef struct { simd_float3 head_pos, l_th, l_ix, r_th, r_ix; uint32_t triad, val_open; } VpPose;"
+  (sl-ln "static double now_s(void){ struct timeval tv; gettimeofday(&tv,NULL); return tv.tv_sec + tv.tv_usec*1e-6; }"
+  (sl-ln "int main(int argc, char** argv) {"
+  (sl-ln "  @autoreleasepool {"
+  (sl-ln (list-append "    const char* mpath = (argc > 1) ? argv[1] : " (list-append (sl-str "/tmp/hy_out/hx_visionpro.metal") ";"))
+  (sl-ln "    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();"
+  (sl-ln (list-append "    if (!dev) { puts(" (list-append (sl-str "No Metal device") "); return 1; }"))
+  (sl-ln "    NSError* err = nil;"
+  (sl-ln "    NSString* src = [NSString stringWithContentsOfFile:[NSString stringWithUTF8String:mpath] encoding:NSUTF8StringEncoding error:&err];"
+  (sl-ln "    MTLCompileOptions* opts = [MTLCompileOptions new]; opts.mathMode = MTLMathModeSafe;"
+  (sl-ln "    id<MTLLibrary> lib = [dev newLibraryWithSource:src options:opts error:&err];"
+  (sl-ln "    if (!lib) { puts([[err localizedDescription] UTF8String]); return 1; }"
+  (sl-ln (list-append "    id<MTLFunction> fn = [lib newFunctionWithName:@" (list-append (sl-str "visionpro_stereo_foveated_loop") "];"))
+  (sl-ln "    id<MTLComputePipelineState> pso = [dev newComputePipelineStateWithFunction:fn error:&err];"
+  (sl-ln "    id<MTLCommandQueue> q = [dev newCommandQueue];" r)))))))))))))))))))))

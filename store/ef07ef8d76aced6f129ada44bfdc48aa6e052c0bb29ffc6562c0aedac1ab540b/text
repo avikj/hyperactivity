@@ -1,0 +1,26 @@
+hyperos-arm64-mkimg-c-p4 : List Word
+hyperos-arm64-mkimg-c-p4 =
+  os-lines-q
+    (cons "        } else if (shndx == 0xfff2u) {"
+    (cons "          bss_end = (bss_end + 15ULL) & ~15ULL; addr = bss_end; bss_end += rd64(sym + 16); ok = 1;"
+    (cons "        }"
+    (cons "        if (ok && ngsym < 500) {"
+    (cons "          snprintf(gsyms[ngsym].name, sizeof gsyms[ngsym].name, `%s`, nm);"
+    (cons "          gsyms[ngsym].addr = addr; gsyms[ngsym].valid = 1; ngsym++;"
+    (cons "        }"
+    (cons "      }"
+    (cons "    }"
+    (cons "  }"
+    (cons "  bss_end = (bss_end + 4095ULL) & ~4095ULL;"
+    (cons "  uint64_t stack_top = bss_end + 0x40000ULL, image_end = stack_top;"
+    (cons "  const char *bi_n[4] = { `__bss_start`, `__bss_end`, `__stack_top`, `__image_end` };"
+    (cons "  uint64_t bi_v[4] = { bss_start, bss_end, stack_top, image_end };"
+    (cons "  for (int i = 0; i < 4; i++) {"
+    (cons "    snprintf(gsyms[ngsym].name, sizeof gsyms[ngsym].name, `%s`, bi_n[i]);"
+    (cons "    gsyms[ngsym].addr = bi_v[i]; gsyms[ngsym].valid = 1; ngsym++;"
+    (cons "  }"
+    (cons "  for (int oi = 0; oi < nobj; oi++) {"
+    (cons "    const uint8_t *sym_sh = NULL;"
+    (cons "    for (int si = 0; si < (int)objs[oi].shnum; si++)"
+    (cons "      if (rd32(sh_ptr(&objs[oi], si) + 4) == 2u) { sym_sh = sh_ptr(&objs[oi], si); break; }"
+    nil))))))))))))))))))))))

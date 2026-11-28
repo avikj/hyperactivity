@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p16 : List Word
+hyperos-arm64-kernel-c-p16 =
+  os-lines-q
+    (cons nil
+    (cons "static int vio_setup_q(VioQueue *vq, uintptr_t base, uint32_t qidx, uint32_t qsz) {"
+    (cons "    uint32_t ver = mmio_r32(base + 0x004);"
+    (cons "    vq->base = base; vq->ver = ver; vq->last_used = 0;"
+    (cons "    k_memset(vq->qmem, 0, sizeof(vq->qmem));"
+    (cons "    vq->desc  = (VqDesc *)(vq->qmem + 0);"
+    (cons "    vq->avail = (VqAvail *)(vq->qmem + 512);"
+    (cons "    vq->used  = (VqUsed *)(vq->qmem + 4096);"
+    (cons nil
+    (cons "    mmio_w32(base + 0x070, 0); /* Reset */"
+    (cons "    mmio_w32(base + 0x070, 1 | 2); /* ACKNOWLEDGE | DRIVER */"
+    (cons "    if (ver == 1) {"
+    (cons "        mmio_w32(base + 0x028, 4096); /* GuestPageSize */"
+    (cons "        mmio_w32(base + 0x030, qidx);"
+    (cons "        if (mmio_r32(base + 0x034) < qsz) return 0;"
+    (cons "        mmio_w32(base + 0x038, qsz);"
+    (cons "        mmio_w32(base + 0x03c, 4096);"
+    (cons "        mmio_w32(base + 0x040, (uint32_t)((uintptr_t)vq->qmem >> 12));"
+    (cons "        mmio_w32(base + 0x070, 1 | 2 | 4); /* DRIVER_OK */"
+    (cons "    } else {"
+    (cons "        mmio_w32(base + 0x014, 1);"
+    (cons "        uint32_t f1 = mmio_r32(base + 0x010);"
+    nil))))))))))))))))))))))

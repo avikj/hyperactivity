@@ -1,0 +1,26 @@
+hypernet-mesh-c-p7 : List Word
+hypernet-mesh-c-p7 =
+  os-lines-q
+    (cons "    char dir[512], tmp[540], dst[540];"
+    (cons "    snprintf(dir, sizeof(dir), `%s/.cubical-store`, repo);"
+    (cons "    mkdir(dir, 0777);"
+    (cons "    snprintf(tmp, sizeof(tmp), `%s/hypernet_peers.json.tmp`, dir);"
+    (cons "    snprintf(dst, sizeof(dst), `%s/hypernet_peers.json`, dir);"
+    (cons "    FILE *f = fopen(tmp, `wb`);"
+    (cons "    if (!f) return;"
+    (cons "    fprintf(f, `{\`self\`:{\`model\`:\`%s\`,\`class\`:\`%s\`,\`cores\`:%u,\`port\`:%u,\`root16\`:\`%s\`},`,"
+    (cons "            self_model, dev_class_name(self_dc), self_cores, (unsigned)port, root16);"
+    (cons "    fprintf(f, `\`rx_valid\`:%llu,\`rx_forged\`:%llu,\`tx_beacons\`:%llu,\`peers\`:[`,"
+    (cons "            (unsigned long long)g_rx_valid, (unsigned long long)g_rx_forged, (unsigned long long)g_tx_beacons);"
+    (cons "    for (int i = 0; i < g_npeers; i++) {"
+    (cons "        if (i) fputc(',', f);"
+    (cons "        fprintf(f, `{\`ip\`:\`%s\`,\`port\`:%u,\`class\`:\`%s\`,\`link\`:\`%s\`,\`cores\`:%u,\`root16\`:\`%08x%08x\`,\`steps\`:%u,\`last_seen\`:%ld}`,"
+    (cons "                g_peers[i].ip, (unsigned)g_peers[i].port, dev_class_name(g_peers[i].dev_class),"
+    (cons "                g_peers[i].is_tb ? `THUNDERBOLT_BRIDGE` : (strcmp(g_peers[i].ip, `127.0.0.1`) == 0 ? `LOOPBACK` : `LAN_WIFI`),"
+    (cons "                g_peers[i].cores, g_peers[i].root_hi, g_peers[i].root_lo, g_peers[i].steps, g_peers[i].last_seen);"
+    (cons "    }"
+    (cons "    fprintf(f, `]}\n`);"
+    (cons "    fclose(f);"
+    (cons "    rename(tmp, dst);"
+    (cons "}"
+    nil))))))))))))))))))))))

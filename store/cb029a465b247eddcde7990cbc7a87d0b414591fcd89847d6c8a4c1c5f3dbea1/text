@@ -1,0 +1,9 @@
+sl-feistel-enc : Word → Word → Word
+sl-feistel-enc k x =
+  let l0 = %wand (%wshr x #16) #65535
+      r0 = %wand x #65535
+      l1 = r0
+      r1 = %wxor l0 (sl-fround k r0)
+      l2 = r1
+      r2 = %wxor l1 (sl-fround (%wxor k #2781060887) r1)
+  in %wor (%wshl l2 #16) r2

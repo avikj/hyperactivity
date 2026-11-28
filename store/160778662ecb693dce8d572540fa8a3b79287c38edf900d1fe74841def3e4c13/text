@@ -1,0 +1,26 @@
+hypernet-mesh-c-p14 : List Word
+hypernet-mesh-c-p14 =
+  os-lines-q
+    (cons "            write_peers_json(repo, model, dc, cores, root16, port);"
+    (cons "            last_bcast = now;"
+    (cons "        }"
+    (cons "        fd_set rfds; FD_ZERO(&rfds); FD_SET(fd, &rfds);"
+    (cons "        struct timeval tv = { 1, 0 };"
+    (cons "        if (select(fd + 1, &rfds, NULL, NULL, &tv) > 0) {"
+    (cons "            for (;;) {"
+    (cons "                uint8_t rx[64]; struct sockaddr_in src; socklen_t sl = sizeof(src);"
+    (cons "                ssize_t n = recvfrom(fd, rx, sizeof(rx), 0, (struct sockaddr *)&src, &sl);"
+    (cons "                if (n < 32) break;"
+    (cons "                if (hxsv_ok(rx)) {"
+    (cons "                    g_rx_valid++;"
+    (cons "                    record_peer(&src, rx);"
+    (cons "                    uint8_t kind = rx[4];"
+    (cons "                    if (kind == 3u) { /* PING / POUW_WORK -> reply PONG */"
+    (cons "                        uint8_t pong[32];"
+    (cons "                        uint32_t ps = seq++;"
+    (cons "                        hxsv_pack(pong, 6u, ps, ((dc & 0xffffu) << 16) | (cores & 0xffffu), rhi, rlo, ps * 1024u);"
+    (cons "                        sendto(fd, pong, 32, 0, (struct sockaddr *)&src, sl);"
+    (cons "                    }"
+    (cons "                    write_peers_json(repo, model, dc, cores, root16, port);"
+    (cons "                } else {"
+    nil))))))))))))))))))))))

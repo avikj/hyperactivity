@@ -1,0 +1,7 @@
+vpi-sov-mix64 : Word → Word → Word
+vpi-sov-mix64 h x =
+  let s1 = %wxor h (%wmul (%wand x #4294967295) #2654435761)
+      s2 = %wxor s1 (%wshr s1 #17)
+      s3 = %wand (%wmul (%wand s2 #4294967295) #2246822519) #4294967295
+      hi = %wand (%wxor (%wshr s1 #13) (%wmul (%wand x #65535) #3266489917)) #4294967295
+  in %wor (%wshl hi #32) s3

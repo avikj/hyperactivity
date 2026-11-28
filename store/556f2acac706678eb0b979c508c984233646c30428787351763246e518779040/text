@@ -1,0 +1,11 @@
+-- 2. 54-Joint Dual-Hand Chorded Gesture Algebra (4 thumb-finger Schmitt pairs per hand):
+vph-hand-chord : Word → Vec3i → Vec3i → Vec3i → Vec3i → Vec3i → Word
+vph-hand-chord prevMask thumb idx mid rng lit =
+  let b0 = vp-pinch-step (%weq (%wand prevMask #1) #1) thumb idx
+      b1 = vp-pinch-step (%weq (%wand prevMask #2) #2) thumb mid
+      b2 = vp-pinch-step (%weq (%wand prevMask #4) #4) thumb rng
+      b3 = vp-pinch-step (%weq (%wand prevMask #8) #8) thumb lit
+  in %wor (if b0 then #1 else #0)
+     (%wor (if b1 then #2 else #0)
+     (%wor (if b2 then #4 else #0)
+           (if b3 then #8 else #0)))

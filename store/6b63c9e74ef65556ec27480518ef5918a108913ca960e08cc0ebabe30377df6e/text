@@ -1,0 +1,12 @@
+fl-main : List (List Word) → Step W Word
+fl-main args =
+  let p  = fl-pref args
+      cf = list-append p "_bench.c"
+      mf = list-append p "_scan.metal"
+      hf = list-append p "_metal_host.m"
+  in scmd (w-file-write-named cf fl-c-bench) (λ bc →
+     scmd (w-file-write-named mf fl-metal-src) (λ bm →
+     scmd (w-file-write-named hf fl-metal-host) (λ bh →
+     cli-say (list-append "HX-FLOW (Zero-Parenthesis Valence & Continuous InQuery Language) | ValMonAssoc=Proved | Roundtrip=Proved | ContinuousStream=Proved | C="
+       (list-append (ce-dec bc) (list-append "B | Metal=" (list-append (ce-dec bm) (list-append "B | Host=" (list-append (ce-dec bh) "B"))))))
+       (sdone #0))))

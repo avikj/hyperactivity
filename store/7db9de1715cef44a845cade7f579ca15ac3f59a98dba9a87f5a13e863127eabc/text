@@ -1,0 +1,44 @@
+vpi-cli-main : List (List Word) → Step W Word
+vpi-cli-main args =
+  let a1  = vpi-a1 args
+      a2  = vpi-a2 args
+      dir = vpi-out-of a1 a2
+      devApp = list-append dir "/HyperactivityVisionPro.app"
+      simApp = list-append dir "/HyperactivityVisionProSim.app"
+  in cli-mkdir "/tmp/hy_out" (λ _ →
+     cli-mkdir dir (λ _ →
+     cli-mkdir devApp (λ _ →
+     cli-mkdir simApp (λ _ →
+     scmd (w-file-write-named (list-append dir "/HyperactivityVisionProShader.metal") vph-metal-src) (λ _ →
+     scmd (w-file-write-named (list-append dir "/hx_vp_bridge.h") vpf-c-hdr) (λ _ →
+     scmd (w-file-write-named (list-append dir "/hx_vp_bridge.c") vpf-c-impl) (λ _ →
+     scmd (w-file-write-named (list-append dir "/HyperactivityVisionPro.swift") vpf-swift-src) (λ bSw →
+     scmd (w-file-write-named (list-append dir "/Entitlements.plist") vpf-entitlements-src) (λ _ →
+     scmd (w-file-write-named (list-append dir "/hx_vp_e2e_bench.m") vpf-mac-bench-src) (λ _ →
+     scmd (w-file-write-named (list-append dir "/HyperactivityVpKernel.hypercubical") vph-embedded-kernel) (λ _ →
+     scmd (w-file-write-named (list-append dir "/project.pbxproj.tmpl") vpf-pbxproj) (λ bPx →
+     scmd (w-file-write-named (list-append dir "/vpf_ota_deploy.sh") vpf-ota-deploy-sh) (λ _ →
+     scmd (w-file-write-named (list-append devApp "/Info.plist") vpf-plist-xros) (λ _ →
+     scmd (w-file-write-named (list-append devApp "/HyperactivityVisionProShader.metal") vph-metal-src) (λ _ →
+     scmd (w-file-write-named (list-append devApp "/HyperactivityVpKernel.hypercubical") vph-embedded-kernel) (λ _ →
+     scmd (w-file-write-named (list-append simApp "/Info.plist") vpf-plist-xrsim) (λ _ →
+     scmd (w-file-write-named (list-append simApp "/HyperactivityVisionProShader.metal") vph-metal-src) (λ _ →
+     scmd (w-file-write-named (list-append simApp "/HyperactivityVpKernel.hypercubical") vph-embedded-kernel) (λ _ →
+     cli-chmod (list-append dir "/vpf_ota_deploy.sh") #493 (λ _ →
+       if cli-eq a1 "emit" then
+         cli-say (list-append "[HX-VISIONPRO] Emitted Zero-Config visionOS 2.0+ Spatial Hypervisor + .xcodeproj ("
+           (list-append (ce-dec (%wadd bSw bPx)) (list-append "B) -> " dir)))
+           (sdone #0)
+       else
+         cli-system (list-append "/bin/sh " (list-append dir (list-append "/vpf_ota_deploy.sh " (list-append dir " ."))))
+           (λ rc → sdone rc))))))))))))))))))))))
+
+vpi-run : Step W Unit
+vpi-run =
+  to-step
+    (bind h-args (λ av →
+      if h-not (h-null (vpi-target-arg av))
+      then bind vpi-execute (λ _ → exit #0)
+      else ret {lzero} {W} unit))
+
+#run vpi-run

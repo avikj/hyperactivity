@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #ifdef __APPLE__
+#include <TargetConditionals.h>
 #include <mach-o/dyld.h>
 #include <sys/sysctl.h>
 #endif
@@ -4871,10 +4872,21 @@ static int jit_bind(const char *name, int ck, const unsigned char *b, size_t len
 #elif defined(__x86_64__)
     if (len >= 4 && b[0] == 0xfd && b[3] == 0xa9) return -1;
 #endif
-    void *m = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (m == MAP_FAILED) return -1;
-    memcpy(m, b, len);
-    if (mprotect(m, len, PROT_READ | PROT_EXEC) != 0) { munmap(m, len); return -1; }
+    void *m = MAP_FAILED;
+#if defined(__APPLE__) && defined(__aarch64__) && defined(TARGET_OS_OSX) && TARGET_OS_OSX
+    m = mmap(NULL, len, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
+    if (m != MAP_FAILED) {
+        pthread_jit_write_protect_np(0);
+        memcpy(m, b, len);
+        pthread_jit_write_protect_np(1);
+    }
+#endif
+    if (m == MAP_FAILED) {
+        m = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (m == MAP_FAILED) return -1;
+        memcpy(m, b, len);
+        if (mprotect(m, len, PROT_READ | PROT_EXEC) != 0) { munmap(m, len); return -1; }
+    }
     __builtin___clear_cache((char *)m, (char *)m + len);
     unsigned char kind[NATIVE_MAXW];
     for (int i = 0; i < n; i++) kind[i] = jt[i]->k == JT_WORD ? 4 : jt[i]->k == JT_PRIM ? 5 : jt[i]->k == JT_ERASED ? 9 : 8;   /* 8: converted by type (jit_in); 9: not read */

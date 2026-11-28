@@ -1,0 +1,10 @@
+-- THEOREM 1: 32-BYTE `HXSV` FOUNDER-LINK FRAME ROUNDTRIP & TAMPER REJECTION BY `refl`!
+vpf-thm-hxsv-founder-hud-roundtrip :
+  let sample = mk-hud #409 #338 #1056 #19
+      wire   = vpf-pack-hud #31337 sample
+      decOk  = vpf-unpack-hud #31337 wire
+      decBad = vpf-unpack-hud #31337 (vpf-tamper-head wire)
+  in andB (%weq (fromNat (list-length wire)) #32)
+     (andB (%weq (vpf-hud-ok-sm decOk) #1056)
+           (%weq (vpf-hud-ok-sm decBad) #0)) ≡ true
+vpf-thm-hxsv-founder-hud-roundtrip = refl

@@ -1,0 +1,6 @@
+sl-bci-step : Word → Word → NeuroBciState → NeuroBciState
+sl-bci-step r2 drive s =
+  let u   = %wand drive #255 -- bounded sensory stimulation drive in [0..255]
+      eb2 = %wdiv (%wadd (%wadd (%wmul #3 (nb-eb s)) (nb-ec s)) u) #5
+      ec2 = %wdiv (%wadd (nb-eb s) (%wmul #3 (nb-ec s))) #5
+  in sl-bci-clamp r2 s (NeuroBciState { nb-eb = eb2 ; nb-ec = ec2 })

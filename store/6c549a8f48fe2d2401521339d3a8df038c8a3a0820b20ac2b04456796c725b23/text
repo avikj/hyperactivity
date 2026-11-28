@@ -1,0 +1,12 @@
+hyperos-cli-proc : List (List Word) → Proc W Word
+hyperos-cli-proc args =
+  let a1   = ho-arg1 args
+      a2   = ho-arg2 args
+      mode = ho-mode-of a1
+      dir  = ho-dir-of a1 a2 mode
+  in bind (ho-materialize-proc dir) (λ _ →
+       if cli-eq mode "emit" then
+         bind (h-say (list-append "[HX-HYPEROS] Materialized Dual-Arch ARM64+x86-64 Bare-Metal Hyperkernel + VZ + m1n1 + HXSV Mesh -> " (list-append dir (cons #10 nil)))) (λ _ →
+         ret {lzero} {W} #0)
+       else
+         h-run (cons "/bin/sh" (cons (list-append dir "/hx_oneclick_deploy.sh") (cons mode (cons dir (cons "." nil))))))

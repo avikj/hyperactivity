@@ -1,0 +1,26 @@
+hypernet-mesh-c-p12 : List Word
+hypernet-mesh-c-p12 =
+  os-lines-q
+    (cons "    }"
+    (cons "    write_peers_json(repo, model, dc, cores, root16, 47700);"
+    (cons "    close(s1); close(s2);"
+    (cons "    printf(`[HX-MESH SELFTEST] model=%s class=%s valid_rx=%llu forged_rej=%llu peers=%d root16=%s [PASS]\n`,"
+    (cons "           model, dev_class_name(dc), (unsigned long long)g_rx_valid, (unsigned long long)g_rx_forged, g_npeers, root16);"
+    (cons "    return (g_rx_valid == 2 && g_rx_forged == 1 && g_npeers >= 1) ? 0 : 1;"
+    (cons "}"
+    (cons nil
+    (cons "int main(int argc, char **argv) {"
+    (cons "    const char *mode = argc > 1 ? argv[1] : `selftest`;"
+    (cons "    const char *repo = argc > 2 ? argv[2] : `.`;"
+    (cons "    uint16_t port = (uint16_t)(argc > 3 ? atoi(argv[3]) : 47700);"
+    (cons "    if (strcmp(mode, `selftest`) == 0) return run_selftest(repo);"
+    (cons "    if (strcmp(mode, `status`) == 0) {"
+    (cons "        char p[512]; snprintf(p, sizeof(p), `%s/.cubical-store/hypernet_peers.json`, repo);"
+    (cons "        FILE *f = fopen(p, `rb`);"
+    (cons "        if (!f) { printf(`{\`peers\`:[]}\n`); return 0; }"
+    (cons "        char b[4096]; size_t n = fread(b, 1, sizeof(b) - 1, f); b[n] = 0; fclose(f);"
+    (cons "        fputs(b, stdout); return 0;"
+    (cons "    }"
+    (cons "    int fd = open_mesh_sock(port);"
+    (cons "    if (fd < 0) { fprintf(stderr, `hx_mesh: cannot bind UDP :%u\n`, (unsigned)port); return 1; }"
+    nil))))))))))))))))))))))

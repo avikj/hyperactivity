@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p1 : List Word
+hyperos-arm64-kernel-c-p1 =
+  os-lines-q
+    (cons "static inline void dmb_ish(void) { __asm__ volatile(`dmb ish` ::: `memory`); }"
+    (cons "static inline uint64_t cntpct(void) { uint64_t v; __asm__ volatile(`mrs %0, cntpct_el0` : `=r`(v)); return v; }"
+    (cons nil
+    (cons "static void *k_memset(void *d, int c, size_t n) { uint8_t *p = (uint8_t *)d; while (n--) *p++ = (uint8_t)c; return d; }"
+    (cons "static void *k_memcpy(void *d, const void *s, size_t n) { uint8_t *p = (uint8_t *)d; const uint8_t *q = (const uint8_t *)s; while (n--) *p++ = *q++; return d; }"
+    (cons "static int k_memcmp(const void *a, const void *b, size_t n) {"
+    (cons "    const uint8_t *p = (const uint8_t *)a, *q = (const uint8_t *)b;"
+    (cons "    for (size_t i = 0; i < n; i++) if (p[i] != q[i]) return (int)p[i] - (int)q[i];"
+    (cons "    return 0;"
+    (cons "}"
+    (cons "static size_t k_strlen(const char *s) { size_t n = 0; while (s[n]) n++; return n; }"
+    (cons "static int k_streq(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }"
+    (cons "static int k_contains(const char *hay, const char *nee) {"
+    (cons "    size_t nl = k_strlen(nee);"
+    (cons "    if (!nl) return 1;"
+    (cons "    for (; *hay; hay++) if (k_memcmp(hay, nee, nl) == 0) return 1;"
+    (cons "    return 0;"
+    (cons "}"
+    (cons "static int k_memhas(const char *buf, uint32_t len, const char *nee) {"
+    (cons "    size_t nl = k_strlen(nee);"
+    (cons "    if (len < nl) return 0;"
+    (cons "    for (uint32_t i = 0; i + nl <= len; i++) if (k_memcmp(buf + i, nee, nl) == 0) return 1;"
+    nil))))))))))))))))))))))

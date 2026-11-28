@@ -1,0 +1,26 @@
+vpf-ota-deploy-sh-q2 : List Word
+vpf-ota-deploy-sh-q2 =
+  vpf-lines-q
+    (cons "      TEAM_ID=`$(security find-certificate -c `$CERT_CN` -p 2>/dev/null | openssl x509 -noout -subject 2>/dev/null | sed -n 's/.*OU *= *\([A-Z0-9]\{10\}\).*/\1/p' | head -n 1)`"
+    (cons "    fi"
+    (cons "  fi"
+    (cons nil
+    (cons "  mkdir -p `$OUT/HyperactivityVisionPro.xcodeproj`"
+    (cons "  sed `s/__HX_TEAM__/${TEAM_ID}/g; s/__HX_BUNDLE__/${BUNDLE_ID}/g` `$OUT/project.pbxproj.tmpl` > `$OUT/HyperactivityVisionPro.xcodeproj/project.pbxproj`"
+    (cons nil
+    (cons "  echo `[2/4] Discovering paired Apple Vision Pro via xcrun devicectl...`"
+    (cons "  xcrun devicectl list devices --json-output `$OUT/devicectl_live.json` >/dev/null 2>&1 || true"
+    (cons "  VP_IDS=`$(python3 - `$OUT/devicectl_live.json` <<'PY'"
+    (cons "import json, sys"
+    (cons "try:"
+    (cons "    d = json.load(open(sys.argv[1]))"
+    (cons "    for dev in d.get(`result`, {}).get(`devices`, []):"
+    (cons "        hw = dev.get(`hardwareProperties`, {})"
+    (cons "        plat = (hw.get(`platform`) or ``) + ` ` + (hw.get(`productType`) or ``)"
+    (cons "        if `xrOS` in plat or `visionOS` in plat or `RealityDevice` in plat:"
+    (cons "            cid = dev.get(`identifier`, ``)"
+    (cons "            udid = hw.get(`udid`, cid)"
+    (cons "            print(f`{cid} {udid}`)"
+    (cons "            break"
+    (cons "except Exception:"
+    nil))))))))))))))))))))))

@@ -1,0 +1,13 @@
+s-public-api : List Word → List Word → List Word → List Word → Proc W (List Word) → Proc W (List Word)
+s-public-api st m path p next =
+  if h-eq p "/api/os/status" then s-os-status st else
+  if h-eq p "/api/net/pulse" then s-net-pulse st else
+  if h-eq p "/peer/manifest" then s-peer-manifest m else
+  if h-eq p "/dht/peers" then s-dht-peers st else
+  if h-prefix "/dht/find/" path then s-dht-find st (h-drop "/dht/find/" p) else
+  if h-eq p "/api/kg/index" then s-kept-mod-public st "json" "docs/kg-index.json" else
+  if h-prefix "/api/kg/module" path then s-kg-module (s-query path) else
+  if h-prefix "/api/live/pulse" path then s-live-pulse st (s-query path) else
+  if h-eq p "/api/trace" then s-trace-get st (s-query path) else
+  if h-prefix "/api/p2p/signal" path then s-p2p-signal st (s-query path) else
+  next

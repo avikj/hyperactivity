@@ -1,0 +1,26 @@
+hypernet-mesh-c-p13 : List Word
+hypernet-mesh-c-p13 =
+  os-lines-q
+    (cons "    uint32_t cores = 1, rhi = 0, rlo = 0, seq = 1; char model[64], root16[17];"
+    (cons "    uint32_t dc = detect_device_class(&cores, model);"
+    (cons "#ifdef __APPLE__"
+    (cons "    if (fork() == 0) {"
+    (cons "        int dn = open(`/dev/null`, O_WRONLY); if (dn >= 0) { dup2(dn, 1); dup2(dn, 2); close(dn); }"
+    (cons "        char ps[16]; snprintf(ps, sizeof(ps), `%u`, (unsigned)port);"
+    (cons "        execlp(`dns-sd`, `dns-sd`, `-R`, model, `_hx-hypernet._udp`, `local`, ps, (char *)NULL);"
+    (cons "        _exit(0);"
+    (cons "    }"
+    (cons "#endif"
+    (cons "    printf(`[HX-MESH DAEMON] %s (%s, %u cores) listening on UDP 0.0.0.0:%u (Thunderbolt + LAN + Bonjour)\n`,"
+    (cons "           model, dev_class_name(dc), cores, (unsigned)port);"
+    (cons "    fflush(stdout);"
+    (cons "    long last_bcast = 0;"
+    (cons "    for (;;) {"
+    (cons "        long now = (long)time(NULL);"
+    (cons "        if (now - last_bcast >= 2) {"
+    (cons "            read_root_prefix(repo, &rhi, &rlo, root16);"
+    (cons "            uint8_t pkt[32];"
+    (cons "            uint32_t cs = seq++;"
+    (cons "            hxsv_pack(pkt, 1u, cs, ((dc & 0xffffu) << 16) | (cores & 0xffffu), rhi, rlo, cs * 1024u);"
+    (cons "            broadcast_all_ifaces(fd, port, pkt);"
+    nil))))))))))))))))))))))

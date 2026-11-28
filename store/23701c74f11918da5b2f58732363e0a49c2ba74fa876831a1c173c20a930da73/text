@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p18 : List Word
+hyperos-arm64-kernel-c-p18 =
+  os-lines-q
+    (cons "        vq->avail->ring[i] = i;"
+    (cons "    }"
+    (cons "    dmb_ish();"
+    (cons "    vq->avail->idx = 16;"
+    (cons "    dmb_ish();"
+    (cons "    mmio_w32(vq->base + 0x050, 0);"
+    (cons "}"
+    (cons nil
+    (cons "static void vio_probe_all(const HwInfo *hw) {"
+    (cons "    for (int i = 0; i < hw->n_vio; i++) {"
+    (cons "        uintptr_t b = hw->vio_bases[i];"
+    (cons "        if (mmio_r32(b + 0x000) != 0x74726976u) continue;"
+    (cons "        uint32_t did = mmio_r32(b + 0x008);"
+    (cons "        if (did == 18u) { /* VIRTIO_ID_INPUT (Magic Keyboard / Magic Mouse) */"
+    (cons "            if (g_hid_count == 0 && vio_setup_q(&g_vq_kbd, b, 0, 16)) { vio_input_arm(&g_vq_kbd, g_kbd_ev); g_hid_count++; }"
+    (cons "            else if (g_hid_count == 1 && vio_setup_q(&g_vq_mse, b, 0, 16)) { vio_input_arm(&g_vq_mse, g_mse_ev); g_hid_count++; }"
+    (cons "        } else if (did == 16u) { /* VIRTIO_ID_GPU */"
+    (cons "            g_gpu_found = 1;"
+    (cons "        } else if (did == 1u) { /* VIRTIO_ID_NET */"
+    (cons "            g_net_found = 1;"
+    (cons "        }"
+    (cons "    }"
+    nil))))))))))))))))))))))

@@ -143,6 +143,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install AArch64 bare-metal toolchain & QEMU
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-system-arm
       - name: Build cubical and emit unified hx native binary (UBSan)
         run: |
           make -s build/cubical
@@ -151,7 +153,7 @@ jobs:
           ./build/cubical lib/hx.hypercubical /tmp/ci_hx/e_hx.hypercubical
           CC_BIN=$(command -v gcc || command -v clang)
           $CC_BIN -std=c11 -O3 -fsanitize=undefined -fno-sanitize-recover=all -o /tmp/ci_hx/hx /tmp/ci_hx/hx.c
-      - name: Run all 6 native engines + live 2-process UDP PoUW + ratchets
+      - name: Run all native engines + Bare-Metal ARM64 EL1 QEMU + HXSV Mesh + UDP PoUW
         run: |
           /tmp/ci_hx/hx tapeout /tmp/ci_hx/foundry
           python3 - <<'PY'
@@ -187,6 +189,13 @@ jobs:
           print("UDP FORGED:", s2.strip(), "|", c2.stdout.strip())
           assert "REJECT:escrow=100:bal=50:forged=1" in c2.stdout
           PY
+          /tmp/ci_hx/hx deploy baremetal /tmp/ci_hx/hyperos | tee /tmp/ci_hx/hyperos.log
+          grep -q "\[HX-MESH SELFTEST\].*\[PASS\]" /tmp/ci_hx/hyperos.log
+          grep -q "\[PASS\] HYPEROS ARM64 EL1 BAREMETAL VERIFIED" /tmp/ci_hx/hyperos.log
+          test -s /tmp/ci_hx/hyperos/hyperos-arm64.img
+          /tmp/ci_hx/hx visionpro emit /tmp/ci_hx/vp | tee /tmp/ci_hx/vp.log
+          test -s /tmp/ci_hx/vp/HyperactivityVisionPro.swift
+          test -s /tmp/ci_hx/vp/project.pbxproj.tmpl
 
   web-and-server-smoke:
     name: "5 · Web Treatises (JS/DOM) & Live HTTP Server Smoke"
@@ -227,7 +236,7 @@ jobs:
                   assert not (refs - ids), f"Missing DOM IDs in {p}: {refs - ids}"
               print(f"OK: {p} ({len(html)} B)")
           PY
-      - name: Boot real Hyperactivity HTTP server and smoke-test all 23 public routes
+      - name: Boot real Hyperactivity HTTP server and smoke-test all 27 public routes
         run: |
           for m in \
             docs/synesthesia.hypercubical \
@@ -259,12 +268,21 @@ jobs:
             sleep 1
           done
           curl -sf http://127.0.0.1:18080/healthz | grep -qx "ok"
-          for route in "/" "/home" "/dag" "/dag?target=plus-comm" "/grh" "/portal" "/archive" "/learn" "/hyperfactor" "/decentralized" "/pouw" "/silicon" "/ai" "/physics" "/neuro" "/ide" "/kg" "/pdf" "/monograph" "/nets" "/sitemap.xml" "/api/kg/index" "/api/net/pulse"; do
+          for route in "/" "/home" "/install" "/deploy" "/os" "/api/os/status" "/dag" "/dag?target=plus-comm" "/grh" "/portal" "/archive" "/learn" "/hyperfactor" "/decentralized" "/pouw" "/silicon" "/ai" "/physics" "/neuro" "/ide" "/kg" "/pdf" "/monograph" "/nets" "/sitemap.xml" "/api/kg/index" "/api/net/pulse"; do
             code=$(curl -s -o /tmp/page.out -w "%{http_code}" "http://127.0.0.1:18080${route}")
             echo "$code  $route"
             test "$code" -eq 200
           done
+          curl -sf http://127.0.0.1:18080/install > /tmp/install.sh
+          sh -n /tmp/install.sh
+          grep -q "hx deploy all" /tmp/install.sh
+          curl -sf http://127.0.0.1:18080/deploy > /tmp/deploy.html
+          grep -q "/install | sh" /tmp/deploy.html
+          curl -sf http://127.0.0.1:18080/api/os/status > /tmp/os_status.json
+          grep -q '47700' /tmp/os_status.json
+          grep -q '"pool_objects"' /tmp/os_status.json
           curl -sf http://127.0.0.1:18080/ > /tmp/root.html
+          grep -q "/deploy" /tmp/root.html
           grep -q "/dag" /tmp/root.html
           grep -q "/grh" /tmp/root.html
           grep -q "/decentralized" /tmp/root.html
@@ -276,4 +294,4 @@ jobs:
           curl -sf http://127.0.0.1:18080/api/net/pulse > /tmp/pulse.json
           grep -q '"pool_objects"' /tmp/pulse.json
           ! grep -q '"eth_block"' /tmp/pulse.json
-          echo "All 23 live HTTP routes & pool DAG / telemetry assertions verified!"
+          echo "All 27 live HTTP routes & one-click deploy / pool DAG / telemetry assertions verified!"

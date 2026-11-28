@@ -1,0 +1,7 @@
+hy-deploy : List Word → List (List Word) → Proc W Unit
+hy-deploy m rest =
+  bind (h-file-time "build/hx") (λ ht →
+  if wlt #0 ht then hy-runs (cons "build/hx" (cons "deploy" rest))
+  else bind (h-run (cons "/usr/bin/env" (cons "make" (cons "-s" (cons "build/hx" nil))))) (λ rc →
+    if weq rc #0 then hy-runs (cons "build/hx" (cons "deploy" rest))
+    else hy-runs (cons m (cons "lib/hx-visionpro-founder.hypercubical" rest))))

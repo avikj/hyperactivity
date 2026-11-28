@@ -1,0 +1,7 @@
+sl-check-feistel-64 : Nat → Word → Bool
+sl-check-feistel-64 zero _ = true
+sl-check-feistel-64 (suc k) i =
+  let payload = %wadd (%wmul i #7919) #104729
+      key     = #31337
+  in andB (%weq (sl-feistel-dec key (sl-feistel-enc key payload)) payload)
+          (sl-check-feistel-64 k (%wadd i #1))
