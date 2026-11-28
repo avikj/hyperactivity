@@ -5339,20 +5339,6 @@ int main(int argc, char **argv)
             }
             idx_unlock(); fflush(stdout); _Exit(0);
         }
-        if (!strcmp(argv[i], "--drop-view")) {
-            /* what the removed layer left in the pool and in the labels: the entries, the versions
-             * records, and the index's live, alternatives and conflicts. Run once on a pool that has them */
-            static const char *sd[] = { "entries", "versions", NULL }; static const char *xd[] = { "live", "alternatives", "conflicts", NULL };
-            int n = 0;
-            for (int j = 0; sd[j]; j++) {
-                char *p = path_in(source_dir(), sd[j], ""); DIR *o = opendir(p);
-                if (o) { struct dirent *de; while ((de = readdir(o))) if (de->d_name[0] != '.') { char *f = path_in(p, de->d_name, ""); if (remove(f) == 0) n++; free(f); } closedir(o); }
-                rmdir(p); free(p);
-            }
-            for (int j = 0; xd[j]; j++) { idx_clear_in(idx_dir(), xd[j]); char *p = path_in(idx_dir(), xd[j], ""); rmdir(p); free(p); }
-            idx_remove("meta", "stamp");
-            printf("%d objects of the removed layer dropped\n", n); fflush(stdout); _Exit(0);
-        }
         if (!strcmp(argv[i], "--export") && i + 3 < argc) {
             /* `--export HASH KIND FILE`: an object of the pool written to FILE (to be put into another pool) */
             char *t = src_read(argv[i + 1], argv[i + 2]); if (!t) { printf("absent\n"); fflush(stdout); _Exit(1); }
