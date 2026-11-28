@@ -1,0 +1,9 @@
+sf-fmt-iso-plan : Word → List SfGroup → List Word
+sf-fmt-iso-plan lim nil = nil
+sf-fmt-iso-plan lim (cons (mkGrp k decl vs) r) =
+  if weq lim #0 then nil
+  else if wlt #1 (fromNat (list-length vs)) then
+    list-append
+      (h-concat (cons "-- DATA-ISO CLASS " (cons k (cons " (ua candidates: " (cons (sf-join-sp vs) (cons ")" (cons sf-nl (cons "--   SHAPE: " (cons decl (cons sf-nl nil))))))))))
+      (sf-fmt-iso-plan (%wsub lim #1) r)
+  else sf-fmt-iso-plan lim r

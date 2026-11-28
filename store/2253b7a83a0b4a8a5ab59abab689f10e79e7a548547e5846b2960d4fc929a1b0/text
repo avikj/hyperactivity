@@ -1,0 +1,10 @@
+sf-erase-shapes-go : List SfShapeMap → Nat → List Word → List Word
+sf-erase-shapes-go sm zero s = s
+sf-erase-shapes-go sm (suc fuel) nil = nil
+sf-erase-shapes-go sm (suc fuel) (cons c r) =
+  if orB (weq c #68) (orB (weq c #67) (weq c #70)) then
+    let res = sf-take-hex64-go (toNat #64) nil r in
+    if fst res then
+      cons c (list-append (sf-lookup-shape (fst (snd res)) sm) (sf-erase-shapes-go sm fuel (snd (snd res))))
+    else cons c (sf-erase-shapes-go sm fuel r)
+  else cons c (sf-erase-shapes-go sm fuel r)

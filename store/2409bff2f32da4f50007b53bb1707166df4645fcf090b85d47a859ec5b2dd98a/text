@@ -1,0 +1,7 @@
+sf-tree-ins : Word → List Word → List Word → List Word → SfTree → SfTree
+sf-tree-ins hk k wit v sfLeaf = sfNode hk k wit (cons v nil) sfLeaf sfLeaf
+sf-tree-ins hk k wit v (sfNode hk0 k0 w0 vs l r) =
+  if wlt hk hk0 then sfNode hk0 k0 w0 vs (sf-tree-ins hk k wit v l) r
+  else if wlt hk0 hk then sfNode hk0 k0 w0 vs l (sf-tree-ins hk k wit v r)
+  else if h-eq k k0 then sfNode hk0 k0 w0 (if sf-in-list v vs then vs else cons v vs) l r
+  else sfNode hk0 k0 w0 vs l (sf-tree-ins hk k wit v r)

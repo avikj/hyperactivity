@@ -1,0 +1,15 @@
+-- Full-store single pass: SemEq skeleton + nested subterms (O(N log N), zero artificial cap)
+sf-scan-semeq-sub : List Word → List SfShapeMap → List SfBinding → SfTree → SfTree → Proc W (List SfGroup × List SfGroup)
+sf-scan-semeq-sub st sm nil skels subs = ret {lzero} {W} (sf-tree-flat skels nil , sf-tree-flat subs nil)
+sf-scan-semeq-sub st sm (cons (mkBind nm ky) r) skels subs =
+  bind (h-read (h-concat (cons st (cons "/" (cons ky (cons "/type" nil)))))) (λ tr →
+  bind (h-read (h-concat (cons st (cons "/" (cons ky (cons "/code" nil)))))) (λ cr →
+  let ty = sf-unwrap tr in
+  let cd = sf-unwrap cr in
+  let skels1 = if h-null ty then skels
+               else
+                 let body = h-concat (cons (sf-erase-shapes sm ty) (cons sf-nl (cons (sf-erase-shapes sm cd) nil))) in
+                 sf-tree-ins (sf-h1-go #14695981039346656037 body) (sf-hash128 body) nil nm skels in
+  let subs1 = if orB (h-null cd) (wlt #2000 (fromNat (list-length cd))) then subs
+              else sf-insert-subs nm (sf-extract-sub-go nil cd nil) subs in
+  sf-scan-semeq-sub st sm r skels1 subs1))

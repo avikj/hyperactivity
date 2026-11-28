@@ -1,0 +1,13 @@
+sf-scan-data-iso : List Word → List SfBinding → List SfShapeMap → SfTree → Proc W (List SfShapeMap × List SfGroup)
+sf-scan-data-iso st nil sm grps = ret {lzero} {W} (sm , sf-tree-flat grps nil)
+sf-scan-data-iso st (cons (mkBind nm ky) r) sm grps =
+  bind (h-read (h-concat (cons st (cons "/" (cons ky (cons "/type" nil)))))) (λ tr →
+  if h-null (sf-unwrap tr) then
+    bind (h-read (h-concat (cons st (cons "/" (cons ky (cons "/code" nil)))))) (λ cr →
+    let cd = sf-unwrap cr in
+    if h-null cd then sf-scan-data-iso st r sm grps
+    else
+      let h1 = sf-h1-go #14695981039346656037 cd in
+      let sh = sf-hash128 cd in
+      sf-scan-data-iso st r (cons (mkShape ky sh) sm) (sf-tree-ins h1 sh cd nm grps))
+  else sf-scan-data-iso st r sm grps)
