@@ -1,0 +1,13 @@
+hy-deploy-mac : List Word → Proc W Unit
+hy-deploy-mac m =
+  bind h-cwd (λ cwd →
+  bind (h-mkdir "build") (λ d0 →
+  bind (h-write "build/hx_mac_hypercrack.m" hc-mac-probe-objc) (λ w0 →
+  bind (h-write "build/ai.hyperactivity.server.plist" (hc-server-plist cwd)) (λ w1 →
+  bind (h-write "build/ai.hyperactivity.sovereign.plist" (hc-sovereign-plist cwd)) (λ w2 →
+  bind (h-write "build/cluster_pair.sh" hc-cluster-pair-sh) (λ w3 →
+  bind (h-write "build/up.sh" (hc-up-sh "https://hyperactivity.ai")) (λ w4 →
+  bind (h-capture (cons "/bin/sh" (cons "-c" (cons "chmod +x build/cluster_pair.sh build/up.sh; if [ $(uname -s) = Darwin ]; then xcrun clang -O3 -mcpu=native -fobjc-arc build/hx_mac_hypercrack.m -framework Foundation -framework Metal -framework IOKit -framework CoreGraphics -o build/hx-mac && ./build/hx-mac --apply && mkdir -p ~/Library/LaunchAgents && cp -f build/ai.hyperactivity.server.plist build/ai.hyperactivity.sovereign.plist ~/Library/LaunchAgents/ && (launchctl bootout gui/$(id -u)/ai.hyperactivity.server 2>/dev/null || true) && (launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.hyperactivity.server.plist 2>/dev/null || launchctl load -w ~/Library/LaunchAgents/ai.hyperactivity.server.plist 2>/dev/null || true) && (launchctl bootout gui/$(id -u)/ai.hyperactivity.sovereign 2>/dev/null || true) && (launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.hyperactivity.sovereign.plist 2>/dev/null || launchctl load -w ~/Library/LaunchAgents/ai.hyperactivity.sovereign.plist 2>/dev/null || true); else cc -O3 -x c build/hx_mac_hypercrack.m -o build/hx-mac && ./build/hx-mac; fi" nil)))) (λ cm →
+  bind (h-out (snd cm)) (λ o0 →
+  bind (h-capture (cons m (cons "lib/hx-sovereign-daemon.hypercubical" nil))) (λ sd →
+  h-out (list-append (snd sd) (h-line "[hyperactive deploy mac] build/hx-mac + LaunchAgents + sovereign mesh ready."))))))))))))

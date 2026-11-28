@@ -2388,12 +2388,15 @@ static char *root_make(void) {
     if (store_dir()) { char *nh = names_make(); SBuf t2 = {0}; sb_put(&t2, "names "); sb_put(&t2, nh); sb_put(&t2, "\n"); sb_put(&t2, t.b ? t.b : ""); free(t.b); t = t2; free(nh); }
     char h[65]; key_hash(t.b, t.n, h);
     char *p = src_path(h, "root"); struct stat st; if (stat(p, &st) != 0) src_write(h, "root", t.b); free(p);
+    idx_write("meta", "root", h);
     free(t.b);
     return strdup(h);
 }
 /* a root taken: this machine's paths hold what it says, and the names are pointed from its modules */
 static bool root_take(const char *h) {
     char *t = src_read(h, "root"); if (!t) return false;
+    char *cur = idx_read("meta", "root");
+    if (cur) { cur[strcspn(cur, "\n")] = 0; if (!strcmp(cur, h)) { free(cur); free(t); return true; } free(cur); }
     static const char *dirs[] = { "modules", "names-of", "written", "module-of", "free-con", NULL };
     for (int i = 0; dirs[i]; i++) idx_clear_in(idx_dir(), dirs[i]);
     w_indexing = true; char *nmh = NULL;
@@ -2450,6 +2453,7 @@ static char *src_text_exact(const char *rel, size_t *len) {
     index_sync();
     SBuf hx = {0}; w_hex(&hx, rel);
     char *mh = hx.b && hx.n <= 250 ? idx_read("modules", hx.b) : NULL;
+    if (!mh && hx.b && hx.n <= 250 && idx_lock_fd < 0) { idx_lock(); mh = idx_read("modules", hx.b); idx_unlock(); }
     free(hx.b);
     if (mh) { char *t = w_module_text(mh, len); free(mh); if (t) return t; }
     root_init();

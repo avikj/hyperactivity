@@ -1,0 +1,24 @@
+s-handle : Bool → List Word → List Word → Sum Unit (List Word) → Word → Proc W Unit
+s-handle pub st m tok c =
+  bind (s-tune-sock c) (λ tu →
+  bind (s-read-head (toNat #32) c nil) (λ hdr →
+  let line1 = h-before (cons #13 nil) hdr in
+  bind (
+    if h-null hdr then ret {lzero} {W} unit
+    else if orB (h-prefix "GET /healthz " line1) (h-prefix "HEAD /healthz " line1)
+    then bind (fd-write c (s-response "text/plain; charset=utf-8" "ok")) (λ w → ret {lzero} {W} unit)
+    else if andB (h-prefix "GET /packs/" line1) (h-not (s-redirect-onrender pub hdr))
+    then let ph = h-before "?" (h-before " " (h-drop "GET /packs/" line1)) in
+      if s-hex64 ph then s-stream-file c (list-append "packs/" ph) "application/gzip" nil
+      else bind (fd-write c (s-respond "404 Not Found" "text/plain" "not found")) (λ w → ret {lzero} {W} unit)
+    else if andB (andB (orB (h-prefix "GET " line1) (h-prefix "HEAD " line1)) (orB (h-eq (h-before "?" (s-request-path hdr)) "/bootstrap.tgz") (h-eq (h-before "?" (s-request-path hdr)) "/bootstrap"))) (h-not (s-redirect-onrender pub hdr))
+    then s-stream-file c "bootstrap.tgz" "application/gzip" "attachment; filename=hyperactivity-bootstrap.tgz"
+    else if andB pub (h-not (s-allowed pub tok hdr))
+    then s-handle-dark pub st m c hdr
+    else if h-prefix "PUT /packs/" line1
+    then let ph = h-before "?" (h-before " " (h-drop "PUT /packs/" line1)) in
+      s-put-pack pub tok c ph hdr
+    else if andB (h-prefix "GET " line1) (h-not (s-redirect-onrender pub hdr))
+    then s-handle-cached pub st m tok c hdr
+    else s-handle-text pub st m tok c hdr) (λ u →
+  bind (sys-call #3 c #0 #0 #0 #0 #0) (λ cl → ret unit))))

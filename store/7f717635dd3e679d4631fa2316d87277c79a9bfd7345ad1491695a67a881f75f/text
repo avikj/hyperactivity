@@ -1,0 +1,12 @@
+hy-deploy-cluster : List (List Word) → Proc W Unit
+hy-deploy-cluster nil = h-fail "hyperactive deploy cluster <mac-mini.local|169.254.77.2> [ssh-port]"
+hy-deploy-cluster (cons peer rs) =
+  let port = hy-head rs
+      pstr = the (List Word) (if h-null port then "22" else port)
+  in if h-not (andB (hc-safe-host peer) (hc-safe-chars pstr))
+     then h-fail (list-append "hyperactive deploy cluster: refused unsafe peer/port: " peer)
+     else bind (h-mkdir "build") (λ d0 →
+          bind (h-write "build/cluster_pair.sh" hc-cluster-pair-sh) (λ w0 →
+          bind (h-run (cons "/bin/sh" (cons "build/cluster_pair.sh" (cons peer (cons pstr nil))))) (λ rc →
+          if weq rc #0 then ret {lzero} {W} unit
+          else h-fail (list-append "hyperactive deploy cluster failed for " peer))))

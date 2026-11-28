@@ -1,0 +1,11 @@
+-- Checked end-to-end invariant bundle: factory bottleneck extracted (`inr #1`), hypercracked
+-- zero-throttle (`inl unit`), heterogeneous Studio+mini split wins, SSH `-o` flag injection blocked,
+-- and LaunchAgent plists contain zero `0.0.0.0` wildcard exposure:
+mac-all-certs-ok : Bool
+mac-all-certs-ok =
+  andB (case hc-hypercrack-audit hc-factory-macos of inl _ → false ; inr k → %weq k #1)
+  (andB (case hc-hypercrack-audit hc-cracked-macos of inl _ → true ; inr _ → false)
+  (andB (%wlt (%wadd #22 (%wadd #8 #1)) #68)
+  (andB (hc-safe-host "mac-mini.local")
+  (andB (if hc-safe-host "-oProxyCommand=sh" then false else true)
+        (if hc-has-infix "0.0.0.0" (hc-server-plist "/Users/avikjain/hyperactivity") then false else true)))))

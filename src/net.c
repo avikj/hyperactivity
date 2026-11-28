@@ -205,6 +205,7 @@ static Port take(Port p) {
 typedef struct { size_t cap; Redex it[]; } Ring;
 typedef struct { Ring *ring; char pad0[56]; size_t top; char pad1[56]; size_t bottom; char pad2[56]; } Queue;
 static Queue *Q; static int NQ;
+static int running;
 static __thread int myq;
 static long pending;                       /* one thread: pairs queued. Threaded: each thread counts the pairs it pushed and
                                             * the pairs it finished (Local.pushed, Local.done), each monotone and written by
@@ -306,7 +307,7 @@ static bool pop(Redex *r, int idle) {
     if (net_solo) return ring_pop(r);
     if (!Q) queues_init(1);
     if (pop_own(&Q[myq], r)) return true;
-    bool lone = idle >= LONE_AT;
+    bool lone = idle >= LONE_AT || !__atomic_load_n(&running, __ATOMIC_RELAXED);
     for (int k = 1; k < NQ; k++) if (steal(&Q[(myq + k) % NQ], r, lone)) return true;
     return false;
 }
@@ -3757,7 +3758,7 @@ bool net_observe(Cell *root, long limit) {
 #endif
         Redex r;
         if (pop(&r, idle)) { rewrite(r); n++; idle = 0; }
-        else { idle_wait(&idle); if (!net_solo && (idle & 63) == 0 && quiescent()) break; }   /* the sums are read now and then: reading them pulls the workers' lines */
+        else { if (!net_solo && !woke && quiescent()) break; idle_wait(&idle); if (!net_solo && (idle & 63) == 0 && quiescent()) break; }   /* the sums are read now and then: reading them pulls the workers' lines */
     }
     if (woke) {
         pthread_mutex_lock(&wmu);

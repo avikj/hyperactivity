@@ -1,0 +1,23 @@
+hc-cluster-pair-sh : List Word
+hc-cluster-pair-sh =
+  hc-ln "#!/bin/sh" (
+  hc-ln "# One-Click Mac Studio <-> Mac mini Thunderbolt 5 / Bonjour Cluster Pairer" (
+  hc-ln "set -eu" (
+  hc-ln "PEER=`${1:?Usage: cluster_pair.sh <mac-mini.local|169.254.77.2>}`" (
+  hc-ln "PORT=`${2:-22}`" (
+  hc-ln "case `$PEER` in -*|*[!A-Za-z0-9._:-]*) echo `refused unsafe host: $PEER` >&2; exit 1;; esac" (
+  hc-ln "echo `[1/4] Checking BatchMode Ed25519 SSH link to $PEER:$PORT...`" (
+  hc-ln "ssh -o BatchMode=yes -o ConnectTimeout=5 -p `$PORT` -- `$PEER` `uname -a && sysctl -n machdep.cpu.brand_string 2>/dev/null || true`" (
+  hc-ln "echo `[2/4] Packaging local bootstrap.tgz + delta store pack...`" (
+  hc-ln "COPYFILE_DISABLE=1 tar -czf build/bootstrap.tgz Makefile src hyperactive README.md" (
+  hc-ln "COPYFILE_DISABLE=1 tar -czf build/peer-store.tgz store" (
+  hc-ln "echo `[3/4] Streaming kernel + pool to $PEER and building native -mcpu=native binaries...`" (
+  hc-ln "ssh -o BatchMode=yes -p `$PORT` -- `$PEER` `mkdir -p ~/hyperactivity`" (
+  hc-ln "cat build/bootstrap.tgz | ssh -o BatchMode=yes -p `$PORT` -- `$PEER` `cd ~/hyperactivity && tar -xz`" (
+  hc-ln "cat build/peer-store.tgz | ssh -o BatchMode=yes -p `$PORT` -- `$PEER` `cd ~/hyperactivity && (tar -k -xzf - store 2>/dev/null || tar -xzf - --skip-old-files store)`" (
+  hc-ln "ssh -o BatchMode=yes -p `$PORT` -- `$PEER` `cd ~/hyperactivity && make -s build/cubical && RENDER=1 ./build/cubical --take $(cat store/ROOT/root) && RENDER=1 ./hyperactive deploy mac`" (
+  hc-ln "echo `[4/4] Registering $PEER in /tmp/hx_agent_bus/cloud_nodes.conf & syncing HXSV mesh...`" (
+  hc-ln "mkdir -p /tmp/hx_agent_bus" (
+  hc-ln "grep -qF `|$PEER|` /tmp/hx_agent_bus/cloud_nodes.conf 2>/dev/null || echo `peer-$(echo $PEER | tr . -)|local-mac|m5-ultra|$PEER|$PORT|$(whoami)|47710` >> /tmp/hx_agent_bus/cloud_nodes.conf" (
+  hc-ln "RENDER=1 ./build/cubical lib/hx-sovereign-daemon.hypercubical" (
+  hc-ln "echo `[CLUSTER READY] $PEER paired + hypercracked + serving :8080 & HXSV :47710`" nil))))))))))))))))))))

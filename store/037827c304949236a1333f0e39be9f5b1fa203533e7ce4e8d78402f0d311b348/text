@@ -1,0 +1,12 @@
+hy-deploy : List Word → List (List Word) → Proc W Unit
+hy-deploy m nil = hy-deploy-status m
+hy-deploy m (cons sub rs) =
+  if h-eq sub "status" then hy-deploy-status m else
+  if h-eq sub "mac" then hy-deploy-mac m else
+  if h-eq sub "cluster" then hy-deploy-cluster rs else
+  if h-eq sub "ipad" then hy-runs (cons m (cons "lib/hx-ipad-hyperos.hypercubical" rs)) else
+  if h-eq sub "live" then
+    bind (h-run (cons m (cons "lib/guard.hypercubical" nil))) (λ grc →
+    if weq grc #0 then bind (h-env "HYPERACTIVE_PLACE") (hy-send m)
+    else h-fail "hyperactive deploy live: lib/guard.hypercubical refused current state")
+  else hy-deploy-status m

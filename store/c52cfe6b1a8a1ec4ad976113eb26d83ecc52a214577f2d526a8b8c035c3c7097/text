@@ -1,0 +1,26 @@
+s-start : List Word → List Word → Word → Proc W Unit
+s-start st m0 port =
+  bind (h-env "HYPERACTIVE_PUBLIC") (λ pub →
+  bind (h-env "HYPERACTIVE_TOKEN") (λ tok →
+  if s-set pub
+  then bind (s-boot-data m0) (λ mb →
+       let m = fst mb in
+       let boot-r = snd mb in
+       bind (h-mkdir st) (λ mk →
+       bind (s-listen true port) (λ fd →
+       if wlt fd #9223372036854775807
+       then bind (h-out (h-line (list-append "http://localhost:" (list-append (h-decimal port) "/")))) (λ u →
+            bind (sys-call #57 #0 #0 #0 #0 #0 #0) (λ pid →
+            if weq pid #0 then bind (sys-call #3 fd #0 #0 #0 #0 #0) (λ cf → bind (s-sync-deploy-root m boot-r) (λ sd → bind (s-seed-place m) (λ sp → bind (sys-call #231 #0 #0 #0 #0 #0 #0) (λ x → ret {lzero} {W} unit))))
+            else s-serve (toNat #18446744073709551615) (if wlt pid #9223372036854775808 then #1 else #0) true st m tok fd))
+       else h-fail (list-append "server: the port cannot be listened on: " (h-decimal port)))))
+  else bind (s-boot-data m0) (λ mb →
+       let m = fst mb in
+       let boot-r = snd mb in
+       bind (s-site-kept st "front" s-front) (λ f0 →
+       bind (s-listen false port) (λ fd →
+       if wlt fd #9223372036854775807 then bind (h-out (h-line (list-append "http://localhost:" (list-append (h-decimal port) "/")))) (λ u →
+         bind (sys-call #57 #0 #0 #0 #0 #0 #0) (λ pid →
+         if weq pid #0 then bind (sys-call #3 fd #0 #0 #0 #0 #0) (λ cf → bind (s-sync-deploy-root m boot-r) (λ sd → bind (s-seed-place m) (λ sp → bind (s-paper st m) (λ r → bind (sys-call #231 #0 #0 #0 #0 #0 #0) (λ x → ret {lzero} {W} unit)))))
+         else s-serve (toNat #18446744073709551615) (if wlt pid #9223372036854775808 then #1 else #0) false st m tok fd))
+       else h-fail (list-append "server: the port cannot be listened on: " (h-decimal port)))))))
