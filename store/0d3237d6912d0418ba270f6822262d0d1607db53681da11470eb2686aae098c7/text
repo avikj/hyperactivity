@@ -1,0 +1,10 @@
+sf-scan-data-iso : List Word → List SfBinding → List SfGroup → Proc W (List SfGroup)
+sf-scan-data-iso st nil acc = ret {lzero} {W} acc
+sf-scan-data-iso st (cons (mkBind nm ky) r) acc =
+  bind (h-read (h-concat (cons st (cons "/" (cons ky (cons "/type" nil)))))) (λ tr →
+  if h-null (sf-unwrap tr) then
+    bind (h-read (h-concat (cons st (cons "/" (cons ky (cons "/code" nil)))))) (λ cr →
+    let cd = sf-unwrap cr in
+    if h-null cd then sf-scan-data-iso st r acc
+    else sf-scan-data-iso st r (sf-insert-grp (h-decimal (sf-hash cd)) nm acc))
+  else sf-scan-data-iso st r acc)
