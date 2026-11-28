@@ -1,0 +1,40 @@
+sf-run-core : Bool → List Word → Proc W Unit
+sf-run-core loud st =
+  bind (h-read (list-append st "/names")) (λ nr →
+  let ntxt = sf-unwrap nr in
+  let nsig = sf-hash128 ntxt in
+  bind (h-read (list-append st "/factor_watermark")) (λ wr →
+  if h-eq nsig (h-trim (sf-unwrap wr)) then
+    if loud then
+      bind (h-read (list-append st "/factor_report.txt")) (λ rep →
+      h-say (list-append "[CACHE HIT: store watermark unchanged] " (list-append nsig (cons #10 (sf-unwrap rep)))))
+    else ret {lzero} {W} unit
+  else
+    let bs = sf-parse-names ntxt in
+    let exact = sf-group-exact bs nil in
+    bind (sf-scan-data-iso st bs nil sfLeaf) (λ iso-res →
+    let sm = fst iso-res in
+    let isos = snd iso-res in
+    bind (sf-scan-semeq-sub st sm bs sfLeaf sfLeaf) (λ ss-res →
+    let skels = fst ss-res in
+    let subs = snd ss-res in
+    let report = h-concat (
+      cons "=== PURE .HYPERCUBICAL CONTINUOUS SEMANTIC FACTORING REPORT ===" (cons sf-nl (
+      cons "STORE: " (cons st (cons sf-nl (
+      cons "WATERMARK (128-bit): " (cons nsig (cons sf-nl (
+      cons "NAMED SEMANTIC OBJECTS: " (cons (h-decimal (fromNat (list-length bs))) (cons sf-nl (cons sf-nl (
+      cons "[1] EXACT CANONICAL DUPLICATES (DigestEq — " (cons (h-decimal (sf-multi-count exact)) (cons " classes):" (cons sf-nl (
+      cons (sf-fmt-groups "EXACT-DUP" #25 exact) (cons sf-nl (
+      cons "[2] STRUCTURALLY ISOMORPHIC DATA TYPES (DataIso / ua — " (cons (h-decimal (sf-multi-count isos)) (cons " classes):" (cons sf-nl (
+      cons (sf-fmt-groups "DATA-ISO" #25 isos) (cons sf-nl (
+      cons "[3] CROSS-TYPE SEMEQ DEFINITIONS (SemEq — " (cons (h-decimal (sf-multi-count skels)) (cons " classes):" (cons sf-nl (
+      cons (sf-fmt-groups "SEMEQ" #25 skels) (cons sf-nl (
+      cons "[4] SHARED INTERNAL SUBTERMS (SubtermFactor — " (cons (h-decimal (sf-multi-count subs)) (cons " shared classes):" (cons sf-nl (
+      cons (sf-fmt-groups "SUBTERM" #25 subs) (cons sf-nl (
+      cons "PLAN: " (cons st (cons "/factor_plan.hypercubical" (cons sf-nl (
+      cons "=== ZERO POSTULATES · ZERO C CHANGES · ZERO AGENTS IN LOOP ===" (cons sf-nl nil)))))))))))))))))))))))))))))))))))))))))) in
+    let plan = sf-build-plan st exact isos skels subs in
+    bind (h-write (list-append st "/factor_report.txt") report) (λ ok1 →
+    bind (h-write (list-append st "/factor_plan.hypercubical") plan) (λ ok2 →
+    bind (h-write (list-append st "/factor_watermark") (list-append nsig sf-nl)) (λ ok3 →
+    if loud then h-say report else ret {lzero} {W} unit)))))))

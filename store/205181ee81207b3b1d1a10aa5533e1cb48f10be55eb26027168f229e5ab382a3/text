@@ -1,0 +1,9 @@
+sf-fmt-sub-plan : Word → List SfGroup → List Word
+sf-fmt-sub-plan lim nil = nil
+sf-fmt-sub-plan lim (cons (mkGrp k ex vs) r) =
+  if weq lim #0 then nil
+  else if wlt #1 (fromNat (list-length vs)) then
+    list-append
+      (h-concat (cons "-- SHARED SUBTERM " (cons k (cons " (" (cons (h-decimal (fromNat (list-length vs))) (cons " users: " (cons (sf-join-sp vs) (cons ")" (cons sf-nl (cons "--   CANON: " (cons ex (cons sf-nl nil))))))))))))
+      (sf-fmt-sub-plan (%wsub lim #1) r)
+  else sf-fmt-sub-plan lim r
