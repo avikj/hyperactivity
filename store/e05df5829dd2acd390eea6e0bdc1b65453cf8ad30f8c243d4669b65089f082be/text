@@ -1,0 +1,9 @@
+dg-render-layers-up : Nat → Word → Word → List DgRaw → List (List Word × Word) → List (List Word × List Word) → Proc W (List Word)
+dg-render-layers-up zero _ _ _ _ _ = ret nil
+dg-render-layers-up (suc f) cur maxLv all lvs nmap =
+  if wlt maxLv cur then ret {lzero} {W} nil
+  else bind (dg-render-layer all lvs nmap cur all) (λ body →
+       bind (dg-render-layers-up f (wadd cur #1) maxLv all lvs nmap) (λ rest →
+       let hdr = if h-null body then nil
+                 else h-concat (cons "<section class='dg-sec'><div class='dg-sh'>Topological Layer " (cons (h-decimal cur) (cons (if weq cur #0 then " &middot; Primitives &amp; Inductive Foundations" else if weq cur maxLv then " &middot; Target Theorem / Culmination" else " &middot; Composed Morphisms &amp; Lemmas") (cons "</div>" (cons body (cons "</section>" nil))))))
+       in ret {lzero} {W} (list-append hdr rest)))

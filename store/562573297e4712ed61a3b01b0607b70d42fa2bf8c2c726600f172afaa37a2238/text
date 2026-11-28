@@ -1,0 +1,21 @@
+hy-factor : List Word → List Word → List (List Word) → Proc W Unit
+hy-factor st m (cons n rest) =
+  bind (hy-probe m (hy-factor-probe (cons n rest))) (λ r →
+  if weq (fst r) #0 then hy-view-show r else h-fail (hy-shown (h-lines (snd r))))
+hy-factor st m nil =
+  bind hy-store-count (λ nObj →
+  bind (h-list (list-append st "/iso")) (λ isos →
+  bind (h-list (list-append st "/motifs")) (λ mots →
+  bind (h-read (list-append st "/equiv-log")) (λ reql →
+  bind (h-read (list-append st "/motif-log")) (λ rmtl →
+  let eqs  = h-nonempty (h-lines (hy-or nil reql))
+      mts  = h-nonempty (h-lines (hy-or nil rmtl))
+  in h-out (h-concat (
+    cons (h-line (list-append "pool objects (store/): " (h-decimal nObj))) (
+    cons (h-line (list-append "indexed data signatures: " (h-decimal (fromNat (list-length isos))))) (
+    cons (h-line (list-append "synthesized ua bridges: " (h-decimal (fromNat (list-length eqs))))) (
+    cons (h-concat (list-map h-line eqs)) (
+    cons (h-line (list-append "indexed subterm motifs: " (h-decimal (fromNat (list-length mots))))) (
+    cons (h-line (list-append "cross-object motif links: " (h-decimal (fromNat (list-length mts))))) (
+    cons (h-concat (list-map h-line (h-take-n (toNat #20) mts))) (
+    cons (h-line "run `hyperactive factor NAME1 NAME2 ...` for kernel Code-level DAG anti-unification") nil))))))))))))))

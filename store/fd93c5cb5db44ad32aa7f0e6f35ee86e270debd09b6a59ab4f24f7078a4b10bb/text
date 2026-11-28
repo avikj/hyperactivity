@@ -1,0 +1,8 @@
+-- Extract non-trivial balanced S-expression subtrees (>= 28 bytes) from canonical `forms` body for motif indexing
+hy-take-sexp : Nat → Word → List Word → List Word → List Word
+hy-take-sexp zero _ _ _ = nil
+hy-take-sexp (suc _) #0 acc _ = h-rev acc nil
+hy-take-sexp (suc k) d acc nil = nil
+hy-take-sexp (suc k) d acc (cons c r) =
+  let d2 = if weq c #40 then wadd d #1 else if weq c #41 then wsub d #1 else d
+  in hy-take-sexp k d2 (cons c acc) r

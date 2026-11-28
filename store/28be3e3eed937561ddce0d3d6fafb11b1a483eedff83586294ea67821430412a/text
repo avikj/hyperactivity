@@ -1,0 +1,9 @@
+-- Canonical nameless constructor-permutation-invariant signature of `(decl data NAME (params ...) (c C0 ...) ...)`
+hy-decl-sig : List Word → List Word
+hy-decl-sig dtxt =
+  let body0 = h-after " " (h-drop "(decl data " (h-before (cons #10 nil) dtxt))
+      body  = h-rev (h-tail (h-rev body0 nil)) nil
+      pars  = hy-strip-bname (h-before " (c " body)
+      raws  = if h-infix " (c " body then hy-split-ctors-at nil (list-append " (c " (h-after " (c " body)) else nil
+      ctrs  = h-msort (list-map hy-anon-ctor raws)
+  in list-append pars (cons #124 (hy-sep "|" ctrs))

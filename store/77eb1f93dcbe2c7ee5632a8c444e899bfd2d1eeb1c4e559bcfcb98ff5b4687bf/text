@@ -1,0 +1,7 @@
+s-dents-bytes : Word → Word → Word → Nat → Proc W Word
+s-dents-bytes fd buf acc zero = ret acc
+s-dents-bytes fd buf acc (suc k) =
+  bind (sys-call #217 fd buf #65536 #0 #0 #0) (λ n →
+  if andB (wlt #0 n) (wlt n #9223372036854775808)
+  then s-dents-bytes fd buf (wadd acc n) k
+  else ret {lzero} {W} acc)

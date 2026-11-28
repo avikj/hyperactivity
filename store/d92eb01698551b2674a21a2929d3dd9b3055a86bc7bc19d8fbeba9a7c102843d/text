@@ -1,0 +1,9 @@
+hy-strip-bname-go : Bool → List Word → List Word
+hy-strip-bname-go _ nil = nil
+hy-strip-bname-go true (cons c r) =
+  if orB (weq c #32) (orB (weq c #41) (orB (weq c #40) (weq c #10)))
+  then cons c (hy-strip-bname-go false r)
+  else hy-strip-bname-go true r
+hy-strip-bname-go false (cons c r) =
+  if weq c #61 then hy-strip-bname-go true r
+  else cons c (hy-strip-bname-go false r)

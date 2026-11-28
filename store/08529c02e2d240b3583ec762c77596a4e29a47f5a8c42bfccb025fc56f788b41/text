@@ -1,0 +1,8 @@
+hy-split-ctors-go : Nat → List Word → List Word → List (List Word)
+hy-split-ctors-go _ cur nil = if h-null cur then nil else cons (h-rev cur nil) nil
+hy-split-ctors-go (suc k) cur (cons _ r) = hy-split-ctors-go k cur r
+hy-split-ctors-go zero cur (cons c r) =
+  if h-prefix " (c " (cons c r) then
+    if h-null cur then hy-split-ctors-go (suc (suc (suc zero))) nil r
+    else cons (h-rev cur nil) (hy-split-ctors-go (suc (suc (suc zero))) nil r)
+  else hy-split-ctors-go zero (cons c cur) r

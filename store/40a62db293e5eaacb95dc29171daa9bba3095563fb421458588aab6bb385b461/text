@@ -1,0 +1,15 @@
+shapes-iso-at : Nat → Word → Word → Bool
+shapes-iso-at zero d1 d2 = %weq d1 d2
+shapes-iso-at (suc n) d1 d2 =
+  if %weq d1 d2 then true
+  else case all-shapes d1 return (λ _ → Bool) of
+    none → false
+    some sh1 →
+      (case all-shapes d2 return (λ _ → Bool) of
+         none → false
+         some sh2 →
+           if %weq (d-len sh1) (d-len sh2)
+           then (case d-match-ctors (shapes-iso-at n) sh1 sh2 lnil return (λ _ → Bool) of
+                   none → false
+                   some _ → true)
+           else false)

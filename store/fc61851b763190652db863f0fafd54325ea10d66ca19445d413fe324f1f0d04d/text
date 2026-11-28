@@ -1,0 +1,12 @@
+dg-resolve-target : List Word → List Word → Proc W (List Word × (List Word × Bool))
+dg-resolve-target st rawQ =
+  let q = the (List Word) (if h-null (h-trim rawQ) then "uaβ" else h-trim rawQ) in
+  if s-hex64 q then ret {lzero} {W} (h-take (toNat #12) q , (q , true))
+  else
+    let hx = h-hex q in
+    bind (dg-read-bound-1 (list-append st (list-append "/bound/" hx)) (list-append ".cubical-store/bound/" hx)) (λ kb →
+    if s-hex64 kb then ret {lzero} {W} (q , (kb , true))
+    else bind (dg-read-bound-1 (list-append st (list-append "/conof/" hx)) (list-append ".cubical-store/conof/" hx)) (λ kc →
+         if s-hex64 kc then ret {lzero} {W} (q , (kc , true))
+         else bind (dg-read-bound-1 (list-append st (list-append "/bound/" (h-hex "uaβ"))) (list-append ".cubical-store/bound/" (h-hex "uaβ"))) (λ ku →
+              ret {lzero} {W} ("uaβ" , (ku , false)))))

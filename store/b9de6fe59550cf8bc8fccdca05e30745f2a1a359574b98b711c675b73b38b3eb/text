@@ -1,0 +1,10 @@
+dg-mentions-go : Nat → List Word → List (List Word)
+dg-mentions-go zero _ = nil
+dg-mentions-go (suc _) nil = nil
+dg-mentions-go (suc f) (cons c r) =
+  if dg-is-ref-tag c then
+    let cand = h-take (toNat #64) r in
+    if s-hex64 cand
+    then cons cand (dg-mentions-go f (h-drop-n (toNat #64) r))
+    else dg-mentions-go f r
+  else dg-mentions-go f r

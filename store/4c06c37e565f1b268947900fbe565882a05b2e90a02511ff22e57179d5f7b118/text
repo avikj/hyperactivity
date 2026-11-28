@@ -1,0 +1,2425 @@
+hy-sexp-motifs : Nat → List Word → List (List Word)
+hy-sexp-motifs zero _ = nil
+hy-sexp-motifs (suc _) nil = nil
+hy-sexp-motifs (suc k) (cons c r) =
+  let rest = hy-sexp-motifs k r
+  in if weq c #40 then
+       let sx = hy-take-sexp (toNat #512) #1 (cons #40 nil) r
+       in if andB (hy-at-least-n (toNat #28) sx) (h-not (orB (h-prefix "(lam " sx) (h-prefix "(Pi " sx))))
+          then cons sx rest else rest
+     else rest
+
+hy-index-motifs : List Word → List Word → List (List Word) → Proc W (List Word)
+hy-index-motifs st key nil = ret nil
+hy-index-motifs st key (cons sx rest) =
+  let mh = hy-fnv16 sx
+      mp = list-append st (list-append "/motifs/" mh)
+  in bind (h-read mp) (λ prev →
+     case prev of
+       inl _ →
+         bind (h-write mp (h-line key)) (λ _ → hy-index-motifs st key rest)
+       inr ptxt →
+         let k0 = h-take (toNat #64) (h-before (cons #10 nil) ptxt)
+         in if h-eq k0 key then hy-index-motifs st key rest
+            else bind (h-write (list-append "store/" (list-append key "/motifs")) (h-line (list-append mh (cons #32 k0)))) (λ _ →
+                 ret {lzero} {W} (list-append ", shared motif " (list-append (h-take (toNat #12) mh) (list-append "≡" (h-take (toNat #12) k0))))))
+
+hy-freed : List (List Word) → Bool
+hy-freed nil = false
+hy-freed (cons l r) = if h-prefix "free " l then true else hy-freed r
+
+-- Continuous pool admission hook:
+-- 1. On `data` (`store/<k>/decl`), indexes nameless constructor-sorted signature; if another `data`
+--    type shares the exact structure, automatically synthesizes & kernel-checks `deriving equiv` (`ua`)!
+-- 2. On `def` (`store/<k>/forms`), indexes canonical nameless subterm motifs across the pool.
+hy-admit-pool : List Word → List Word → List Word → Sum Unit (List Word) → Proc W (List Word)
+hy-admit-pool st m name (inl _) = ret nil
+hy-admit-pool st m name (inr kraw) =
+  let key = h-take (toNat #64) (h-before (cons #10 nil) kraw)
+  in if h-not (weq (fromNat (list-length key)) #64) then ret {lzero} {W} nil
+     else bind (h-read (list-append "store/" (list-append key "/decl"))) (λ md →
+       case md of
+         inr dtxt →
+           if h-not (h-prefix "(decl data " dtxt) then ret {lzero} {W} nil
+           else
+             let sig = hy-decl-sig dtxt
+                 sh = hy-fnv16 sig
+                 ip = list-append st (list-append "/iso/" sh)
+             in bind (h-mkdir (list-append st "/iso")) (λ _ →
+                bind (h-read ip) (λ prev →
+                case prev of
+                  inl _ →
+                    bind (h-write ip (list-append key (cons #32 (h-line name)))) (λ _ → ret {lzero} {W} nil)
+                  inr ptxt →
+                    let ln = h-before (cons #10 nil) ptxt
+                        k0 = h-before " " ln
+                        nm0 = h-after " " ln
+                    in if orB (h-eq k0 key) (orB (h-eq nm0 name) (h-null nm0)) then ret {lzero} {W} nil
+                       else
+                         let eqvNm = list-append name (list-append "·equiv·" nm0)
+                             declT = h-line (list-append "deriving equiv " (list-append name (list-append " " (list-append nm0 (list-append " as " eqvNm)))))
+                         in bind (hy-cand #2) (λ c0 → bind (hy-cand #3) (λ tf →
+                            let cf = list-append c0 ".hypercubical"
+                                full = list-append "import " (cons #34 (list-append "../lib/core.hypercubical" (cons #34 (cons #10 (cons #10 declT)))))
+                            in bind (h-write cf full) (λ _ → bind (h-write tf declT) (λ _ →
+                               bind (h-capture (cons m (cons "--read" (cons cf (cons "--keep" (cons eqvNm (cons tf nil))))))) (λ r →
+                               bind (h-unlink cf) (λ _ → bind (h-unlink tf) (λ _ →
+                               if hy-freed (h-lines (snd r)) then
+                                 bind (hy-get st (list-append "bound/" (h-hex eqvNm))) (λ uk →
+                                 let uak = h-take (toNat #64) (hy-or nil uk)
+                                 in bind (h-write (list-append "store/" (list-append key "/equiv")) (h-line (list-append nm0 (cons #32 (list-append k0 (cons #32 uak)))))) (λ _ →
+                                    ret {lzero} {W} (list-append ", ua≡" (list-append nm0 (list-append " " (h-take (toNat #12) uak))))))
+                               else ret {lzero} {W} nil)))))))
+         inl _ →
+           bind (h-read (list-append "store/" (list-append key "/forms"))) (λ mf →
+           case mf of
+             inl _ → ret {lzero} {W} nil
+             inr ftxt →
+               let tm = hy-strip-bname (h-after (cons #10 nil) ftxt)
+                   ms = h-dedupe (h-take-n (toNat #24) (hy-sexp-motifs (toNat #2048) (h-tail tm)))
+               in bind (h-mkdir (list-append st "/motifs")) (λ _ → hy-index-motifs st key ms)))
+
+-- one definition changed, placed or removed: kept, its key shown, and continuously indexed/bridged in the pool
+hy-done : List Word → List Word → List Word → Bool → List (List Word) → Proc W Unit
+hy-done st m name removing nil =
+  if removing then bind (h-unlink (list-append h-index (list-append "/written/" (h-hex name)))) (λ u →
+    bind (h-unlink (list-append st (list-append "/bound/" (h-hex name)))) (λ u2 → h-out (h-line (list-append "removed " name))))
+  else if hy-module-path name then h-out (h-line (list-append name "   (its head)"))
+  else bind (hy-get st (list-append "bound/" (h-hex name))) (λ k →
+    bind (hy-admit-pool st m name k) (λ note →
+    h-out (h-line (list-append name (list-append "   (" (list-append (hy-key-label k) (list-append note ")")))))))
+hy-done st m name removing (cons p ps) = hy-misread (cons p ps)
+
+-- one declaration written on its own, in no module (part of language-implementation-remainder):
+-- its text alone after core.hypercubical's import is read by the machine, which takes everything it
+-- mentions (forms, decl, prim, member) from the pool by content key, keeps the definition's objects
+-- beside its key, labels the name, and runs continuous pool isomorphism/motif admission.
+hy-free : List Word → List Word → List Word → List Word → Proc W Unit
+hy-free st m name t = bind (hy-cand #0) (λ c0 → bind (hy-cand #1) (λ tf → bind (ret {lzero} {W} (list-append c0 ".hypercubical")) (λ cf →
+  bind (h-write cf (list-append "import " (cons #34 (list-append "../lib/core.hypercubical" (cons #34 (cons #10 (cons #10 t))))))) (λ w → bind (h-write tf t) (λ w2 →
+  bind (h-capture (cons m (cons "--read" (cons cf (cons "--keep" (cons name (cons tf nil))))))) (λ r →
+  bind (h-unlink cf) (λ u → bind (h-unlink tf) (λ u2 →
+  if hy-freed (h-lines (snd r)) then hy-done st m name false nil
+  else bind (h-say (list-append (h-line "nothing written: it does not check") (snd r))) (λ u3 → exit #1)))))))))
+
+-- the candidate checked: recorded naming the entries it was made from, or refused with nothing recorded
+hy-put-checked : List Word → List Word → List Word → List Word → List Word → List Word → List Word → Bool → List (List Word) → Proc W Unit
+hy-put-checked st m name expect path ids cf removing nil = bind (hy-record-as m path cf ids) (λ c → hy-on-record c (bind (hy-tip st m path) (λ t2 →
+  bind (hy-piece-of st name) (λ piece → hy-done st m name removing (hy-read-back removing name piece expect)))))
+hy-put-checked st m name expect path ids cf removing (cons p ps) = hy-refuse cf (cons p ps)
+
+
+
+
+
+-- a module's new text put: written to a file of this process, the roots read with it in place of
+-- the source's, and recorded only if nothing is wrong
+hy-put : List Word → List Word → List Word → List Word → List Word → List Word → List Word → List (List Word) → Bool → Proc W Unit
+hy-put st m name expect path ids new roots removing =
+  bind (hy-cand #0) (λ cf → bind (h-write cf new) (λ w →
+  bind (hy-verdicts-with m (cons (path , cf) nil) roots) (λ after →
+  hy-put-checked st m name expect path ids cf removing (hy-wrong after))))
+
+
+
+
+
+hy-new-checked : List Word → List Word → List Word → List (List Word) → Proc W Unit
+hy-new-checked m path cf nil = bind (hy-record-as m path cf "-") (λ c → hy-on-record c (h-out (h-line (list-append path "   (a new module)"))))
+hy-new-checked m path cf (cons p ps) = hy-refuse cf (cons p ps)
+
+
+
+-- write: the piece found, its file rendered from the path's head with the change, the change checked
+-- and then recorded; a name no module holds is written on its own (hy-free)
+hy-write-at : List Word → List Word → List Word → List Word → Bool → List Word → Sum Unit (List Word × List (List Word)) → Proc W Unit
+hy-write-at st m name h after t (inl u) = hy-free st m name t
+hy-write-at st m name h after t (inr mo) =
+  bind (hy-tip st m (h-unhex (fst mo))) (λ hd → hy-tip-then (h-unhex (fst mo)) (fst hd) (snd hd) (λ ids ps →
+    bind (hy-render st ps h t after) (λ new →
+    bind (hy-root-of st (fst mo)) (λ root →
+    bind (hy-live-users st name) (λ us → bind (hy-user-roots st us) (λ urs →
+    hy-put st m name t (h-unhex (fst mo)) ids new (h-dedupe (cons root urs)) false))))))
+
+
+
+hy-write-new-module : List Word → List Word → List Word → List Word → Sum Unit (List Word) → Proc W Unit
+hy-write-new-module st m path t (inr s) = h-fail (list-append path ": the source holds no head of it (no piece before its first definition)")
+hy-write-new-module st m path t (inl u) = bind (hy-cand #0) (λ cf → bind (h-write cf t) (λ w →
+  bind (hy-verdicts-with m (cons (path , cf) nil) (cons path nil)) (λ vs → hy-new-checked m path cf (hy-wrong vs))))
+
+
+
+-- write PATH: the module's head replaced, checked the same way
+hy-write-head : List Word → List Word → List Word → List Word → Sum Unit (List Word × List (List Word)) → Proc W Unit
+hy-write-head st m path t (inl u) = bind (h-source-text path) (hy-write-new-module st m path t)
+hy-write-head st m path t (inr hp) = hy-write-at st m path (fst hp) false t (inr (h-hex path , snd hp))
+
+
+
+hy-write-after-head : List Word → List Word → List Word → List Word → List Word → Sum Unit (List Word × List (List Word)) → Proc W Unit
+hy-write-after-head st m name path t (inl u) = h-fail (list-append path ": the machine holds no head of it (no piece before its first definition)")
+hy-write-after-head st m name path t (inr hp) = hy-write-at st m name (fst hp) true t (inr (h-hex path , snd hp))
+
+
+
+-- write NAME NAME ... < DECLARATIONS: several definitions changed as one change. The text holds their
+-- declarations in the order named, each beginning at the comment directly above its first line (where
+-- the store cuts pieces); every file they are in is written, every root any of them touches (through
+-- its file or its users) is checked once, and all is kept or all is put back.
+-- A line that begins a name's declaration: its signature, a clause, or its data, record or codata line
+hy-decl-line : List Word → List Word → Bool
+hy-decl-line n l = orB (h-prefix (list-append n " ") l) (orB (h-prefix (list-append "data " (list-append n " ")) l)
+  (orB (h-prefix (list-append "record " (list-append n " ")) l) (h-prefix (list-append "codata " (list-append n " ")) l)))
+
+
+
+hy-drop-nl : List Word → List Word
+hy-drop-nl nil = nil
+hy-drop-nl (cons x r) = if weq x #10 then hy-drop-nl r else cons x r
+
+
+
+-- lines as one piece's text: each line ended by a newline, blank lines at its end dropped
+hy-piece-text : List (List Word) → List Word
+hy-piece-text ls = h-line (h-rev (hy-drop-nl (h-rev (h-concat (list-map h-line ls)) nil)) nil)
+
+
+
+hy-cons-piece : List Word → Sum (List Word) (List (List Word)) → Sum (List Word) (List (List Word))
+hy-cons-piece p (inl n) = inl n
+hy-cons-piece p (inr ps) = inr (cons p ps)
+
+
+
+-- the text cut into the named declarations: the names still to find, the current piece's lines, the
+-- comment lines waiting to see whether a declaration follows them, and the lines left; a name not
+-- found, in order, is given back
+hy-cut : List (List Word) → List (List Word) → List (List Word) → List (List Word) → Sum (List Word) (List (List Word))
+hy-cut nil acc pend nil = inr (cons (hy-piece-text (list-append acc pend)) nil)
+hy-cut (cons n ns) acc pend nil = inl n
+hy-cut nil acc pend (cons l r) = hy-cut nil (list-append acc (list-append pend (cons l nil))) nil r
+hy-cut (cons n ns) acc pend (cons l r) =
+  if hy-decl-line n l then hy-cons-piece (hy-piece-text acc) (hy-cut ns (list-append pend (cons l nil)) nil r)
+  else if h-prefix "--" l then hy-cut (cons n ns) acc (list-append pend (cons l nil)) r
+  else hy-cut (cons n ns) (list-append acc (list-append pend (cons l nil))) nil r
+
+
+
+-- each name's edit: its file (hex path, pieces) and its piece's hash with the new text
+hy-edit-in : List Word → List Word → List Word → Sum Unit (List Word × List (List Word)) → (((List Word × List (List Word)) × (List Word × List Word)) → Proc W Unit) → Proc W Unit
+hy-edit-in n h t (inl u) k = h-fail (list-append "hyperactive: no file holds the piece of " n)
+hy-edit-in n h t (inr mo) k = k (mo , (h , t))
+
+
+
+hy-edit-of : List Word → List Word → List Word → Sum Unit (List Word) → (((List Word × List (List Word)) × (List Word × List Word)) → Proc W Unit) → Proc W Unit
+hy-edit-of st n t (inl u) k = h-fail (list-append n ": no definition has that name (write NAME after OTHER places a new one)")
+hy-edit-of st n t (inr h) k = bind (hy-module-of st n h) (λ mo → hy-edit-in n h t mo k)
+
+
+
+hy-edits : List Word → List (List Word) → List (List Word) → List ((List Word × List (List Word)) × (List Word × List Word)) → (List ((List Word × List (List Word)) × (List Word × List Word)) → Proc W Unit) → Proc W Unit
+hy-edits st nil ts acc k = k acc
+hy-edits st (cons n ns) nil acc k = k acc
+hy-edits st (cons n ns) (cons t ts) acc k = bind (hy-get st (list-append "written/" (h-hex n))) (λ w →
+  hy-edit-of st n t w (λ e → hy-edits st ns ts (list-append acc (cons e nil)) k))
+
+
+
+-- a file's pieces and its edits
+hy-pieces-of : List Word → List ((List Word × List (List Word)) × (List Word × List Word)) → List (List Word)
+hy-pieces-of f nil = nil
+hy-pieces-of f (cons e r) = if h-eq f (fst (fst e)) then snd (fst e) else hy-pieces-of f r
+
+
+
+hy-file-edits : List Word → List ((List Word × List (List Word)) × (List Word × List Word)) → List (List Word × List Word)
+hy-file-edits f nil = nil
+hy-file-edits f (cons e r) = if h-eq f (fst (fst e)) then cons (snd e) (hy-file-edits f r) else hy-file-edits f r
+
+
+
+-- a file rendered from its pieces, each piece an edit names replaced by its new text
+hy-swap : List Word → List Word → List (List Word × List Word) → List Word
+hy-swap p x nil = x
+hy-swap p x (cons e r) = if h-eq p (fst e) then snd e else hy-swap p x r
+
+
+
+hy-render-swapped : List Word → List (List Word) → List (List Word × List Word) → Proc W (List Word)
+hy-render-swapped st nil rs = ret nil
+hy-render-swapped st (cons p r) rs = bind (hy-get st (list-append p "/text")) (λ x →
+  bind (hy-render-swapped st r rs) (λ rest → ret (list-append (hy-swap p (hy-or nil x) rs) rest)))
+
+
+
+-- each module's change (path, text before, text after), from the source
+hy-file-changes : List Word → List ((List Word × List (List Word)) × (List Word × List Word)) → List (List Word) → List (List Word × (List Word × List Word)) → (List (List Word × (List Word × List Word)) → Proc W Unit) → Proc W Unit
+hy-file-changes st es nil acc k = k acc
+hy-file-changes st es (cons f r) acc k =
+  bind (hy-render-swapped st (hy-pieces-of f es) nil) (λ was →
+  bind (hy-render-swapped st (hy-pieces-of f es) (hy-file-edits f es)) (λ new →
+    hy-file-changes st es r (list-append acc (cons (h-unhex f , (was , new)) nil)) k))
+
+
+
+-- every root a change touches: each name's file's root and its users' roots
+hy-roots-all : List Word → List (List Word) → List ((List Word × List (List Word)) × (List Word × List Word)) → Proc W (List (List Word))
+hy-roots-all st nil es = ret nil
+hy-roots-all st (cons n ns) nil = ret nil
+hy-roots-all st (cons n ns) (cons e es) = bind (hy-root-of st (fst (fst e))) (λ root →
+  bind (hy-live-users st n) (λ us → bind (hy-user-roots st us) (λ urs →
+  bind (hy-roots-all st ns es) (λ rest → ret (cons root (list-append urs rest))))))
+
+
+
+hy-read-backs : List Word → List (List Word) → List (List Word) → Proc W (List (List Word))
+hy-read-backs st nil ts = ret nil
+hy-read-backs st (cons n ns) nil = ret nil
+hy-read-backs st (cons n ns) (cons t ts) = bind (hy-piece-of st n) (λ p →
+  bind (hy-read-backs st ns ts) (λ rest → ret (list-append (hy-read-back false n p t) rest)))
+
+
+
+hy-keys : List Word → List (List Word) → Proc W Unit
+hy-keys st nil = ret unit
+hy-keys st (cons n r) = bind (hy-get st (list-append "bound/" (h-hex n))) (λ k →
+  bind (h-out (h-line (list-append n (list-append "   (" (list-append (hy-key-label k) ")"))))) (λ u → hy-keys st r))
+
+
+
+-- several files changed at once: each file's head read again and required to be the text the
+-- change was made from (else nothing is written and the change is run again); each new text to
+-- a file of this process; the roots read with all of them; each recorded naming its head
+hy-tips-cons : List Word → Sum (List Word) (List (List Word)) → Sum (List Word) (List (List Word))
+hy-tips-cons id (inl p) = inl p
+hy-tips-cons id (inr ids) = inr (cons id ids)
+
+
+
+
+
+hy-many-tips : List Word → List Word → List (List Word × (List Word × List Word)) → Proc W (Sum (List Word) (List (List Word)))
+hy-many-tips st m nil = ret (inr nil)
+hy-many-tips st m (cons c r) = bind (hy-tip st m (fst c)) (λ hd → bind (hy-render st (snd hd) nil nil false) (λ cur →
+  if h-eq cur (fst (snd c)) then bind (hy-many-tips st m r) (λ rest → ret {lzero} {W} (hy-tips-cons (fst hd) rest)) else ret {lzero} {W} (inl (fst c))))
+
+
+
+
+
+hy-many-cands : Word → List (List Word × (List Word × List Word)) → Proc W (List (List Word × List Word))
+hy-many-cands k nil = ret nil
+hy-many-cands k (cons c r) = bind (hy-cand k) (λ f → bind (h-write f (snd (snd c))) (λ w → bind (hy-many-cands (wadd k #1) r) (λ rest → ret (cons (fst c , f) rest))))
+
+
+
+
+
+hy-many-records : List Word → List (List Word × List Word) → List (List Word) → Proc W Unit
+hy-many-records m nil is = ret unit
+hy-many-records m (cons w r) nil = ret unit
+hy-many-records m (cons w r) (cons i is) = bind (hy-record-as m (fst w) (snd w) i) (λ c → hy-on-record c (hy-many-records m r is))
+
+
+
+
+
+hy-many-done : List Word → List (List Word) → List (List Word) → Proc W Unit
+hy-many-done st names nil = hy-keys st names
+hy-many-done st names (cons p ps) = hy-misread (cons p ps)
+
+
+
+
+
+hy-many-checked : List Word → List Word → List (List Word) → List (List Word) → List (List Word × List Word) → List (List Word) → List (List Word) → Proc W Unit
+hy-many-checked st m names ts ws ids nil = bind (hy-many-records m ws ids) (λ u → bind (hy-tip st m "lib/library.hypercubical") (λ t2 →
+  bind (hy-read-backs st names ts) (λ rb → hy-many-done st names rb)))
+hy-many-checked st m names ts ws ids (cons p ps) = hy-refuse "build/cand-none" (cons p ps)
+
+
+
+
+
+hy-many-go : List Word → List Word → List (List Word) → List (List Word) → List (List Word × (List Word × List Word)) → List (List Word) → Sum (List Word) (List (List Word)) → Proc W Unit
+hy-many-go st m names ts cs roots (inl p) = h-fail (list-append p " changed in the source while this change was being made: nothing written; run it again")
+hy-many-go st m names ts cs roots (inr ids) = bind (hy-many-cands #0 cs) (λ ws → bind (hy-verdicts-with m ws roots) (λ after →
+  hy-many-checked st m names ts ws ids (hy-wrong after)))
+
+
+
+hy-change-many : List Word → List Word → List (List Word) → List (List Word) → List (List Word × (List Word × List Word)) → List (List Word) → Proc W Unit
+hy-change-many st m names ts cs roots = bind (hy-many-tips st m cs) (hy-many-go st m names ts cs roots)
+
+
+
+hy-write-many : List Word → List Word → List (List Word) → Sum (List Word) (List (List Word)) → Proc W Unit
+hy-write-many st m names (inl n) = h-fail (list-append "the text holds no declaration of " (list-append n " after the one before it: write NAME NAME ... takes their declarations in the order named"))
+hy-write-many st m names (inr ts) = hy-edits st names ts nil (λ es →
+  hy-file-changes st es (h-dedupe (list-map (λ e → fst (fst e)) es)) nil (λ cs →
+  bind (hy-roots-all st names es) (λ rs → hy-change-many st m names ts cs (h-dedupe rs))))
+
+
+
+-- the names of write NAME NAME ... after OTHER: those before "after"
+hy-names-before : List (List Word) → List (List Word)
+hy-names-before nil = nil
+hy-names-before (cons x r) = if h-eq x "after" then nil else cons x (hy-names-before r)
+
+
+
+-- the name after "after"
+hy-name-after : List (List Word) → List Word
+hy-name-after nil = nil
+hy-name-after (cons x r) = if h-eq x "after" then hy-head r else hy-name-after r
+
+
+
+-- the new names written: the key of each shown
+hy-keep-new : List Word → List (List Word) → Proc W Unit
+hy-keep-new st nil = ret unit
+hy-keep-new st (cons n r) = bind (hy-get st (list-append "bound/" (h-hex n))) (λ k → bind (h-out (h-line (list-append n (list-append "   (" (list-append (hy-key-label k) ")"))))) (λ u → hy-keep-new st r))
+
+
+
+hy-group-done : List Word → List (List Word) → List (List Word) → Proc W Unit
+hy-group-done st names nil = hy-keep-new st names
+hy-group-done st names (cons p ps) = hy-misread (cons p ps)
+
+
+
+
+
+hy-group-checked : List Word → List Word → List (List Word) → List (List Word) → List Word → List Word → List Word → List (List Word) → Proc W Unit
+hy-group-checked st m names ts path ids cf nil = bind (hy-record-as m path cf ids) (λ c → hy-on-record c (bind (hy-tip st m path) (λ t2 →
+  bind (hy-read-backs st names ts) (λ rb → hy-group-done st names rb))))
+hy-group-checked st m names ts path ids cf (cons p ps) = hy-refuse cf (cons p ps)
+
+
+
+-- the group's text placed after OTHER's piece in its file, the file checked once and then recorded
+hy-group-in : List Word → List Word → List (List Word) → List Word → List (List Word) → List Word → Sum Unit (List Word × List (List Word)) → Proc W Unit
+hy-group-in st m names t ts h (inl u) = h-fail "hyperactive: no file holds the piece written after"
+hy-group-in st m names t ts h (inr mo) =
+  bind (hy-tip st m (h-unhex (fst mo))) (λ hd → hy-tip-then (h-unhex (fst mo)) (fst hd) (snd hd) (λ ids ps →
+  bind (hy-render st ps h t true) (λ new →
+  bind (hy-root-of st (fst mo)) (λ root →
+  bind (hy-cand #0) (λ cf → bind (h-write cf new) (λ w →
+  bind (hy-verdicts-with m (cons (h-unhex (fst mo) , cf) nil) (cons root nil)) (λ after →
+  hy-group-checked st m names ts (h-unhex (fst mo)) ids cf (hy-wrong after))))))))
+
+
+
+hy-write-group : List Word → List Word → List (List Word) → List Word → List Word → Sum (List Word) (List (List Word)) → Sum Unit (List Word) → Proc W Unit
+hy-write-group st m names other t (inl n) w = h-fail (list-append "the text holds no declaration of " (list-append n " after the one before it: write NAME NAME ... after OTHER takes their declarations in the order named"))
+hy-write-group st m names other t (inr ts) (inl u) = h-fail (list-append "hyperactive: no definition named " other)
+hy-write-group st m names other t (inr ts) (inr h) = bind (hy-module-of st other h) (hy-group-in st m names t ts h)
+
+
+
+-- write NAME NAME ... after OTHER: new declarations, in the order named, placed together after OTHER and
+-- checked once (Avik, 2026-11-18: "shouldn't you have created a mode where you can stage many writes and
+-- confirm them with a single check?")
+hy-write-group-of : List Word → List Word → List (List Word) → List Word → List Word → Proc W Unit
+hy-write-group-of st m nil other t = h-fail "hyperactive write NAME NAME ... after OTHER"
+hy-write-group-of st m (cons n ns) other t = bind (hy-get st (list-append "written/" (h-hex other))) (hy-write-group st m (cons n ns) other t (hy-cut ns nil nil (h-split #10 t)))
+
+
+
+hy-write-new : List Word → List Word → List Word → List Word → List Word → Sum Unit (List Word) → Proc W Unit
+hy-write-new st m name other t (inl u) = h-fail (list-append "hyperactive: no definition named " other)
+hy-write-new st m name other t (inr h) = bind (hy-module-of st other h) (hy-write-at st m name h true t)
+
+
+
+-- a new name given no place is written on its own (hy-free); `after OTHER` still places one in OTHER's module
+hy-write-to : List Word → List Word → List Word → List (List Word) → List Word → Sum Unit (List Word) → Proc W Unit
+hy-write-to st m name rest t (inr h) = bind (hy-module-of st name h) (hy-write-at st m name h false t)
+hy-write-to st m name (cons a (cons other r)) t (inl u) =
+  if h-eq a "after" then (if hy-module-path other then bind (hy-head-of st other) (hy-write-after-head st m name other t)
+    else bind (hy-get st (list-append "written/" (h-hex other))) (λ w → hy-write-new st m name other t w))
+  else hy-free st m name t
+hy-write-to st m name rest t (inl u) = hy-free st m name t
+
+
+
+-- write NAME: a declaration changed; write NAME after OTHER: a new one placed; write NAME NAME ...: several
+-- changed, checked once; write NAME NAME ... after OTHER: several new ones placed together, checked once
+hy-write : List Word → List Word → List (List Word) → List Word → Proc W Unit
+hy-write st m nil t = h-fail "hyperactive write NAME [NAME ...] [after OTHER], the declarations on standard input"
+hy-write st m (cons name rest) t = if hy-module-path name then bind (hy-head-of st name) (hy-write-head st m name (hy-nl t))
+  else if hy-document name then bind (h-record m name t) (λ u → h-out (h-line (list-append name "   (a document, written whole)")))
+  else if andB (h-has "after" rest) (h-not (h-eq (hy-head rest) "after")) then hy-write-group-of st m (cons name (hy-names-before rest)) (hy-name-after rest) (hy-nl t)
+  else if andB (h-not (h-null (h-concat rest))) (h-not (h-eq (hy-head rest) "after"))
+  then hy-write-many st m (cons name rest) (hy-cut rest nil nil (h-split #10 (hy-nl t)))
+  else bind (hy-get st (list-append "written/" (h-hex name))) (λ w → hy-write-to st m name rest (hy-nl t) w)
+
+
+
+
+
+
+
+
+-- remove: the name's piece taken away and checked like a write: its file's root and the roots of
+-- everything recorded as using it read with the piece gone, so the machine judges whether anything
+-- still needs it. A use recorded under another name of the same code refuses nothing: identical code
+-- is one object, its key, and the store names a use by whichever name holds that key. A name no
+-- module holds is a label alone: it is dropped, and the object it named and every object that
+-- mentions that one by key stay as they are
+hy-remove-in : List Word → List Word → List Word → List Word → Sum Unit (List Word × List (List Word)) → Proc W Unit
+hy-remove-in st m name h (inl u) = hy-done st name true nil
+hy-remove-in st m name h (inr mo) =
+  bind (hy-tip st m (h-unhex (fst mo))) (λ hd → hy-tip-then (h-unhex (fst mo)) (fst hd) (snd hd) (λ ids ps →
+    bind (hy-render st ps h nil false) (λ new → bind (hy-root-of st (fst mo)) (λ root →
+    bind (hy-live-users st name) (λ us → bind (hy-user-roots st us) (λ urs →
+    hy-put st m name nil (h-unhex (fst mo)) ids new (h-dedupe (cons root urs)) true))))))
+
+
+
+hy-remove-at : List Word → List Word → List Word → Sum Unit (List Word) → Proc W Unit
+hy-remove-at st m name (inl u) = h-fail (list-append "hyperactive: no definition named " name)
+hy-remove-at st m name (inr h) = bind (hy-module-of st name h) (hy-remove-in st m name h)
+
+
+
+
+
+hy-remove : List Word → List Word → List (List Word) → Proc W Unit
+hy-remove st m nil = h-fail "hyperactive remove NAME"
+hy-remove st m (cons name r) = if orB (hy-module-path name) (hy-document name)
+  then bind (h-unrecord name) (λ u → h-out (h-line (list-append "removed " name)))
+  else bind (hy-get st (list-append "written/" (h-hex name))) (λ w → hy-remove-at st m name w)
+
+
+
+-- history [NAME]: every binding of the name to a key, in the order bound, from the store's names log
+-- (`name key time`, a key `-` an unbinding), each with its time in UTC
+hy-two : Word → List Word
+hy-two w = if wlt w #10 then cons #48 (h-decimal w) else h-decimal w
+
+
+
+hy-civil-ymd : Word → Word → Word → List Word
+hy-civil-ymd y d m = list-append (h-decimal (if wlt m #3 then wadd y #1 else y)) (list-append "-" (list-append (hy-two m) (list-append "-" (hy-two d))))
+
+
+
+hy-civil-mp : Word → Word → Word → List Word
+hy-civil-mp y doy mp = hy-civil-ymd y (wadd (wsub doy (wquot (wadd (wmul #153 mp) #2) #5)) #1) (if wlt mp #10 then wadd mp #3 else wsub mp #9)
+
+
+
+hy-civil-doy : Word → Word → List Word
+hy-civil-doy y doy = hy-civil-mp y doy (wquot (wadd (wmul #5 doy) #2) #153)
+
+
+
+hy-civil-yoe : Word → Word → Word → List Word
+hy-civil-yoe era doe yoe = hy-civil-doy (wadd yoe (wmul era #400)) (wsub doe (wsub (wadd (wmul #365 yoe) (wquot yoe #4)) (wquot yoe #100)))
+
+
+
+hy-civil-era : Word → Word → List Word
+hy-civil-era era doe = hy-civil-yoe era doe (wquot (wsub (wadd (wsub doe (wquot doe #1460)) (wquot doe #36524)) (wquot doe #146096)) #365)
+
+
+
+hy-civil-at : Word → List Word
+hy-civil-at z = hy-civil-era (wquot z #146097) (wsub z (wmul (wquot z #146097) #146097))
+
+
+
+wrem-of : Word → Word → Word
+wrem-of a b = wsub a (wmul (wquot a b) b)
+
+
+
+hy-civil : Word → List Word
+hy-civil days =
+  hy-civil-at (wadd days #719468)
+
+
+
+hy-utc : Word → List Word
+hy-utc t = list-append (hy-civil (wquot t #86400)) (list-append " " (list-append (hy-two (wquot (wrem-of t #86400) #3600))
+  (list-append ":" (list-append (hy-two (wquot (wrem-of t #3600) #60)) (list-append ":" (list-append (hy-two (wrem-of t #60)) " UTC"))))))
+
+
+
+hy-binding : List (List Word) → List Word
+hy-binding (cons n (cons k (cons t r))) = h-line (list-append (hy-utc (h-number t)) (list-append " " (list-append n (list-append " " (if h-eq k "-" then "unbound" else k)))))
+hy-binding ws = nil
+
+
+
+hy-history-of : List Word → List (List Word) → List Word
+hy-history-of name nil = nil
+hy-history-of name (cons l r) = if orB (h-null name) (h-eq name (hy-head (h-split #32 l))) then list-append (hy-binding (h-split #32 l)) (hy-history-of name r) else hy-history-of name r
+
+
+
+hy-history : List Word → List (List Word) → Proc W Unit
+hy-history st a = bind (hy-get st "names") (λ log →
+  if h-null (hy-history-of (hy-sep " " a) (h-lines (hy-or nil log)))
+  then h-out (h-line (if h-null (hy-sep " " a) then "the history is empty" else list-append "no history for " (hy-sep " " a)))
+  else h-out (hy-history-of (hy-sep " " a) (h-lines (hy-or nil log))))
+
+
+
+
+
+-- paper [SECTION]: the paper as it reads, whole or one section (4.4, A.1, Part II), from the store,
+-- where lib/paper-view.hypercubical keeps it, made again when anything under the repository has changed
+hy-hashes : List Word → Nat
+hy-hashes nil = zero
+hy-hashes (cons x r) = if weq x #35 then suc (hy-hashes r) else zero
+
+
+
+hy-depth-at : Nat → List Word → Nat
+hy-depth-at zero l = zero
+hy-depth-at (suc k) l = if andB (wlt (fromNat (suc k)) #5) (h-prefix (cons #32 nil) (h-drop-n (suc k) l)) then suc k else zero
+
+
+
+hy-depth : List Word → Nat
+hy-depth l = hy-depth-at (hy-hashes l) l
+
+
+
+hy-ends-there : List Word → Bool
+hy-ends-there nil = false
+hy-ends-there (cons x r) = orB (weq x #32) (weq x #46)
+
+
+
+hy-names-section : List Word → List Word → Bool
+hy-names-section s rest = andB (h-prefix s rest) (hy-ends-there (h-drop s rest))
+
+
+
+hy-section-rest : List Word → List Word → Bool
+hy-section-rest s r = orB (hy-names-section s r) (orB (andB (h-prefix "Part " r) (hy-names-section s (h-drop "Part " r))) (andB (h-prefix "Appendix " r) (hy-names-section s (h-drop "Appendix " r))))
+
+
+
+hy-section-at : List Word → Nat → List Word → Bool
+hy-section-at s zero l = false
+hy-section-at s (suc d) l = hy-section-rest s (h-drop-n (suc (suc d)) l)
+
+
+
+hy-section-head : List Word → List Word → Bool
+hy-section-head s l = hy-section-at s (hy-depth l) l
+
+
+
+hy-nat-le : Nat → Nat → Bool
+hy-nat-le a b = h-not (wlt (fromNat b) (fromNat a))
+
+
+
+hy-section-body : Nat → List (List Word) → List (List Word)
+hy-section-body d nil = nil
+hy-section-body d (cons l r) = if andB (h-not (hy-same-nat (hy-depth l) zero)) (hy-nat-le (hy-depth l) d) then nil else cons l (hy-section-body d r)
+
+
+
+hy-section : List Word → List (List Word) → List (List Word)
+hy-section s nil = nil
+hy-section s (cons l r) = if hy-section-head s l then cons l (hy-section-body (hy-depth l) r) else hy-section s r
+
+
+
+hy-paper-show : List (List Word) → List Word → Proc W Unit
+hy-paper-show nil t = h-out t
+hy-paper-show (cons s r) t = if h-null (h-concat (hy-section s (h-split #10 t))) then h-fail (list-append "the paper has no section " s)
+  else h-out (h-concat (list-map h-line (hy-section s (h-split #10 t))))
+
+
+
+-- the paper kept fresh: lib/paper-view.hypercubical runs when docs/hyperactivity.hypercubical or what it imports has changed
+-- since it last ran (paper/stamp); its exit status, 0 when the paper is fresh
+hy-paper-ready : List Word → List Word → Proc W Word
+hy-paper-ready st m =
+  bind (hy-get st "paper/stamp") (λ s → bind (h-code-time m "docs/hyperactivity.hypercubical") (λ now →
+  if h-eq (hy-or nil s) (h-decimal now) then ret {lzero} {W} #0
+  else bind (h-run (cons m (cons "lib/paper-view.hypercubical" nil))) (λ r →
+    if weq r #0 then bind (h-write (list-append st "/paper/stamp") (h-decimal now)) (λ b → ret {lzero} {W} r) else ret {lzero} {W} r)))
+
+
+
+-- replace this process image with prog and args so cold `hyperactive paper` frees hyperactive.hypercubical before building the site (part of memory-is-local)
+hy-exec : List Word → List (List Word) → Proc W Unit
+hy-exec prog args =
+  bind (h-read "/proc/self/environ") (λ env →
+  bind (h-ptrs (cons prog args)) (λ argv → bind (h-ptrs (h-env-block env)) (λ envp →
+  with-bytes {Unit} (wadd (fromNat (list-length prog)) #1) (λ p → bind (h-poke p prog) (λ u →
+  bind (sys-call #59 p (fst argv) (fst envp) #0 #0 #0) (λ r → exit #1))))))
+
+
+
+-- paper: the paper made fresh, then every public page of the site made and kept for this state of the
+-- source (lib/server.hypercubical site: s-make-site), so the build (make && ./hyperactive paper) leaves the server
+-- nothing to render; on a cold run, execve replaces hyperactive.hypercubical before s-make-site runs
+hy-paper : List Word → List Word → List (List Word) → Proc W Unit
+hy-paper st m a =
+  bind (hy-paper-ready st m) (λ r →
+  if weq r #0 then
+    bind (hy-get st "paper/text") (λ t →
+    bind (h-read "/proc/self/cmdline") (λ cl →
+    if h-has "--session" (h-args-of cl)
+    then bind (h-run (cons m (cons "lib/server.hypercubical" (cons "site" nil)))) (λ s → if weq s #0 then hy-paper-show a (hy-or nil t) else exit #1)
+    else bind (hy-paper-show a (hy-or nil t)) (λ u → hy-exec m (cons "lib/server.hypercubical" (cons "site" nil)))))
+  else exit #1)
+
+
+
+
+
+-- check [FILE ...]: the machine's verdict on the workflow (or on each file given, each loading what
+-- it imports), then the graph's rules (lib/views.hypercubical check)
+hy-last : List (List Word) → List Word
+hy-last nil = nil
+hy-last (cons x nil) = x
+hy-last (cons x (cons y r)) = hy-last (cons y r)
+
+
+
+hy-fail-lines : List (List Word) → List Word
+hy-fail-lines nil = nil
+hy-fail-lines (cons l r) = if orB (h-prefix "FAIL" l) (orB (h-prefix "   reason" l) (h-prefix "   in:" l)) then list-append (h-line (list-append "  " l)) (hy-fail-lines r) else hy-fail-lines r
+
+
+
+-- check FILE ...: the machine's verdict on each file, and the exit 1 when any fails or the machine
+-- ends without its verdict
+hy-machine-good : Word × List Word → Bool
+hy-machine-good r = andB (weq (fst r) #0) (andB (hy-complete (h-lines (snd r))) (h-null (hy-fail-lines (h-lines (snd r)))))
+
+
+
+hy-machine-text : List Word → Word × List Word → List Word
+hy-machine-text f r = if hy-complete (h-lines (snd r))
+  then list-append (h-line (list-append f (list-append ": " (hy-last (h-lines (snd r)))))) (hy-fail-lines (h-lines (snd r)))
+  else list-append (h-line (list-append f (list-append ": the machine ended without its verdict (exit status " (list-append (h-decimal (fst r)) ")"))))
+    (h-indented "  " (h-lines (snd r)))
+
+
+
+hy-machine-on : List Word → List Word → Proc W Bool
+hy-machine-on m f = bind (h-capture (cons m (cons "--read" (cons f nil)))) (λ r →
+  bind (h-out (hy-machine-text f r)) (λ u → ret (hy-machine-good r)))
+
+
+
+hy-machine-files : List Word → Bool → List (List Word) → Proc W Unit
+hy-machine-files m good nil = exit (if good then #0 else #1)
+hy-machine-files m good (cons f r) = bind (hy-machine-on m f) (λ g → hy-machine-files m (andB good g) r)
+
+
+
+
+
+-- brunerie: Brunerie's number (Ljungström's brunerie', the typed port experiments/brunerie/typed.cub)
+-- computed with no store, with one worker and with four: it must be -2 (negsuc (suc zero)) each time
+hy-brunerie-in : List (List Word) → Bool
+hy-brunerie-in nil = false
+hy-brunerie-in (cons l r) = if andB (h-eq l "brunerie") (h-infix "= negsuc (suc zero)" (hy-head r)) then true else hy-brunerie-in r
+
+
+
+hy-brunerie-with : List Word → List Word → Proc W Bool
+hy-brunerie-with m w = bind (h-capture-with (cons "CUBICAL_NOCACHE=1" (cons (list-append "CUBICAL_WORKERS=" w) nil))
+  (cons m (cons "lib/core.hypercubical" (cons "experiments/brunerie/typed.hypercubical" (cons "experiments/brunerie/run-typed.hypercubical" nil))))) (λ r → ret (hy-brunerie-in (h-lines (snd r))))
+
+
+
+hy-brunerie : List Word → Proc W Unit
+hy-brunerie m = bind (hy-brunerie-with m "0") (λ a → bind (hy-brunerie-with m "4") (λ b →
+  if andB a b then h-out (h-line "brunerie = negsuc (suc zero), with one worker and with four")
+  else h-fail (list-append "brunerie: not -2 with " (if a then "four workers" else "one worker"))))
+
+
+
+
+
+
+-- view [in FILE] [type T] TERM: a term's value, the term read in FILE (the workflow by default). Its
+-- type is the machine's (#type) unless given; text (List Word) is shown as text, a list of texts one
+-- per line with their count, anything else as the machine shows its normal form
+hy-view-args : List Word → List Word → List (List Word) → (List Word × List Word) × List Word
+hy-view-args f t (cons k (cons v r)) = if h-eq k "in" then hy-view-args v t r else if h-eq k "type" then hy-view-args f v r else ((f , t) , hy-sep " " (cons k (cons v r)))
+hy-view-args f t a = ((f , t) , hy-sep " " a)
+
+
+
+hy-probe-head : List Word → List Word
+hy-probe-head f = list-append (h-line (list-append "import " (h-quote "../lib/host.hypercubical"))) (h-line (list-append "import " (h-quote (list-append "../" f))))
+
+
+
+hy-after-last-colon : List Word → List Word
+hy-after-last-colon l = h-rev (h-before (h-rev " : " nil) (h-rev l nil)) nil
+
+
+
+hy-type-of : List (List Word) → List Word
+hy-type-of nil = nil
+hy-type-of (cons l r) = if andB (h-prefix "type: " l) (h-infix " : " l) then hy-after-last-colon l else hy-type-of r
+
+
+
+-- the machine's report without its count of checks
+hy-shown : List (List Word) → List Word
+hy-shown nil = nil
+hy-shown (cons l r) = if h-infix " passed, " l then hy-shown r else list-append (h-line l) (hy-shown r)
+
+
+
+-- a probe written beside the build and given to the machine: its report. The probe's file is named by this process's
+-- number (system call 39), so that two views at once do not read each other's term (2026-11-21: concurrent views
+-- crossed their inputs through the one file build/view-probe.cub)
+hy-probe : List Word → List Word → Proc W (Word × List Word)
+hy-probe m text = bind (h-mkdir "build") (λ u → bind (sys-call #39 #0 #0 #0 #0 #0 #0) (λ pid → bind (h-write (list-append "build/view-probe-" (list-append (h-decimal pid) ".hypercubical")) text) (λ b → h-capture (cons m (cons (list-append "build/view-probe-" (list-append (h-decimal pid) ".hypercubical")) nil)))))
+
+
+
+hy-program : List Word → List Word
+hy-program body = h-concat (list-map h-line (cons "view-probe : Proc W Unit" (cons (list-append "view-probe = bind (" (list-append body ") (λ u → exit #0)")) (cons "view-run : Step W Unit" (cons "view-run = to-step view-probe" (cons "#run view-run" nil))))))
+
+
+
+hy-list-body : List Word → List Word → List Word
+hy-list-body term t = h-concat (cons "h-out (list-append (h-concat (list-map h-line (" (cons term (cons "))) (h-line (list-append " (cons (h-quote "(") (cons " (list-append (h-decimal (fromNat (list-length (" (cons term (cons ")))) (list-append " (cons (h-quote ", ") (cons " " (cons (h-quote (list-append t ")")) (cons ")))))" nil)))))))))))
+
+
+
+hy-text-body : List Word → List Word
+hy-text-body term = list-append "bind (h-out (" (list-append term ")) (λ u2 → h-out (cons #10 nil))")
+
+
+
+hy-is-text : List Word → Bool
+hy-is-text t = orB (h-eq t "List Word") (h-eq t "(List Word)")
+
+
+
+hy-is-texts : List Word → Bool
+hy-is-texts t = orB (h-eq t "List (List Word)") (h-eq t "(List (List Word))")
+
+
+
+hy-view-source : List Word → List Word → List Word → List Word
+hy-view-source f t term = list-append (hy-probe-head f)
+  (if hy-is-text t then hy-program (hy-text-body term) else if hy-is-texts t then hy-program (hy-list-body term t) else h-line (list-append "#show " term))
+
+
+
+hy-view-show : Word × List Word → Proc W Unit
+hy-view-show r = h-out (hy-shown (h-lines (snd r)))
+
+
+
+hy-view-run : List Word → List Word → List Word → List Word → Proc W Unit
+hy-view-run m f t term = bind (hy-probe m (hy-view-source f t term)) hy-view-show
+
+
+
+hy-view-typed-of : List Word → List Word → List Word → Word × List Word → Proc W Unit
+hy-view-typed-of m f term r = if h-null (hy-type-of (h-lines (snd r))) then h-fail (hy-shown (h-lines (snd r))) else hy-view-run m f (hy-type-of (h-lines (snd r))) term
+
+
+
+hy-view-typed : List Word → List Word → List Word → List Word → Proc W Unit
+hy-view-typed m f t term = if h-null t then bind (hy-probe m (list-append (hy-probe-head f) (h-line (list-append "#type (" (list-append term ")"))))) (hy-view-typed-of m f term)
+  else hy-view-run m f t term
+
+
+
+hy-view-term : List Word → List (List Word) → Proc W Unit
+hy-view-term m a = hy-view-typed m (fst (fst (hy-view-args "workflow/hyperactivity.hypercubical" nil a))) (snd (fst (hy-view-args "workflow/hyperactivity.hypercubical" nil a))) (snd (hy-view-args "workflow/hyperactivity.hypercubical" nil a))
+
+
+
+
+
+-- the workflow's views, kept in the store by lib/views.hypercubical (views/), made again when a file it reads
+-- as code has changed since they were made (views/stamp: the latest change among those files then)
+hy-views-ready : List Word → List Word → Proc W Unit
+hy-views-ready st m = bind (hy-get st "views/stamp") (λ s → bind (h-code-time m "lib/views.hypercubical") (λ now →
+  if h-eq (hy-or nil s) (h-decimal now) then ret {lzero} {W} unit
+  else bind (h-run (cons m (cons "lib/views.hypercubical" nil))) (λ r →
+    if weq r #0 then bind (h-write (list-append st "/views/stamp") (h-decimal now)) (λ b → ret {lzero} {W} unit) else ret {lzero} {W} unit)))
+
+
+
+hy-view : List Word → List Word → List Word → Proc W Unit
+hy-view st m v = bind (hy-views-ready st m) (λ u → bind (hy-get st (list-append "views/" v)) (λ t → h-out (hy-or nil t)))
+
+
+
+hy-show-nodes : List Word → List (List Word) → Proc W Unit
+hy-show-nodes st nil = ret unit
+hy-show-nodes st (cons i r) = bind (hy-get st (list-append "views/show-" (h-hex i))) (λ t →
+  bind (h-out (hy-or (h-line (h-line (list-append i ": no such node"))) t)) (λ u → hy-show-nodes st r))
+
+
+
+hy-views : List Word → List Word → List (List Word) → Proc W Unit
+hy-views st m nil = hy-view st m "tree"
+hy-views st m (cons c rest) = if h-eq c "show" then bind (hy-views-ready st m) (λ u → hy-show-nodes st rest) else hy-view st m c
+
+
+
+-- check: the machine's verdict on the workflow (kept like a write's) and the graph's rules
+hy-verdict-text : List Word → Bool × List (List Word) → List Word
+hy-verdict-text f v = list-append (h-line (list-append f (if fst v then (if h-null (h-concat (snd v)) then ": the machine reads it to the end; nothing fails" else ": these fail:") else ": the machine does not read it to the end")))
+  (h-indented "  " (snd v))
+
+
+
+hy-verdict-ok : Bool × List (List Word) → Bool
+hy-verdict-ok v = andB (fst v) (h-null (h-concat (snd v)))
+
+
+
+-- the names the paper gives as code (paper/names) that no file the machine has read declares
+hy-unbound : Sum Unit (List Word) → List Word → List (List Word) → List (List Word)
+hy-unbound (inl u) n rest = cons (list-append "the paper names " (list-append n " as code; no file the machine has read declares it (hyperactive check FILE reads one)")) rest
+hy-unbound (inr k) n rest = rest
+
+
+
+hy-unresolved : List Word → List (List Word) → Proc W (List (List Word))
+hy-unresolved st nil = ret nil
+hy-unresolved st (cons n r) = bind (hy-get st (list-append "written/" (h-hex n))) (λ k →
+  bind (hy-unresolved st r) (λ rest → ret (hy-unbound k n rest)))
+
+
+
+-- check: the machine's verdict on the workflow, the graph's rules (views/problems), and the names
+-- the paper gives as code that no file the machine has read declares; the exit is 1 when any fails
+hy-check : List Word → List Word → List (List Word) → Proc W Unit
+hy-check st m nil =
+  bind (hy-verdict st m "workflow/hyperactivity.hypercubical") (λ v → bind (h-out (hy-verdict-text "workflow/hyperactivity.hypercubical" v)) (λ u →
+  bind (hy-view st m "check") (λ u2 → bind (hy-paper-ready st m) (λ r →
+  bind (hy-get st "paper/names") (λ pn → bind (hy-unresolved st (h-lines (hy-or nil pn))) (λ un →
+  bind (h-out (h-concat (list-map h-line un))) (λ u3 →
+  bind (hy-get st "views/problems") (λ vp →
+  exit (if andB (andB (hy-verdict-ok v) (weq r #0)) (andB (h-null (h-concat un)) (h-null (hy-or nil vp))) then #0 else #1)))))))))
+hy-check st m (cons f r) = hy-machine-files m true (cons f r)
+
+
+
+-- why NAME, unexplained [FILE ...] (“The Hyperactive Workflow”: every declaration is there for a
+-- reason, a chain to a root of the workflow): a node of the graph is a part of a node with a reason,
+-- or a root; a declaration whose statement says (part of NODE) or (prerequisite to NODE) has NODE's
+-- reason; a name the machine itself names (a string of src/) has the machine as its reason; and what
+-- a declaration with a reason uses has that reason too. The nodes come from the views kept in the
+-- store, the uses from the checker's record (deps/, users/), the statements from the written pieces.
+hy-node-table : List (List Word) → List (List Word × List (List Word))
+hy-node-table nil = nil
+hy-node-table (cons l r) = cons (hy-head (h-split #32 l) , h-tail-lists (h-split #32 l)) (hy-node-table r)
+
+
+
+hy-node-parts : List Word → List (List Word × List (List Word)) → Sum Unit (List (List Word))
+hy-node-parts i nil = inl unit
+hy-node-parts i (cons e r) = if h-eq i (fst e) then inr (snd e) else hy-node-parts i r
+
+
+
+-- a node's chain to a root: part of …, then a root
+hy-up-with : (List Word → List (List Word)) → Sum Unit (List (List Word)) → List (List Word)
+hy-up-with k (inl u) = cons "no reason" nil
+hy-up-with k (inr ps) = cons (list-append "part of " (hy-head ps)) (k (hy-head ps))
+
+
+
+hy-node-chain : Nat → List (List Word) → List (List Word × List (List Word)) → List Word → List (List Word)
+hy-node-chain zero roots t i = cons "(the chain is longer than the graph)" nil
+hy-node-chain (suc f) roots t i = if h-has i roots then cons "a root" nil else hy-up-with (hy-node-chain f roots t) (hy-node-parts i t)
+
+
+
+-- the names the machine names: each run of non-space, non-quote bytes between quotation marks in src/
+-- (a run with a space is no name; the search goes on at the next byte), and a name %%f is f
+hy-space : Word → Bool
+hy-space b = orB (weq b #32) (andB (wlt #8 b) (wlt b #14))
+
+
+
+hy-quoted-run : List Word → List Word → Sum Unit (List Word × List Word)
+hy-quoted-run cur nil = inl unit
+hy-quoted-run cur (cons x r) = if weq x #34 then (if h-null cur then inl unit else inr (h-rev cur nil , r)) else if hy-space x then inl unit else hy-quoted-run (cons x cur) r
+
+
+
+hy-unprefixed : List Word → List Word
+hy-unprefixed n = if h-prefix "%%" n then h-drop "%%" n else n
+
+
+
+hy-c-names-at : (List Word → List (List Word)) → List Word → Sum Unit (List Word × List Word) → List (List Word)
+hy-c-names-at k r (inl u) = k r
+hy-c-names-at k r (inr m) = cons (hy-unprefixed (fst m)) (k (snd m))
+
+
+
+hy-c-names : Nat → List Word → List (List Word)
+hy-c-names zero t = nil
+hy-c-names (suc f) nil = nil
+hy-c-names (suc f) (cons x r) = if weq x #34 then hy-c-names-at (hy-c-names f) r (hy-quoted-run nil r) else hy-c-names f r
+
+
+
+hy-c-files : List (List Word) → List (List Word)
+hy-c-files nil = nil
+hy-c-files (cons f r) = if orB (h-ends ".c" f) (h-ends ".h" f) then cons (list-append "src/" f) (hy-c-files r) else hy-c-files r
+
+
+
+hy-read-all : List (List Word) → Proc W (List (List Word))
+hy-read-all nil = ret nil
+hy-read-all (cons f r) = bind (h-read f) (λ t → bind (hy-read-all r) (λ rest → ret (cons (hy-or nil t) rest)))
+
+
+
+hy-machine-names : Proc W (List (List Word))
+hy-machine-names = bind (h-list "src") (λ fs → bind (hy-read-all (hy-c-files fs)) (λ ts →
+  ret (h-msort (h-concat-lists (list-map (λ t → hy-c-names (list-length t) t) ts)))))
+
+
+
+-- a statement's stated reason: the last (part of NODE) or (prerequisite to NODE) in its comment lines
+hy-word-byte : Word → Bool
+hy-word-byte b = orB (orB (andB (wlt #47 b) (wlt b #58)) (andB (wlt #64 b) (wlt b #91))) (orB (andB (wlt #96 b) (wlt b #123)) (orB (weq b #95) (weq b #45)))
+
+
+
+hy-word-run : List Word → List Word
+hy-word-run nil = nil
+hy-word-run (cons x r) = if hy-word-byte x then cons x (hy-word-run r) else nil
+
+
+
+hy-stated-in : List Word → Sum Unit (List Word × List Word)
+hy-stated-in nil = inl unit
+hy-stated-in (cons x r) =
+  if andB (h-prefix "(part of " (cons x r)) (h-prefix ")" (h-drop (hy-word-run (h-drop "(part of " (cons x r))) (h-drop "(part of " (cons x r))))
+    then (if h-null (hy-word-run (h-drop "(part of " (cons x r))) then hy-stated-in r else inr ("part of" , hy-word-run (h-drop "(part of " (cons x r)))) else
+  if andB (h-prefix "(prerequisite to " (cons x r)) (h-prefix ")" (h-drop (hy-word-run (h-drop "(prerequisite to " (cons x r))) (h-drop "(prerequisite to " (cons x r))))
+    then (if h-null (hy-word-run (h-drop "(prerequisite to " (cons x r))) then hy-stated-in r else inr ("prerequisite to" , hy-word-run (h-drop "(prerequisite to " (cons x r)))) else
+  hy-stated-in r
+
+
+
+hy-comment-lines : List (List Word) → List (List Word)
+hy-comment-lines nil = nil
+hy-comment-lines (cons l r) = if h-prefix "--" (h-trim l) then cons l (hy-comment-lines r) else nil
+
+
+
+hy-or-stated : Sum Unit (List Word × List Word) → Sum Unit (List Word × List Word) → Sum Unit (List Word × List Word)
+hy-or-stated (inr a) b = inr a
+hy-or-stated (inl u) b = b
+
+
+
+hy-stated-last : List (List Word) → Sum Unit (List Word × List Word)
+hy-stated-last nil = inl unit
+hy-stated-last (cons l r) = hy-or-stated (hy-stated-last r) (hy-stated-in l)
+
+
+
+-- a piece's stated reason, read from its text alone; kept beside the piece (<piece>/stated-<key>, the
+-- key this definition has, which covers all it calls), so each piece's text is read for it once, and a
+-- change to how it is read is a new key and never meets an answer kept by the old one
+hy-stated-of : List Word → Sum Unit (List Word × List Word)
+hy-stated-of p = hy-stated-last (hy-comment-lines (h-split #10 p))
+
+
+
+hy-stated-text : Sum Unit (List Word × List Word) → List Word
+hy-stated-text (inl u) = h-line "none"
+hy-stated-text (inr s) = list-append (h-line (fst s)) (h-line (snd s))
+
+
+
+hy-stated-read : List (List Word) → Sum Unit (List Word × List Word)
+hy-stated-read nil = inl unit
+hy-stated-read (cons k nil) = inl unit
+hy-stated-read (cons k (cons n r)) = inr (k , n)
+
+
+
+hy-stated-keep : List Word → List Word → Sum Unit (List Word × List Word) → Proc W (Sum Unit (List Word × List Word))
+hy-stated-keep st path s = bind (h-write (list-append st (cons #47 path)) (hy-stated-text s)) (λ b → ret s)
+
+
+
+hy-stated-kept : List Word → List Word → List Word → Sum Unit (List Word) → Proc W (Sum Unit (List Word × List Word))
+hy-stated-kept st h path (inr c) = ret (hy-stated-read (h-lines c))
+hy-stated-kept st h path (inl u) = bind (hy-get st (list-append h "/text")) (λ t → hy-stated-keep st path (hy-stated-of (hy-or nil t)))
+
+
+
+hy-stated-keyed : List Word → List Word → Sum Unit (List Word) → Proc W (Sum Unit (List Word × List Word))
+hy-stated-keyed st h (inl u) = bind (hy-get st (list-append h "/text")) (λ t → ret (hy-stated-of (hy-or nil t)))
+hy-stated-keyed st h (inr k) = bind (hy-get st (list-append h (list-append "/stated-" (h-take (toNat #12) k)))) (hy-stated-kept st h (list-append h (list-append "/stated-" (h-take (toNat #12) k))))
+
+
+
+hy-stated : List Word → List Word → Proc W (Sum Unit (List Word × List Word))
+hy-stated st name = bind (hy-get st (list-append "written/" (h-hex name))) (λ w →
+  if h-null (hy-or nil w) then ret {lzero} {W} (inl unit)
+  else bind (hy-get st (list-append "bound/" (h-hex "hy-stated-of"))) (hy-stated-keyed st (hy-or nil w)))
+
+
+
+-- what the reasons are read from: the nodes and roots (the views kept), and the machine's names
+hy-reason-data : List Word → List Word → Proc W ((List (List Word × List (List Word)) × List (List Word)) × List (List Word))
+hy-reason-data st m = bind (hy-views-ready st m) (λ u →
+  bind (hy-get st "views/nodes") (λ ns → bind (hy-get st "views/roots") (λ rs → bind hy-machine-names (λ mn →
+  ret ((hy-node-table (h-lines (hy-or nil ns)) , h-lines (hy-or nil rs)) , mn)))))
+
+
+
+hy-is-some-parts : Sum Unit (List (List Word)) → Bool
+hy-is-some-parts (inl u) = false
+hy-is-some-parts (inr p) = true
+
+
+
+hy-is-node : List Word → List (List Word × List (List Word)) → Bool
+hy-is-node i t = hy-is-some-parts (hy-node-parts i t)
+
+
+
+-- a declaration's own reason, as the lines of its chain, or none
+hy-direct-machine : List (List Word) → List Word → Sum Unit (List (List Word))
+hy-direct-machine mn name = if h-has name mn then inr (cons "named by the machine (src/)" nil) else inl unit
+
+
+
+hy-direct-stated : List (List Word × List (List Word)) → List (List Word) → List (List Word) → List Word → Sum Unit (List Word × List Word) → Sum Unit (List (List Word))
+hy-direct-stated t roots mn name (inr s) = if hy-is-node (snd s) t then inr (cons (list-append (fst s) (list-append " " (snd s))) (hy-node-chain (list-length t) roots t (snd s))) else hy-direct-machine mn name
+hy-direct-stated t roots mn name (inl u) = hy-direct-machine mn name
+
+
+
+hy-direct-of : List (List Word × List (List Word)) → List (List Word) → List (List Word) → List Word → Sum Unit (List Word × List Word) → Sum Unit (List (List Word))
+hy-direct-of t roots mn name s =
+  if hy-is-node name t then inr (hy-node-chain (list-length t) roots t name) else hy-direct-stated t roots mn name s
+
+
+
+hy-direct : List Word → List (List Word × List (List Word)) → List (List Word) → List (List Word) → List Word → Proc W (Sum Unit (List (List Word)))
+hy-direct st t roots mn name = bind (hy-stated st name) (λ s → ret (hy-direct-of t roots mn name s))
+
+
+
+-- why: from the name, through what uses it, breadth first, to the first with a reason of its own
+h-minus-unsorted : List (List Word) → List (List Word) → List (List Word)
+h-minus-unsorted nil b = nil
+h-minus-unsorted (cons x r) b = if h-has x b then h-minus-unsorted r b else cons x (h-minus-unsorted r b)
+
+
+
+hy-why-found : List Word → List (List Word × List (List Word)) → List (List Word) → List (List Word) → (List (List Word) → List (List Word × List (List Word)) → Proc W (Sum Unit (List (List Word)))) → List (List Word) → List Word × List (List Word) → List (List Word × List (List Word)) → Sum Unit (List (List Word)) → Proc W (Sum Unit (List (List Word)))
+hy-why-found st t roots mn k seen e r (inr chain) = ret (inr (list-append (snd e) chain))
+hy-why-found st t roots mn k seen e r (inl u) = bind (hy-live-users st (fst e)) (λ us →
+  k (list-append seen (h-minus-unsorted us seen)) (list-append r (list-map (λ x → (x , list-append (snd e) (cons (list-append "used by " x) nil))) (h-minus-unsorted us seen))))
+
+
+
+hy-why-step : List Word → List (List Word × List (List Word)) → List (List Word) → List (List Word) → (List (List Word) → List (List Word × List (List Word)) → Proc W (Sum Unit (List (List Word)))) → List (List Word) → List (List Word × List (List Word)) → Proc W (Sum Unit (List (List Word)))
+hy-why-step st t roots mn k seen nil = ret (inl unit)
+hy-why-step st t roots mn k seen (cons e r) = bind (hy-direct st t roots mn (fst e)) (λ d → hy-why-found st t roots mn k seen e r d)
+
+
+
+hy-why-bfs : Nat → List Word → List (List Word × List (List Word)) → List (List Word) → List (List Word) → List (List Word) → List (List Word × List (List Word)) → Proc W (Sum Unit (List (List Word)))
+hy-why-bfs zero st t roots mn seen q = ret (inl unit)
+hy-why-bfs (suc f) st t roots mn seen q = hy-why-step st t roots mn (hy-why-bfs f st t roots mn) seen q
+
+
+
+hy-or-lines : List (List Word) → Sum Unit (List (List Word)) → List (List Word)
+hy-or-lines d (inl u) = d
+hy-or-lines d (inr x) = x
+
+
+
+hy-why-one : List Word → List (List Word × List (List Word)) → List (List Word) → List (List Word) → List Word → Proc W Unit
+hy-why-one st t roots mn name = bind (hy-why-bfs (toNat #4096) st t roots mn (cons name nil) (cons (name , nil) nil)) (λ r →
+  h-out (list-append (h-line name) (list-append (h-indented "  " (hy-or-lines (cons "no reason" nil) r)) (cons #10 nil))))
+
+
+
+hy-why-all : List Word → List (List Word × List (List Word)) → List (List Word) → List (List Word) → List (List Word) → Proc W Unit
+hy-why-all st t roots mn nil = ret unit
+hy-why-all st t roots mn (cons n r) = bind (hy-why-one st t roots mn n) (λ u → hy-why-all st t roots mn r)
+
+
+
+hy-why : List Word → List Word → List (List Word) → Proc W Unit
+hy-why st m names = bind (hy-reason-data st m) (λ d → hy-why-all st (fst (fst d)) (snd (fst d)) (snd d) names)
+
+
+
+
+
+-- unexplained [FILE ...]: every declaration with no reason, by file, among the files the machine has
+-- read (names-of/ in the store); with files given, those files and those under the paths given.
+-- The declarations with a reason of their own come first; then everything they use, round by round
+hy-files-names : List Word → List (List Word) → Proc W (List (List Word × List (List Word)))
+hy-files-names st nil = ret nil
+hy-files-names st (cons h r) = bind (hy-get st (list-append "names-of/" h)) (λ ns → bind (hy-files-names st r) (λ rest →
+  ret (cons (h-unhex h , h-lines (hy-or nil ns)) rest)))
+
+
+
+hy-files-read : List Word → Proc W (List (List Word × List (List Word)))
+hy-files-read st = bind (h-list (list-append h-index "/names-of")) (λ hs → hy-files-names st (h-msort hs))
+
+
+
+hy-in-scope-of : List (List Word) → List Word → Bool
+hy-in-scope-of nil f = false
+hy-in-scope-of (cons a r) f = orB (h-prefix a f) (hy-in-scope-of r f)
+
+
+
+hy-in-scope : List (List Word) → List Word → Bool
+hy-in-scope nil f = true
+hy-in-scope (cons a r) f = hy-in-scope-of (cons a r) f
+
+
+
+-- the names with a reason of their own stated, and the statements naming something not a node
+hy-reasoned-add : List (List Word × List (List Word)) → List Word → Sum Unit (List Word × List Word) → (List (List Word)) × (List (List Word)) → (List (List Word)) × (List (List Word))
+hy-reasoned-add t n (inr s) acc = if hy-is-node (snd s) t then (cons n (fst acc) , snd acc)
+  else (fst acc , cons (list-append n (list-append ": states a reason, " (list-append (snd s) ", which is not a node of workflow/hyperactivity.hypercubical"))) (snd acc))
+hy-reasoned-add t n (inl u) acc = (if hy-is-node n t then cons n (fst acc) else fst acc , snd acc)
+
+
+
+hy-reasoned : List Word → List (List Word × List (List Word)) → List (List Word) → Proc W ((List (List Word)) × (List (List Word)))
+hy-reasoned st t nil = ret (nil , nil)
+hy-reasoned st t (cons n r) = bind (hy-stated st n) (λ s → bind (hy-reasoned st t r) (λ rest → ret (hy-reasoned-add t n s rest)))
+
+
+
+-- the declarations with a reason of their own, sorted: those whose statement or node gives one, and
+-- those the machine itself names
+hy-seed : (List (List Word)) × (List (List Word)) → List (List Word) → List (List Word × List (List Word)) → List (List Word)
+hy-seed own mn fs = h-union (h-msort (fst own)) (h-inter (h-msort (h-concat-lists (list-map (λ e → snd e) fs))) mn)
+
+
+
+-- what a set of names uses, sorted
+hy-deps-of : List Word → List (List Word) → Proc W (List (List Word))
+hy-deps-of st ns = bind (hy-deps-lines st ns) (λ d → ret (h-msort d))
+
+
+
+hy-closure : Nat → List Word → List (List Word) → List (List Word) → Proc W (List (List Word))
+hy-closure zero st have frontier = ret have
+hy-closure (suc f) st have frontier = bind (hy-deps-of st frontier) (λ d →
+  if h-null (h-concat (h-minus d have)) then ret {lzero} {W} have else hy-closure f st (h-union have (h-minus d have)) (h-minus d have))
+
+
+
+hy-not-in : List (List Word) → List (List Word) → List (List Word)
+hy-not-in have ns = h-minus (h-msort ns) have
+
+
+
+hy-unexplained-file : List (List Word) → List Word × List (List Word) → List Word
+hy-unexplained-file have e = if h-null (h-concat (hy-not-in have (snd e))) then nil
+  else list-append (h-line (list-append (fst e) (list-append "  (" (list-append (h-decimal (fromNat (list-length (hy-not-in have (snd e))))) ")")))) (h-indented "  " (hy-not-in have (snd e)))
+
+
+
+hy-scoped : List (List Word) → List (List Word × List (List Word)) → List (List Word × List (List Word))
+hy-scoped args nil = nil
+hy-scoped args (cons e r) = if hy-in-scope args (fst e) then cons e (hy-scoped args r) else hy-scoped args r
+
+
+
+hy-count-names : List (List Word × List (List Word)) → Nat
+hy-count-names fs = list-length (h-concat-lists (list-map (λ e → snd e) fs))
+
+
+
+hy-count-missing : List (List Word) → List (List Word × List (List Word)) → Nat
+hy-count-missing have fs = list-length (h-concat-lists (list-map (λ e → hy-not-in have (snd e)) fs))
+
+
+
+hy-unexplained-report : List (List Word) → List (List Word) → List (List Word × List (List Word)) → List Word
+hy-unexplained-report warn have fs = list-append (h-concat (list-map h-line warn)) (list-append (h-concat (list-map (hy-unexplained-file have) fs))
+  (h-line (list-append (h-decimal (fromNat (hy-count-missing have fs))) (list-append " of " (list-append (h-decimal (fromNat (hy-count-names fs))) " declarations read have no reason")))))
+
+
+
+hy-unexplained : List Word → List Word → List (List Word) → Proc W Unit
+hy-unexplained st m args = bind (hy-reason-data st m) (λ d → bind (hy-files-read st) (λ fs →
+  bind (hy-reasoned st (fst (fst d)) (h-concat-lists (list-map (λ e → snd e) fs))) (λ own →
+  bind (hy-closure (toNat #256) st (hy-seed own (snd d) fs) (hy-seed own (snd d) fs)) (λ have →
+  h-out (hy-unexplained-report (snd own) have (hy-scoped args fs))))))
+
+
+
+-- same-type: the declarations whose stored type is the same text as another's. Each group is a candidate
+-- for one definition; a merge is made only with the two proven equal, or their type proven a proposition.
+-- Built on what unexplained reads: hy-files-read (every module with its names) and the store's bound and
+-- type entries. A line is the stored type, a tab, the name, the module.
+hy-st-first : List (List Word) → List Word
+hy-st-first nil = nil
+hy-st-first (cons l r) = l
+
+
+
+
+
+hy-st-key : List Word → List Word
+hy-st-key nil = nil
+hy-st-key (cons c r) = if %weq c #9 then nil else cons c (hy-st-key r)
+
+
+
+
+
+hy-st-paren : List Word → Bool
+hy-st-paren nil = false
+hy-st-paren (cons c r) = %weq c #40
+
+
+
+
+
+hy-st-line : List Word → List Word → List Word → Proc W (List Word)
+hy-st-line st path n = bind (hy-get st (list-append "bound/" (h-hex n))) (λ k →
+  bind (hy-get st (list-append (hy-st-first (h-lines (hy-or nil k))) "/type")) (λ t →
+  ret (list-append (hy-st-first (h-lines (hy-or nil t))) (cons #9 (list-append n (list-append "   " path))))))
+
+
+
+
+
+hy-st-names : List (List Word) → List Word → List Word → Proc W (List (List Word))
+hy-st-names nil st path = ret nil
+hy-st-names (cons n r) st path = bind (hy-st-line st path n) (λ l → bind (hy-st-names r st path) (λ rest → ret (cons l rest)))
+
+
+
+
+
+hy-st-files : List (List Word × List (List Word)) → List Word → Proc W (List (List Word))
+hy-st-files nil st = ret nil
+hy-st-files (cons e r) st = bind (hy-st-names (snd e) st (fst e)) (λ a → bind (hy-st-files r st) (λ b → ret (list-append a b)))
+
+
+
+
+
+hy-st-next : List (List Word) → List Word
+hy-st-next nil = cons #0 nil
+hy-st-next (cons l r) = hy-st-key l
+
+
+
+
+
+hy-st-dups : List (List Word) → List Word → List (List Word)
+hy-st-dups nil p = nil
+hy-st-dups (cons l r) p =
+  if hy-st-paren l
+  then (if h-eq (hy-st-key l) p then cons l (hy-st-dups r (hy-st-key l))
+        else if h-eq (hy-st-key l) (hy-st-next r) then cons l (hy-st-dups r (hy-st-key l))
+        else hy-st-dups r (hy-st-key l))
+  else hy-st-dups r (hy-st-key l)
+
+
+
+
+
+hy-same-type : List Word → List Word → List (List Word) → Proc W Unit
+hy-same-type st m args = bind (hy-files-read st) (λ fs → bind (hy-st-files (hy-scoped args fs) st) (λ ls →
+  h-out (list-append (h-concat (list-map h-line (hy-st-dups (h-msort ls) (cons #0 nil))))
+    (h-line (list-append (h-decimal (fromNat (list-length (hy-st-dups (h-msort ls) (cons #0 nil))))) " declarations share a stored type with another")))))
+
+
+
+-- same-text: the pieces of text held by more than one module. A module is the list of its pieces'
+-- hashes, and a hash is its text's, so one hash in two modules is one text in two places: the same
+-- declaration by content, with nothing to prove before one copy is kept. A line is the piece's hash, a
+-- tab, the module.
+hy-sx-some : List Word → Bool
+hy-sx-some nil = false
+hy-sx-some (cons c r) = if %weq c #9 then false else true
+
+
+
+
+
+hy-sx-tag : List Word → List (List Word) → List (List Word)
+hy-sx-tag path nil = nil
+hy-sx-tag path (cons h r) = cons (list-append h (cons #9 path)) (hy-sx-tag path r)
+
+
+
+
+
+hy-sx-module : List Word → Proc W (List (List Word))
+hy-sx-module path = bind (h-read (list-append h-index (list-append "/modules/" (h-hex path)))) (λ k →
+  bind (h-read (list-append h-source (cons #47 (list-append (hy-st-first (h-lines (hy-or nil k))) "/module")))) (λ ps →
+  ret (hy-sx-tag path (h-lines (hy-or nil ps)))))
+
+
+
+
+
+hy-sx-files : List (List Word × List (List Word)) → Proc W (List (List Word))
+hy-sx-files nil = ret nil
+hy-sx-files (cons e r) = bind (hy-sx-module (fst e)) (λ a → bind (hy-sx-files r) (λ b → ret (list-append a b)))
+
+
+
+
+
+hy-sx-dups : List (List Word) → List Word → List (List Word)
+hy-sx-dups nil p = nil
+hy-sx-dups (cons l r) p =
+  if hy-sx-some l
+  then (if h-eq (hy-st-key l) p then cons l (hy-sx-dups r (hy-st-key l))
+        else if h-eq (hy-st-key l) (hy-st-next r) then cons l (hy-sx-dups r (hy-st-key l))
+        else hy-sx-dups r (hy-st-key l))
+  else hy-sx-dups r (hy-st-key l)
+
+
+
+
+
+hy-same-text : List Word → List Word → List (List Word) → Proc W Unit
+hy-same-text st m args = bind (hy-files-read st) (λ fs → bind (hy-sx-files (hy-scoped args fs)) (λ ls →
+  h-out (list-append (h-concat (list-map h-line (hy-sx-dups (h-msort ls) (cons #0 nil))))
+    (h-line (list-append (h-decimal (fromNat (list-length (hy-sx-dups (h-msort ls) (cons #0 nil))))) " places hold a piece of text that another module also holds")))))
+
+
+
+-- held-whole: the modules every piece of whose text, after the head, another module also holds. Such a
+-- module adds no text to the source: it is a copy of part of the other. Identical modules are listed once
+-- (the one whose path sorts later). Built on the same index same-text reads.
+hy-hw-tail : List (List Word) → List (List Word)
+hy-hw-tail nil = nil
+hy-hw-tail (cons h r) = r
+
+
+
+
+
+hy-hw-pieces : List Word → Proc W (List (List Word))
+hy-hw-pieces path = bind (h-read (list-append h-index (list-append "/modules/" (h-hex path)))) (λ k →
+  bind (h-read (list-append h-source (cons #47 (list-append (hy-st-first (h-lines (hy-or nil k))) "/module")))) (λ ps →
+  ret (h-msort (hy-hw-tail (h-lines (hy-or nil ps))))))
+
+
+
+
+
+hy-hw-all : List (List Word × List (List Word)) → Proc W (List (List Word × List (List Word)))
+hy-hw-all nil = ret nil
+hy-hw-all (cons e r) = bind (hy-hw-pieces (fst e)) (λ p → bind (hy-hw-all r) (λ rest → ret (cons (fst e , p) rest)))
+
+
+
+
+
+hy-hw-sub : List (List Word) → List (List Word) → Bool
+hy-hw-sub a b = h-null (h-concat (h-minus a b))
+
+
+
+
+
+hy-hw-before : List Word → List Word → Bool
+hy-hw-before a b = h-eq (hy-st-first (h-msort (cons a (cons b nil)))) a
+
+
+
+
+
+hy-hw-in : List (List Word × List (List Word)) → List Word → List (List Word) → List Word
+hy-hw-in nil path ps = nil
+hy-hw-in (cons e r) path ps =
+  if h-eq (fst e) path then hy-hw-in r path ps
+  else if hy-hw-sub ps (snd e)
+       then (if hy-hw-sub (snd e) ps then (if hy-hw-before (fst e) path then fst e else hy-hw-in r path ps) else fst e)
+       else hy-hw-in r path ps
+
+
+
+
+
+hy-hw-report : List (List Word × List (List Word)) → List (List Word × List (List Word)) → List (List Word)
+hy-hw-report nil all = nil
+hy-hw-report (cons e r) all =
+  if h-null (h-concat (snd e)) then hy-hw-report r all
+  else if h-null (hy-hw-in all (fst e) (snd e)) then hy-hw-report r all
+  else cons (list-append (fst e) (list-append "   is held whole by   " (hy-hw-in all (fst e) (snd e)))) (hy-hw-report r all)
+
+
+
+
+
+hy-held-whole : List Word → List Word → List (List Word) → Proc W Unit
+hy-held-whole st m args = bind (hy-files-read st) (λ fs → bind (hy-hw-all (hy-scoped args fs)) (λ ps →
+  h-out (list-append (h-concat (list-map h-line (hy-hw-report ps ps)))
+    (h-line (list-append (h-decimal (fromNat (list-length (hy-hw-report ps ps)))) " modules are held whole by another")))))
+
+
+
+
+
+-- every: every file checked, by giving the machine each file no file imports (lib/, experiments/,
+-- workflow/), loaded alone with its imports and without performing what acts on the world (--read);
+-- a file another imports is checked in that file's run. A failure is a file's own when its position
+-- is in that file. The imports are the reader's own (the machine's --imports).
+hy-every-file : List (List Word) → List (List Word)
+hy-every-file nil = nil
+hy-every-file (cons p r) = if andB (hy-module-path p) (orB (h-prefix "lib/" p) (orB (h-prefix "experiments/" p) (h-prefix "workflow/" p)))
+  then cons p (hy-every-file r) else hy-every-file r
+
+
+
+hy-every-files : Proc W (List (List Word))
+hy-every-files = bind h-source-paths (λ ps → ret (h-msort (hy-every-file ps)))
+
+
+
+hy-own-fails : List Word → List (List Word) → List (List Word)
+hy-own-fails cwd nil = nil
+hy-own-fails cwd (cons l r) = if h-prefix "   in: " l then cons (h-drop (list-append cwd "/") (h-drop "   in: " l)) (hy-own-fails cwd r) else hy-own-fails cwd r
+
+
+
+h-tail-colon : List Word → List Word
+h-tail-colon nil = nil
+h-tail-colon (cons x r) = if weq x #58 then r else h-tail-colon r
+
+
+
+hy-file-of : List Word → List Word
+hy-file-of pos = h-rev (h-tail-colon (h-rev pos nil)) nil
+
+
+
+hy-fatal : List Word → List (List Word) → List Word
+hy-fatal abs nil = nil
+hy-fatal abs (cons l r) = if orB (h-prefix abs l) (h-prefix "error" l) then l else hy-fatal abs r
+
+
+
+hy-fatal-note : List Word → List Word
+hy-fatal-note t = if h-null t then nil else list-append "  (" (list-append (h-take (toNat #100) t) ")")
+
+
+
+hy-every-line : List Word → List Word → List (List Word) → List Word
+hy-every-line cwd f out = h-line (list-append f (list-append ": " (list-append (h-take (toNat #60) (hy-last (h-nonempty out)))
+  (hy-fatal-note (hy-fatal (list-append cwd (cons #47 f)) out)))))
+
+
+
+hy-every-run : List Word → List Word → List (List Word) → Proc W (List (List Word))
+hy-every-run m cwd nil = ret nil
+hy-every-run m cwd (cons f r) = bind (h-capture (cons m (cons "--read" (cons f nil)))) (λ c →
+  bind (h-out (hy-every-line cwd f (h-lines (snd c)))) (λ u →
+  bind (hy-every-run m cwd r) (λ rest → ret (list-append (hy-own-fails cwd (h-lines (snd c))) rest))))
+
+
+
+v-filter-pos : List Word → List (List Word) → List (List Word)
+v-filter-pos g nil = nil
+v-filter-pos g (cons p r) = if h-eq g (hy-file-of p) then cons p (v-filter-pos g r) else v-filter-pos g r
+
+
+
+hy-count-line : List Word → List (List Word) → List Word
+hy-count-line g ps = if h-null (h-concat ps) then nil else h-line (list-append g (list-append ": " (list-append (h-decimal (fromNat (list-length ps))) " failing")))
+
+
+
+hy-count-by : List (List Word) → List (List Word) → List Word
+hy-count-by files pos = h-concat (list-map (λ g → hy-count-line g (h-dedupe (v-filter-pos g pos))) files)
+
+
+
+hy-every : List Word → Proc W Unit
+hy-every m = bind hy-every-files (λ fs → bind (h-capture (cons m (cons "--imports" fs))) (λ im → bind h-cwd (λ cwd →
+  bind (hy-every-run m cwd (h-minus fs (h-msort (h-imported (h-lines (snd im)))))) (λ pos →
+  h-out (list-append (cons #10 nil) (list-append (hy-count-by fs pos)
+    (h-line (list-append (h-decimal (fromNat (list-length (h-minus fs (h-msort (h-imported (h-lines (snd im)))))))) (list-append " files no file imports, checked; "
+      (list-append (h-decimal (fromNat (list-length (h-nonempty (list-map (λ g → hy-count-line g (h-dedupe (v-filter-pos g pos))) fs))))) " files with failures of their own"))))))))))
+
+
+
+-- unimported: the modules no module imports, as every finds them (the machine's own reading of imports).
+hy-unimported-list : List Word → Proc W (List (List Word))
+hy-unimported-list m = bind hy-every-files (λ fs → bind (h-capture (cons m (cons "--imports" fs))) (λ im →
+  ret (h-msort (h-minus fs (h-msort (h-imported (h-lines (snd im))))))))
+
+
+
+
+
+hy-unimported : List Word → Proc W Unit
+hy-unimported m = bind (hy-unimported-list m) (λ us →
+  h-out (list-append (h-concat (list-map h-line us))
+    (h-line (list-append (h-decimal (fromNat (list-length us))) " modules no module imports"))))
+
+
+
+
+
+-- foldable: the modules held whole by another that no module imports. Each adds no text and nothing
+-- reaches it by import. A module a command names by its path is not seen by this and must be excluded
+-- before a fold.
+hy-hw-paths : List (List Word × List (List Word)) → List (List Word × List (List Word)) → List (List Word)
+hy-hw-paths nil all = nil
+hy-hw-paths (cons e r) all =
+  if h-null (h-concat (snd e)) then hy-hw-paths r all
+  else if h-null (hy-hw-in all (fst e) (snd e)) then hy-hw-paths r all
+  else cons (fst e) (hy-hw-paths r all)
+
+
+
+
+
+hy-foldable : List Word → List Word → List (List Word) → Proc W Unit
+hy-foldable st m args = bind (hy-files-read st) (λ fs → bind (hy-hw-all (hy-scoped args fs)) (λ ps →
+  bind (hy-unimported-list m) (λ us →
+  h-out (list-append (h-concat (list-map h-line (h-inter (h-msort (hy-hw-paths ps ps)) us)))
+    (h-line (list-append (h-decimal (fromNat (list-length (h-inter (h-msort (hy-hw-paths ps ps)) us)))) " modules are held whole by another and imported by none"))))))
+
+
+
+-- fold-safe: the foldable modules whose path no other module's text holds and the Makefile does not
+-- hold. A command reaches a module by writing its path, so a path written nowhere is reached by nothing.
+-- Each module's text is read once and searched for every candidate.
+hy-nm-hits : List Word → List Word → List (List Word) → List (List Word)
+hy-nm-hits q t nil = nil
+hy-nm-hits q t (cons p r) =
+  if h-eq p q then hy-nm-hits q t r
+  else if h-infix p t then cons p (hy-nm-hits q t r) else hy-nm-hits q t r
+
+
+
+
+
+hy-nm-all : List (List Word) → List (List Word) → Proc W (List (List Word))
+hy-nm-all nil cs = ret nil
+hy-nm-all (cons q r) cs = bind (h-source-text q) (λ t → bind (hy-nm-all r cs) (λ rest →
+  ret (list-append (hy-nm-hits q (hy-or nil t) cs) rest)))
+
+
+
+
+
+hy-fold-safe-list : List Word → List Word → List (List Word) → Proc W (List (List Word))
+hy-fold-safe-list st m args = bind (hy-files-read st) (λ fs → bind (hy-hw-all (hy-scoped args fs)) (λ ps →
+  bind (hy-unimported-list m) (λ us → bind hy-every-files (λ all → bind (h-read "Makefile") (λ mk →
+  bind (hy-nm-all all (h-inter (h-msort (hy-hw-paths ps ps)) us)) (λ named →
+  ret (h-minus (h-inter (h-msort (hy-hw-paths ps ps)) us)
+        (h-msort (list-append (hy-nm-hits "Makefile" (hy-or nil mk) (h-inter (h-msort (hy-hw-paths ps ps)) us)) named)))))))))
+
+
+
+
+
+hy-fold-safe : List Word → List Word → List (List Word) → Proc W Unit
+hy-fold-safe st m args = bind (hy-fold-safe-list st m args) (λ ks →
+  h-out (list-append (h-concat (list-map h-line ks))
+    (h-line (list-append (h-decimal (fromNat (list-length ks))) " modules are held whole by another, imported by none, and named by no module's text or the Makefile"))))
+
+
+
+
+
+
+-- the further actions of the work: why, unexplained, view, every, server and brunerie (above), the
+-- machine itself (repl, library), etym (lib/etym.cub) and chat (lib/chat.cub)
+hy-runs : List (List Word) → Proc W Unit
+hy-runs a = bind (h-run a) (λ r → ret unit)
+
+
+
+-- factor [NAME1 NAME2 ...]: pool-wide univalent structural equivalence & canonical motif census,
+-- or live kernel Code-level multi-round hierarchical DAG anti-unification (pool-hyperfactor) on named defs
+hy-is-hex64 : List Word → Bool
+hy-is-hex64 s = weq (fromNat (list-length s)) #64
+
+hy-scan-store-links : List (List Word) → Proc W ((List (List Word)) × (List (List Word)))
+hy-scan-store-links nil = ret (nil , nil)
+hy-scan-store-links (cons k r) =
+  if h-not (hy-is-hex64 k) then hy-scan-store-links r
+  else bind (h-read (list-append "store/" (list-append k "/equiv"))) (λ eqv →
+       bind (h-read (list-append "store/" (list-append k "/motifs"))) (λ mot →
+       bind (hy-scan-store-links r) (λ rest →
+       let eqs = case eqv of
+                   inl _ → fst rest
+                   inr t → cons (list-append "  " (list-append (h-take (toNat #12) k) (list-append "  ua≡  " (h-before (cons #10 nil) t)))) (fst rest)
+           mts = case mot of
+                   inl _ → snd rest
+                   inr m → cons (list-append "  " (list-append (h-take (toNat #12) k) (list-append "  motif≡  " (h-before (cons #10 nil) m)))) (snd rest)
+       in ret {lzero} {W} (eqs , mts))))
+
+hy-def-sources : List (List Word) → List Word
+hy-def-sources nil = "nil"
+hy-def-sources (cons n r) = list-append "(cons (def-source " (list-append n (list-append ") " (list-append (hy-def-sources r) ")")))
+
+hy-factor-probe : List (List Word) → List Word
+hy-factor-probe ns =
+  h-concat (list-map h-line (
+    cons (list-append "import " (h-quote "../lib/host.hypercubical")) (
+    cons (list-append "import " (h-quote "../lib/rules.hypercubical")) (
+    cons "hf-probe-in : List Code" (
+    cons (list-append "hf-probe-in = " (hy-def-sources ns)) (
+    cons "hf-probe-out : List (Nat × Code) × List Code" (
+    cons "hf-probe-out = pool-hyperfactor (toNat #8) hf-probe-in" (
+    cons "hf-probe-msg : List Word" (
+    cons (h-concat (cons "hf-probe-msg = h-line (list-append " (cons (h-quote "pool-hyperfactor (") (cons " (list-append (h-decimal (fromNat (list-length hf-probe-in))) (list-append " (cons (h-quote " defs): ") (cons " (list-append (h-decimal (fromNat (pool-code-size hf-probe-in))) (list-append " (cons (h-quote " Code nodes -> ") (cons " (list-append (h-decimal (fromNat (pool-dag-size hf-probe-out))) (list-append " (cons (h-quote " DAG nodes, ") (cons " (list-append (h-decimal (fromNat (list-length (fst hf-probe-out)))) " (cons (h-quote " nameless lemmas extracted") (cons ")))))))))))" nil)))))))))))) (
+    cons (hy-program "h-out hf-probe-msg") nil))))))))))
+
+hy-factor : List Word → List Word → List (List Word) → Proc W Unit
+hy-factor st m (cons n rest) =
+  bind (hy-probe m (hy-factor-probe (cons n rest))) (λ r →
+  if weq (fst r) #0 then hy-view-show r else h-fail (hy-shown (h-lines (snd r))))
+hy-factor st m nil =
+  bind (h-list "store") (λ sks →
+  bind (h-list (list-append st "/iso")) (λ isos →
+  bind (h-list (list-append st "/motifs")) (λ mots →
+  bind (hy-scan-store-links sks) (λ links →
+  let nObj = list-length (h-dedupe sks)
+      eqs  = fst links
+      mts  = snd links
+  in h-out (h-concat (
+    cons (h-line (list-append "pool objects (store/): " (h-decimal (fromNat nObj)))) (
+    cons (h-line (list-append "indexed data signatures: " (h-decimal (fromNat (list-length isos))))) (
+    cons (h-line (list-append "synthesized ua bridges: " (h-decimal (fromNat (list-length eqs))))) (
+    cons (h-concat (list-map h-line eqs)) (
+    cons (h-line (list-append "indexed subterm motifs: " (h-decimal (fromNat (list-length mots))))) (
+    cons (h-line (list-append "cross-object motif links: " (h-decimal (fromNat (list-length mts))))) (
+    cons (h-concat (list-map h-line (h-take-n (toNat #20) mts))) (
+    cons (h-line "run `hyperactive factor NAME1 NAME2 ...` for kernel Code-level DAG anti-unification") nil)))))))))))))
+
+
+
+hy-bridge : List Word → List Word → List Word → List (List Word) → Proc W Unit
+hy-bridge st m c rest =
+  if h-eq c "factor" then hy-factor st m rest else
+  if h-eq c "etym" then hy-runs (cons m (cons "lib/etym.hypercubical" rest)) else
+  if h-eq c "chat" then hy-runs (cons m (cons "lib/chat.hypercubical" rest)) else
+  if h-eq c "view" then hy-view-term m rest else
+  if h-eq c "why" then hy-why st m rest else
+  if h-eq c "unexplained" then hy-unexplained st m rest else
+  if h-eq c "same-type" then hy-same-type st m rest else
+  if h-eq c "same-text" then hy-same-text st m rest else
+  if h-eq c "held-whole" then hy-held-whole st m rest else
+  if h-eq c "unimported" then hy-unimported m else
+  if h-eq c "foldable" then hy-foldable st m rest else
+  if h-eq c "fold-safe" then hy-fold-safe st m rest else
+  if h-eq c "every" then hy-every m else
+  if h-eq c "server" then hy-runs (cons m (cons "lib/server.hypercubical" rest)) else
+  if h-eq c "peers" then hy-peers rest else
+  if h-eq c "peer-pull" then hy-peer-pull st m rest else
+  if h-eq c "delegate" then hy-delegate m rest else
+  if h-eq c "dht-join" then hy-dht-join st rest else
+  if h-eq c "dht-provide" then hy-dht-provide st rest else
+  if h-eq c "dht-find" then hy-dht-find st rest else
+  if h-eq c "brunerie" then hy-brunerie m else
+  if h-eq c "repl" then hy-runs (cons m (cons "lib/core.hypercubical" (list-append rest (cons "--serve" nil)))) else
+  if h-eq c "library" then hy-runs (cons m (cons "lib/library.hypercubical" nil)) else ret unit
+
+
+
+hy-bridge-words : List (List Word)
+hy-bridge-words = cons "factor" (cons "etym" (cons "chat" (cons "why" (cons "unexplained" (cons "same-type" (cons "same-text" (cons "held-whole" (cons "unimported" (cons "foldable" (cons "fold-safe" (cons "view" (cons "every" (cons "server" (cons "peers" (cons "peer-pull" (cons "delegate" (cons "dht-join" (cons "dht-provide" (cons "dht-find" (cons "brunerie" (cons "repl" (cons "library" nil))))))))))))))))))))))
+
+
+
+
+
+-- The session (2026-11-15, Avik: "the interactive loop of understanding/contributing"; "the cli may
+-- simply deliver exactly the onboarding contents in a sequence of turns"): one loop whose state is a
+-- value, the actions taken so far (session/log in the store, one per line) folded from the first
+-- state. Each call of `hyperactive ACTION` takes one action, if it is valid where the session is,
+-- and shows the state it reaches with the actions valid there; `hyperactive` alone shows where the
+-- session is. A session begins with the walk of the onboarding, where next and prev are the only
+-- actions; then the work: the graph's views, reading code by name, and the rest; `done` declares
+-- the work done and ends the session. A session not ended by `done` stays where it was.
+-- Decomposing a document by pulls (Avik, 2026-11-16, “Avik's words, verbatim”; 10:06–11:06 UTC; lib/selection.cub):
+-- `decompose FILE` shows the document (a file, or the source of a decomposed one); `pull FROM TO
+-- [FROM TO …]` names the lines of one piece; the piece is shown with its surroundings and asserted
+-- `self-contained` or given `re-expressed` (on standard input); `finish` writes each piece as a
+-- definition, the selection of the source's lines or its re-expression. Pulls are independent: none
+-- claims the lines it takes, and any may overlap another.
+data HyState = hy-walking (k : Nat) | hy-working | hy-reading (file : List Word)
+             | hy-decomposing (file : List Word) (lines : List Word)
+
+
+
+
+
+hy-pred : Nat → Nat
+hy-pred zero = suc zero
+hy-pred (suc zero) = suc zero
+hy-pred (suc (suc k)) = suc k
+
+
+
+hy-work-words : List (List Word)
+hy-work-words = cons "show" (cons "tree" (cons "order" (cons "open" (cons "def" (cons "write" (cons "remove" (cons "history" (cons "paper" (cons "check" (cons "done" (cons "root" (cons "take" (cons "send" (cons "apply" nil))))))))))))))
+
+
+
+hy-rest : List (List Word) → List (List Word)
+hy-rest nil = nil
+hy-rest (cons w r) = r
+
+
+
+hy-second : List (List Word) → List Word
+hy-second a = hy-head (hy-rest a)
+
+
+
+-- a range of lines: from the first line on, not ending before it begins
+-- the lines of a pull: ranges FROM TO, in order, each beginning after the last ended (a subsequence of
+-- the document's lines)
+hy-ranges-ok-after : Word → List Word → Bool
+hy-ranges-ok-after prev nil = true
+hy-ranges-ok-after prev (cons x nil) = false
+hy-ranges-ok-after prev (cons x (cons y r)) = if wlt prev x then (if wlt y x then false else hy-ranges-ok-after y r) else false
+
+
+
+hy-ranges-ok : List Word → Bool
+hy-ranges-ok nil = false
+hy-ranges-ok ws = hy-ranges-ok-after #0 ws
+
+
+
+
+
+-- an action applied: the state it reaches, or none when it is not valid there. The walk is open, never a
+-- gate (Avik, 2026-11-17 09:18 UTC: "I'm sick of hearing of onboarding preventing shit just remove
+-- onboarding or something then for now"): a working command during the walk leaves it for work.
+hy-step : Nat → HyState → List (List Word) → Sum Unit HyState
+hy-step count (hy-walking k) a =
+  if h-eq (hy-head a) "next" then inr (if hy-same-nat k count then hy-working else hy-walking (suc k)) else
+  if h-eq (hy-head a) "prev" then inr (hy-walking (hy-pred k)) else
+  if orB (h-has (hy-head a) hy-work-words) (h-has (hy-head a) hy-bridge-words) then inr hy-working else inl unit
+hy-step count hy-working a =
+  if h-eq (hy-head a) "decompose" then (if h-null (hy-second a) then inl unit else inr (hy-reading (hy-second a))) else
+  if orB (h-has (hy-head a) hy-work-words) (h-has (hy-head a) hy-bridge-words) then inr hy-working else inl unit
+hy-step count (hy-reading f) a =
+  if h-eq (hy-head a) "pull"
+  then (if hy-ranges-ok (list-map h-number (hy-rest a)) then inr (hy-decomposing f (list-map h-number (hy-rest a))) else inl unit) else
+  if h-eq (hy-head a) "finish" then inr hy-working else
+  if h-eq (hy-head a) "part" then inr (hy-reading f) else inl unit
+hy-step count (hy-decomposing f xy) a =
+  if h-has (hy-head a) (cons "self-contained" (cons "re-expressed" nil)) then inr (hy-reading f) else
+  if h-eq (hy-head a) "part" then inr (hy-decomposing f xy) else inl unit
+
+
+
+hy-or-state : HyState → Sum Unit HyState → HyState
+hy-or-state s (inl u) = s
+hy-or-state s (inr t) = t
+
+
+
+-- the state the log reaches
+hy-fold : Nat → HyState → List (List Word) → HyState
+hy-fold count s nil = s
+hy-fold count s (cons l r) = hy-fold count (hy-or-state s (hy-step count s (h-split #32 l))) r
+
+
+
+
+
+-- the walk's chunks, kept in the store by lib/walk.cub; made again when anything has changed since
+hy-machine : List (List Word) → List Word
+hy-machine nil = "build/cubical"
+hy-machine (cons m r) = m
+
+
+
+-- the walk's chunks, kept in the store by lib/walk.hypercubical (walk/), cut again when a file the onboarding
+-- depends on has changed since they were cut (walk/stamp, as views/stamp)
+hy-walk-fresh : List Word → List Word → Proc W Unit
+hy-walk-fresh st m =
+  bind (hy-get st "walk/stamp") (λ s → bind (h-code-time m "lib/walk.hypercubical") (λ now →
+  if h-eq (hy-or nil s) (h-decimal now) then ret {lzero} {W} unit
+  else bind (h-out (h-line "(the onboarding has changed since it was last cut into chunks: cutting it again)")) (λ u →
+    bind (h-run (cons m (cons "lib/walk.hypercubical" nil))) (λ r →
+    if weq r #0 then bind (h-write (list-append st "/walk/stamp") (h-decimal now)) (λ b → ret {lzero} {W} unit) else ret {lzero} {W} unit))))
+
+
+
+hy-count : List Word → Proc W Nat
+hy-count st = bind (hy-get st "walk/count") (λ c → ret (toNat (h-number (hy-or "0" c))))
+
+
+
+
+
+-- what a state shows
+hy-arrival : List Word
+hy-arrival = h-line (h-line "You are entering hyperactivity. This walk is how an agent comes to hold Avik's complete insight: every agent reads the same material, whole, in the same order, one chunk at a time. Read every word of a chunk before `hyperactive next`; nothing else can be done until the walk is done.")
+
+
+
+hy-rule : List Word
+hy-rule = "────────"
+
+
+
+hy-first-line : List Word → List Word
+hy-first-line nil = nil
+hy-first-line (cons x r) = if weq x #10 then nil else cons x (hy-first-line r)
+
+
+
+hy-after-first-line : List Word → List Word
+hy-after-first-line nil = nil
+hy-after-first-line (cons x r) = if weq x #10 then r else hy-after-first-line r
+
+
+
+hy-of : Nat → Nat → List Word
+hy-of k n = list-append (h-decimal (fromNat k)) (list-append " of " (h-decimal (fromNat n)))
+
+
+
+hy-show-chunk : Nat → Nat → Sum Unit (List Word) → Proc W Unit
+hy-show-chunk k n (inl u) = h-fail "hyperactive: the walk's chunk is missing from the store"
+hy-show-chunk k n (inr t) =
+  h-out (list-append (if hy-same-nat k (suc zero) then hy-arrival else nil)
+    (list-append (h-line (h-line (list-append "── " (list-append (hy-of k n) (list-append ": " (list-append (hy-first-line t) (list-append " " hy-rule)))))))
+    (list-append (h-line (hy-after-first-line t))
+    (h-line (list-append hy-rule (list-append " end of " (list-append (hy-of k n)
+      (if hy-same-nat k n then ". The walk is done: hyperactive next begins the work." else ". Next: hyperactive next   (back: hyperactive prev)"))))))))
+
+
+
+hy-work-usage : List Word
+hy-work-usage = list-append (h-line "Actions:")
+  (list-append (h-line "  hyperactive show NODE ...   a node of the workflow: its statement, what it serves, what serves it")
+  (list-append (h-line "  hyperactive tree            the workflow from its roots")
+  (list-append (h-line "  hyperactive order           the whole order of work")
+  (list-append (h-line "  hyperactive open            what is in progress and what can start now")
+  (list-append (h-line "  hyperactive def NAME ...    a definition: its statement, its text, its key, and what uses it; a module's path names its head, the comment and imports before its first definition; a document's path, the document whole (all of them in the source, store/)")
+  (list-append (h-line "  hyperactive write NAME [after OTHER] < DECLARATION   the declaration takes the place of NAME's (or, new, follows OTHER's); kept only if all it touches checks; write PATH replaces a module's head, makes a new module (checked), or replaces a document whole; write NAME after PATH follows a module's head")
+  (list-append (h-line "  hyperactive write NAME NAME ... < DECLARATIONS   several definitions changed as one change, their declarations in the order named; all kept or all put back")
+  (list-append (h-line "  hyperactive remove NAME      a definition nothing uses taken away, checked the same way; remove PATH takes a module or a document out of the source")
+  (list-append (h-line "  hyperactive dead ENTRY REASON   an entry of the view stated dead, for its reason: alternatives at a path (two entries live there, named when it is read) end when all but one are")
+  (list-append (h-line "  hyperactive history [NAME]  every binding of the name to a key, in the order bound")
+  (list-append (h-line "  hyperactive paper [SECTION]  the paper as it reads, whole or one section (4.4, A.1, Part II)")
+  (list-append (h-line "  hyperactive check [FILE ...] the machine's verdict on the workflow and the graph's rules, or on each file given")
+  (list-append (h-line "  hyperactive decompose FILE   a document decomposed by pulls: a piece of its lines at a time (lib/selection.hypercubical)")
+  (list-append (h-line "  hyperactive why NAME ... | unexplained [FILE ...] | view [in FILE] [type T] TERM | every | server [PORT] | brunerie | repl | library | etym TEXT | chat TEXT")
+  (h-line "  hyperactive done            the work is done: the session ends")))))))))))))))
+
+
+
+-- lines without the empty ones at their end
+hy-dt-at : List Word → List (List Word) → List (List Word)
+hy-dt-at l nil = if h-null l then nil else cons l nil
+hy-dt-at l (cons k r) = cons l (cons k r)
+
+
+
+hy-dt : List (List Word) → List (List Word)
+hy-dt nil = nil
+hy-dt (cons l r) = hy-dt-at l (hy-dt r)
+
+
+
+hy-prev : Nat → Nat
+hy-prev zero = zero
+hy-prev (suc k) = k
+
+
+
+-- decomposition: the document's lines (its last newline closes the last line), a part's lines
+hy-init : List (List Word) → List (List Word)
+hy-init nil = nil
+hy-init (cons l nil) = nil
+hy-init (cons l (cons k r)) = cons l (hy-init (cons k r))
+
+
+
+hy-doc-lines : Sum Unit (List Word) → List (List Word)
+hy-doc-lines (inl u) = nil
+hy-doc-lines (inr t) = hy-init (h-split #10 t)
+
+
+
+hy-take-lines : Nat → List (List Word) → List (List Word)
+hy-take-lines zero ls = nil
+hy-take-lines (suc k) nil = nil
+hy-take-lines (suc k) (cons l r) = cons l (hy-take-lines k r)
+
+
+
+-- lines a to b, counted from 1, b included
+hy-lines-in : Word → Word → List (List Word) → List (List Word)
+hy-lines-in a b ls = hy-take-lines (toNat (wsub (wadd b #1) a)) (h-drop-n (toNat (wsub a #1)) ls)
+
+
+
+hy-lines-from : Word → List (List Word) → List (List Word)
+hy-lines-from a ls = h-drop-n (toNat (wsub a #1)) ls
+
+
+
+hy-marked : List Word → List (List Word) → List Word
+hy-marked mk ls = h-concat (list-map (λ l → h-line (list-append mk l)) ls)
+
+
+
+hy-numbered : Word → List (List Word) → List Word
+hy-numbered k nil = nil
+hy-numbered k (cons l r) = list-append (h-line (list-append (h-decimal k) (list-append " " l))) (hy-numbered (wadd k #1) r)
+
+
+
+-- the pulls made in this decomposition: one line each, "FROM TO … P", P w (as written) or r (re-expressed)
+hy-pulls-path : List Word → List Word
+hy-pulls-path st = list-append st "/session/decompose-pulls"
+
+
+
+hy-self-path : List Word → Nat → List Word → List Word
+hy-self-path st i part = list-append st (list-append "/session/decompose-" (list-append (h-decimal (fromNat i)) (list-append "-" part)))
+
+
+
+hy-pulls : Sum Unit (List Word) → List (List (List Word))
+hy-pulls (inl u) = nil
+hy-pulls (inr t) = list-map (h-split #32) (h-lines t)
+
+
+
+hy-judge : List Word → List Word
+hy-judge what = list-append (h-line (list-append "Read the " (list-append what " alone, as a reader who has seen nothing else of the document. Ensure it is self-contained with any relevant context included: every reference to another part of the document (this, above, these, a label, a section number) resolved to what it refers to, and any context it leans on stated. Add nothing else and drop nothing. Avik's words stay verbatim: give their context around a quotation, never inside it.")))
+  (list-append (h-line "  It is self-contained and makes sense:   hyperactive self-contained")
+  (h-line (list-append "  It is not; this is its re-expression:   hyperactive re-expressed < THE " (list-append what " RE-EXPRESSED"))))
+
+
+
+hy-show-reading : List Word → List (List Word) → Nat → Proc W Unit
+hy-show-reading f ls n = h-out (list-append (h-line (list-append "── " (list-append f (list-append ", to decompose " hy-rule))))
+  (list-append (hy-numbered #1 ls)
+  (list-append (h-line (list-append (h-decimal (fromNat n)) " pulls made in this decomposition."))
+  (list-append (h-line "Read all of it. A pull takes one piece, where the meaning makes a unit, one assertion with its evidence. Pulls are independent: none claims the lines it takes, and a piece may overlap any other.")
+  (list-append (h-line "  hyperactive pull FROM TO [FROM TO …]   the lines of the piece: one range, or a subsequence of ranges in order")
+  (h-line "  hyperactive finish            the pulls made written beside the document"))))))
+
+
+
+hy-nth-w : Nat → List Word → Word
+hy-nth-w k nil = #0
+hy-nth-w zero (cons x r) = x
+hy-nth-w (suc k) (cons x r) = hy-nth-w k r
+
+
+
+-- a judgement recorded: the piece's re-expression kept, and the pull added to the pulls made
+hy-judged : List Word → List (List Word) → List Word → Proc W Unit
+hy-judged st a xy = bind (h-read (hy-pulls-path st)) (λ pt →
+  bind (if h-eq (hy-head a) "re-expressed"
+    then bind h-stdin (λ e → bind (h-write (hy-self-path st (list-length (hy-pulls pt)) "piece") e) (λ b → ret unit))
+    else h-unlink (hy-self-path st (list-length (hy-pulls pt)) "piece")) (λ u →
+  bind (h-write (hy-pulls-path st) (list-append (hy-or nil pt) (h-line (list-append (hy-sep " " (list-map h-decimal xy))
+    (list-append " " (if h-eq (hy-head a) "re-expressed" then "r" else "w")))))) (λ b → ret unit)))
+
+
+
+-- whether line k lies in the ranges of a pull
+hy-in : Word → List Word → Bool
+hy-in k nil = false
+hy-in k (cons x nil) = false
+hy-in k (cons x (cons y r)) = if (if wlt k x then false else h-not (wlt y k)) then true else hy-in k r
+
+
+
+hy-last-w : List Word → Word
+hy-last-w nil = #0
+hy-last-w (cons x nil) = x
+hy-last-w (cons x (cons y r)) = hy-last-w (cons y r)
+
+
+
+-- the lines from the pull's first to its last, those of the piece marked >, those between them ·
+hy-piece-lines : Word → Word → List Word → List (List Word) → List Word
+hy-piece-lines k e xy nil = nil
+hy-piece-lines k e xy (cons l r) = if wlt e k then nil else
+  list-append (h-line (list-append (if hy-in k xy then "  > " else "  · ") l)) (hy-piece-lines (wadd k #1) e xy r)
+
+
+
+hy-ranges-text : List Word → List Word
+hy-ranges-text nil = nil
+hy-ranges-text (cons x nil) = nil
+hy-ranges-text (cons x (cons y r)) = list-append (h-decimal x) (list-append "–" (list-append (h-decimal y) (if h-null (hy-ranges-text r) then nil else list-append ", " (hy-ranges-text r))))
+
+
+
+hy-show-pull : List Word → List Word → List (List Word) → Proc W Unit
+hy-show-pull f xy ls = h-out (list-append (h-line (list-append "── the piece, lines " (list-append (hy-ranges-text xy) (list-append " of " (list-append f (list-append " " hy-rule))))))
+    (list-append (if wlt #1 (hy-nth-w zero xy) then list-append (h-line "Before it in the original:") (hy-marked "  | " (hy-lines-in (if wlt #4 (hy-nth-w zero xy) then wsub (hy-nth-w zero xy) #3 else #1) (wsub (hy-nth-w zero xy) #1) ls)) else nil)
+    (list-append (list-append (h-line "THE PIECE (> its lines; · lines between them that are not in it):") (hy-piece-lines (hy-nth-w zero xy) (hy-last-w xy) xy (hy-lines-from (hy-nth-w zero xy) ls)))
+    (list-append (list-append (h-line "After it in the original:") (hy-marked "  | " (hy-lines-in (wadd (hy-last-w xy) #1) (wadd (hy-last-w xy) #3) ls)))
+    (hy-judge "PIECE")))))
+
+
+
+hy-q : List Word → List Word
+hy-q s = cons #34 (list-append s (cons #34 nil))
+
+
+
+hy-cons-list : List (List Word) → List Word
+hy-cons-list nil = "nil"
+hy-cons-list (cons x r) = list-append "(cons " (list-append x (list-append " " (list-append (hy-cons-list r) ")")))
+
+
+
+hy-has-byte : Word → List Word → Bool
+hy-has-byte b nil = false
+hy-has-byte b (cons x r) = if weq x b then true else hy-has-byte b r
+
+
+
+hy-lit : List Word → List Word
+hy-lit l = if hy-has-byte #34 l then list-append "(quoted " (list-append (hy-cons-list (list-map hy-q (h-split #34 l))) ")") else hy-q l
+
+
+
+hy-lines-term : List (List Word) → List Word
+hy-lines-term ls = hy-cons-list (list-map hy-lit ls)
+
+
+
+-- the line ranges FROM TO (counted from 1, TO included) as positions from ≤ i < to of the lines
+hy-line-ranges : List (List Word) → List (Nat × Nat)
+hy-line-ranges nil = nil
+hy-line-ranges (cons x nil) = nil
+hy-line-ranges (cons x (cons y r)) = cons (toNat (wsub (h-number x) #1) , toNat (h-number y)) (hy-line-ranges r)
+
+
+
+hy-ranges-term : List (Nat × Nat) → List Word
+hy-ranges-term nil = "nil"
+hy-ranges-term (cons r rs) = list-append "(cons (toNat #" (list-append (h-decimal (fromNat (fst r))) (list-append " , toNat #"
+  (list-append (h-decimal (fromNat (snd r))) (list-append ") " (list-append (hy-ranges-term rs) ")")))))
+
+
+
+-- a piece as a definition: the selection of the bytes of its lines of the source lines-of ls, which are
+-- exactly those lines (lib/selection.cub, lines-pulled), or its re-expression
+hy-selection : List Word → List (List Word) → List (List Word) → List Word
+hy-selection stem ls p = list-append "mask-select " (list-append stem (list-append "-source (ranges-mask " (list-append (hy-ranges-term (byte-ranges ls (hy-line-ranges (hy-init p)))) ")")))
+
+
+
+hy-piece-body : List Word → List (List Word) → List (List Word) → Sum Unit (List Word) → List Word
+hy-piece-body stem ls p (inr t) = if h-eq (hy-last p) "r" then list-append "unlines " (hy-lines-term (hy-dt (h-split #10 t))) else hy-selection stem ls p
+hy-piece-body stem ls p (inl u) = hy-selection stem ls p
+
+
+
+hy-pull-decl : List Word → List Word → List (List Word) → List (List Word) → Sum Unit (List Word) → List Word
+hy-pull-decl stem nm ls p ps = list-append (h-line (list-append nm " : List Word"))
+  (h-line (list-append nm (list-append " = " (hy-piece-body stem ls p ps))))
+
+
+
+hy-pull-decls : List Word → List Word → List Word → List (List Word) → List (List (List Word)) → Nat → Proc W (List Word)
+hy-pull-decls st stem tag ls nil i = ret nil
+hy-pull-decls st stem tag ls (cons p r) i = bind (h-read (hy-self-path st i "piece")) (λ ps →
+  bind (hy-pull-decls st stem tag ls r (suc i)) (λ rest → ret (list-append (hy-pull-decl stem (list-append stem (list-append "-pull-" (list-append tag (list-append "-" (h-decimal (fromNat (suc i))))))) ls p ps) rest)))
+
+
+
+hy-ups : List Word → List Word
+hy-ups nil = nil
+hy-ups (cons x r) = if weq x #47 then list-append "../" (hy-ups r) else hy-ups r
+
+
+
+hy-base : List Word → List Word
+hy-base f = h-before ".hypercubical" (h-before ".hypercubical" (h-before ".md" (hy-last (h-split #47 f))))
+
+
+
+-- the document of a decomposition: the file itself, or a decomposed one's source, written out by the machine
+hy-source-probe : List Word → List Word
+hy-source-probe f = list-append (h-line (list-append "import " (hy-q (list-append "../" f))))
+  (list-append (h-line (list-append "import " (hy-q "../lib/host.hypercubical")))
+  (list-append (h-line "hy-source-out : Step W Unit")
+  (list-append (h-line (list-append "hy-source-out = to-step (bind (h-write " (list-append (hy-q "build/decompose-source") (list-append " " (list-append (hy-base f) "-source) (λ b → exit #0))")))))
+  (h-line "#run hy-source-out"))))
+
+
+
+hy-doc : List Word → List Word → Proc W (Sum Unit (List Word))
+hy-doc m f = if hy-module-path f
+  then bind (h-write "build/decompose-probe.hypercubical" (hy-source-probe f)) (λ b → bind (h-capture (cons m (cons "build/decompose-probe.hypercubical" nil))) (λ r → h-read "build/decompose-source"))
+  else h-document f
+
+
+
+-- finish: a document becomes a decomposed one (its source the document, checked equal, the file removed); a
+-- decomposed one gains the pulls made, appended
+hy-new-text : List Word → List Word → List (List Word) → List Word → List Word
+hy-new-text f title ls decls =
+  list-append (h-line (list-append "-- " (list-append (h-before ".md" f) (list-append ".hypercubical — " title))))
+  (list-append (h-line "-- decomposed with hyperactive decompose (lib/selection.hypercubical): the document once, as its source, and its pieces, each a selection of its lines or their re-expression.")
+  (list-append (h-line (list-append "import " (hy-q (list-append (hy-ups f) "lib/selection.hypercubical"))))
+  (list-append (h-line (list-append (hy-base f) "-source : List Word"))
+  (list-append (h-line (list-append (hy-base f) (list-append "-source = lines-of " (hy-lines-term ls))))
+  decls))))
+
+
+
+hy-check-source : List Word → List Word
+hy-check-source f = list-append (h-line (list-append "import " (hy-q (list-append "../" (list-append (h-before ".md" f) ".hypercubical")))))
+  (h-line (list-append "#same " (list-append (hy-base f) (list-append "-source = text " (hy-q (list-append "../" f))))))
+
+
+
+hy-checked-ok : List Word → Bool
+hy-checked-ok out = if hy-complete (h-lines out) then h-not (orB (h-infix "FAIL: " out) (h-infix "error" out)) else false
+
+
+
+hy-finished : List Word → List Word → Bool → Proc W Unit
+hy-finished f out true = bind (h-unrecord f) (λ u → h-out (h-line (list-append f (list-append " is now " (list-append (h-before ".md" f) ".hypercubical: its source, checked equal to the document, which the source no longer holds by its old path, and the pulls made. Point what referred to the document at the source.")))))
+hy-finished f out false = h-out (list-append (h-line (list-append (h-before ".md" f) ".hypercubical was written, but its source is not the document exactly; the document is kept:")) out)
+
+
+
+hy-finish : List Word → List Word → List Word → Proc W Unit
+hy-finish st m f = bind (hy-doc m f) (λ t → bind (h-read (hy-pulls-path st)) (λ pt → bind (sys-call #201 #0 #0 #0 #0 #0 #0) (λ now →
+  bind (hy-pull-decls st (hy-base f) (h-decimal now) (hy-doc-lines t) (hy-pulls pt) zero) (λ decls →
+  if hy-module-path f
+  then bind (h-source-text f) (λ old → bind (h-record m f (list-append (hy-or nil old) decls)) (λ b → h-out (h-line (list-append f ": the pulls made are appended."))))
+  else bind (h-record m (list-append (h-before ".md" f) ".hypercubical") (hy-new-text f (hy-first-line (hy-or nil t)) (hy-doc-lines t) decls)) (λ b →
+    bind (h-write "build/decompose-probe.hypercubical" (hy-check-source f)) (λ b2 →
+    bind (h-capture (cons m (cons "--read" (cons "build/decompose-probe.hypercubical" nil)))) (λ r → hy-finished f (snd r) (hy-checked-ok (snd r)))))))))
+
+
+
+hy-reading-view : List Word → Sum Unit (List Word) → Sum Unit (List Word) → Proc W Unit
+hy-reading-view f t pt = hy-show-reading f (hy-doc-lines t) (list-length (hy-pulls pt))
+
+
+
+hy-pull-view : List Word → List Word → Sum Unit (List Word) → Proc W Unit
+hy-pull-view f xy t = hy-show-pull f xy (hy-doc-lines t)
+
+
+
+hy-show : List Word → List Word → Nat → HyState → Proc W Unit
+hy-show st m n (hy-walking k) = bind (hy-walk-fresh st m) (λ u → bind (hy-count st) (λ n1 → bind (hy-get st (list-append "walk/" (h-decimal (fromNat k)))) (hy-show-chunk k n1)))
+hy-show st m n hy-working = bind (hy-view st m "open") (λ u → h-out (list-append (cons #10 nil) hy-work-usage))
+hy-show st m n (hy-reading f) = bind (hy-doc m f) (λ t → bind (h-read (hy-pulls-path st)) (hy-reading-view f t))
+hy-show st m n (hy-decomposing f xy) = bind (hy-doc m f) (hy-pull-view f xy)
+
+
+
+-- dead ENTRY REASON: the statement that an entry of the view is dead, for its reason (src/syntax.c, the
+-- view): alternatives at a path end when all but one are stated dead, or a new entry follows them
+hy-spaced : List (List Word) → List Word
+hy-spaced nil = nil
+hy-spaced (cons w nil) = w
+hy-spaced (cons w r) = list-append w (cons #32 (hy-spaced r))
+
+
+
+-- a working action performed. The actions that change the source take no lock: a change is
+-- checked before it is recorded (hy-put), and what a path holds is this machine's own label
+hy-act : List Word → List Word → List (List Word) → Proc W Unit
+hy-act st m nil = ret unit
+hy-act st m (cons c rest) =
+  if h-eq c "def" then hy-def st rest else
+  if h-eq c "write" then bind h-stdin (hy-write st m rest) else
+  if h-eq c "remove" then hy-remove st m rest else
+  if h-eq c "root" then hy-root m else
+  if h-eq c "take" then hy-take m rest else
+  if h-eq c "send" then bind (h-env "HYPERACTIVE_PLACE") (hy-send m) else
+  if h-eq c "apply" then hy-apply m rest else
+  if h-eq c "history" then hy-history st rest else
+  if h-eq c "paper" then hy-paper st m rest else
+  if h-eq c "check" then hy-check st m rest else
+  if h-eq c "done" then bind (h-write (list-append st "/session/log") nil) (λ b → h-out (h-line "The work is declared done; the session is over. The next session begins with the walk."))
+  else if h-has c hy-bridge-words then hy-bridge st m c rest
+  else hy-views st m (cons c rest)
+
+
+
+
+
+-- one call: the action taken when valid, then what the state reached shows
+hy-log-lines : Sum Unit (List Word) → List (List Word)
+hy-log-lines (inl u) = nil
+hy-log-lines (inr t) = h-lines t
+
+
+
+-- text added at the end of a file, made when absent (open with O_WRONLY | O_CREAT | O_APPEND, mode 0644):
+-- the session log grows by its new line, never read and written whole
+hy-append : List Word → List Word → Proc W Unit
+hy-append path t = with-bytes {Unit} (wadd (fromNat (list-length path)) #1) (λ p → bind (h-poke p path) (λ u →
+  bind (sys-call #2 p #1089 #420 #0 #0 #0) (λ fd →
+  bind (h-put fd t) (λ u2 → bind (sys-call #3 fd #0 #0 #0 #0 #0) (λ u3 → ret unit)))))
+
+
+
+
+
+-- the state the session reached, kept in session/state beside the log: one line, read back by hy-state-of
+hy-state-text : HyState → List Word
+hy-state-text (hy-walking k) = list-append "walking " (h-decimal (fromNat k))
+hy-state-text hy-working = "working"
+hy-state-text (hy-reading f) = list-append "reading " f
+hy-state-text (hy-decomposing f xy) = list-append "decomposing " (hy-sep " " (cons f (list-map h-decimal xy)))
+
+
+
+
+
+hy-state-of : List (List Word) → Sum Unit HyState
+hy-state-of nil = inl unit
+hy-state-of (cons w r) =
+  if h-eq w "walking" then inr (hy-walking (toNat (h-number (hy-head r)))) else
+  if h-eq w "working" then inr hy-working else
+  if h-eq w "reading" then inr (hy-reading (hy-head r)) else
+  if h-eq w "decomposing" then inr (hy-decomposing (hy-head r) (list-map h-number (hy-rest r))) else inl unit
+
+
+
+
+
+hy-state-parse : Sum Unit (List Word) → Sum Unit HyState
+hy-state-parse (inl u) = inl unit
+hy-state-parse (inr t) = hy-state-of (h-split #32 t)
+
+
+
+
+
+-- a store with no session/state (before it was kept) reaches its state by the log, once
+hy-state-or-log : List Word → Nat → Sum Unit HyState → Proc W HyState
+hy-state-or-log st n (inr s) = ret s
+hy-state-or-log st n (inl u) = bind (hy-get st "session/log") (λ l → ret (hy-fold n (hy-walking (suc zero)) (hy-log-lines l)))
+
+
+
+
+
+hy-state-read : List Word → Nat → Proc W HyState
+hy-state-read st n = bind (hy-get st "session/state") (λ x → hy-state-or-log st n (hy-state-parse x))
+
+
+
+-- the state before the action (s) and after it: decompose begins with no pulls made; a judgement is
+-- recorded; finish writes the pulls
+hy-recorded : List Word → List (List Word) → HyState → Proc W Unit
+hy-recorded st a (hy-decomposing f xy) = hy-judged st a xy
+hy-recorded st a (hy-walking k) = ret unit
+hy-recorded st a hy-working = bind (h-write (hy-pulls-path st) nil) (λ b → ret unit)
+hy-recorded st a (hy-reading f) = ret unit
+
+
+
+hy-working-after : List Word → List Word → Nat → List (List Word) → HyState → Proc W Unit
+hy-working-after st m n a (hy-reading f) = hy-finish st m f
+hy-working-after st m n a (hy-walking k) = if h-has (hy-head a) (cons "next" (cons "prev" nil)) then hy-show st m n hy-working else hy-act st m a
+hy-working-after st m n a hy-working = if h-has (hy-head a) (cons "next" (cons "prev" nil)) then hy-show st m n hy-working else hy-act st m a
+hy-working-after st m n a (hy-decomposing f xy) = hy-act st m a
+
+
+
+hy-after : List Word → List Word → Nat → List (List Word) → HyState → HyState → Proc W Unit
+hy-after st m n a s (hy-walking k) = hy-show st m n (hy-walking k)
+hy-after st m n a s hy-working = hy-working-after st m n a s
+hy-after st m n a s (hy-reading f) = bind (hy-recorded st a s) (λ u → hy-show st m n (hy-reading f))
+hy-after st m n a s (hy-decomposing f xy) = bind (hy-recorded st a s) (λ u → hy-show st m n (hy-decomposing f xy))
+
+
+
+hy-took : List Word → List Word → Nat → List (List Word) → HyState → Sum Unit HyState → Proc W Unit
+hy-took st m n a s (inl u) = bind (h-out (h-line (h-line (list-append "Not an action here: hyperactive " (hy-sep " " a))))) (λ u2 → hy-show st m n s)
+hy-took st m n a s (inr t) =
+  bind (hy-append (list-append st "/session/log") (h-line (hy-sep " " a))) (λ b →
+  bind (h-write (list-append st "/session/state") (hy-state-text t)) (λ b2 →
+  hy-after st m n a s t))
+
+
+
+hy-take-at : List Word → List Word → Nat → List (List Word) → HyState → Proc W Unit
+hy-take-at st m n nil s = hy-show st m n s
+hy-take-at st m n (cons c rest) s = hy-took st m n (cons c rest) s (hy-step n s (cons c rest))
+
+
+
+-- one command: the state the session reached (session/state, read in constant time; the log only grows),
+-- the action taken (the walk's chunks are cut only when hy-show displays a walking state)
+hy-begin : List Word → List Word → List (List Word) → Proc W Unit
+hy-begin st m a =
+  bind (h-file-time ".git/HEAD") (λ gt →
+  bind (if wlt #0 gt then h-run (cons "/usr/bin/env" (cons "git" (cons "config" (cons "core.hooksPath" (cons ".githooks" nil))))) else ret {lzero} {W} #0) (λ g →
+  bind (h-mkdir st) (λ u → bind (h-mkdir (list-append st "/session")) (λ u2 →
+  bind (hy-get st "session/state") (λ rawSt →
+  if andB (h-not (hy-held rawSt)) (andB (h-not (h-null (hy-head a))) (orB (h-has (hy-head a) hy-work-words) (h-has (hy-head a) hy-bridge-words)))
+  then bind (hy-append (list-append st "/session/log") (h-line (hy-sep " " a))) (λ b1 →
+       bind (h-write (list-append st "/session/state") "working") (λ b2 →
+       bind (hy-act st m a) (λ u4 → exit #0)))
+  else
+    bind (hy-count st) (λ n →
+    bind (hy-state-or-log st n (hy-state-parse rawSt)) (λ s →
+    bind (hy-take-at st m n a s) (λ u4 → exit #0))))))))
+
+
+
+hy-main : Proc W Unit
+hy-main = bind (h-env "CUBICAL_STORE") (λ e → bind h-args (λ args → hy-begin (h-store-of e) (hy-machine args) (h-drop-n (suc (suc zero)) args)))
+
+
+
+-- hy-main with the arguments held at a path, as /proc/self/cmdline holds them: the session's requests
+-- (src/lang.c, session_serve, which answers ./hyperactive from one loaded program)
+hy-main-at : List Word → Proc W Unit
+hy-main-at p = bind (h-env "CUBICAL_STORE") (λ e → bind (h-read p) (λ t → hy-begin (h-store-of e) (hy-machine (h-args-of t)) (h-drop-n (suc (suc zero)) (h-args-of t))))
+
+
+
+-- hy-run: the command hyperactive, the loop: one session whose state is kept in the store (part of product-implementation)
+hy-run : Step W Unit
+hy-run = to-step hy-main
+
+
+
+#run hy-run

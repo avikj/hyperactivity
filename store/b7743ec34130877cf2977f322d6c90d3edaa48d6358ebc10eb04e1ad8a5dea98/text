@@ -1,0 +1,13 @@
+-- Map constructor fields from ks1 to ks2 under clams (n + r):
+-- field j is cvar (r + (n - 1 - j)), recursive hypothesis t is cforce (cvar (r - 1 - t))
+d-map-fields : (Word → Word → Code) → Lst (Word × Word) → Lst (Word × Word) → Word → Word → Word → Word → Lst Code
+d-map-fields mf lnil _ n r j t = lnil
+d-map-fields mf (lcons _ _) lnil n r j t = lnil
+d-map-fields mf (lcons k1 r1) (lcons k2 r2) n r j t =
+  let f = cvar (%wadd r (%wsub (%wsub n #1) j))
+      h = cforce (cvar (%wsub (%wsub r #1) t))
+      v = (if %weq (fst k1) #1 then h
+           else if %weq (fst k1) #2 then
+             (if %weq (snd k1) (snd k2) then f else capp (mf (snd k1) (snd k2)) f)
+           else f)
+  in lcons v (d-map-fields mf r1 r2 n r (%wsucc j) (if %weq (fst k1) #1 then %wsucc t else t))

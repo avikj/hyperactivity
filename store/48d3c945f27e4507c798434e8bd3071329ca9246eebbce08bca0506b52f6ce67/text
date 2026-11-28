@@ -1,0 +1,15 @@
+-- Returns (fwd , (bwd , (sec , ret))) for structurally isomorphic d1 and d2
+derive-iso4-at : Nat → Word → Word → Opt (Code × (Code × (Code × Code)))
+derive-iso4-at zero d1 d2 =
+  if %weq d1 d2 then some (d-id-fn , (d-id-fn , (d-refl-fn , d-refl-fn))) else none
+derive-iso4-at (suc n) d1 d2 =
+  if %weq d1 d2 then some (d-id-fn , (d-id-fn , (d-refl-fn , d-refl-fn)))
+  else case all-shapes d1 return (λ _ → Opt (Code × (Code × (Code × Code)))) of
+    none → none
+    some sh1 →
+      (case all-shapes d2 return (λ _ → Opt (Code × (Code × (Code × Code)))) of
+         none → none
+         some sh2 →
+           if %weq (d-len sh1) (d-len sh2)
+           then d-omap (d-build-iso4 (derive-iso4-at n) d1 d2 sh1 sh2) (d-match-ctors (shapes-iso-at n) sh1 sh2 lnil)
+           else none)

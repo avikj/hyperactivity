@@ -1,0 +1,8 @@
+hy-split-ctors-at : List Word → List Word → List (List Word)
+hy-split-ctors-at cur nil = if h-null cur then nil else cons (h-rev cur nil) nil
+hy-split-ctors-at cur (cons c r) =
+  if h-prefix " (c " (cons c r) then
+    let rest = h-drop " (c " (cons c r)
+    in if h-null cur then hy-split-ctors-at nil rest
+       else cons (h-rev cur nil) (hy-split-ctors-at nil rest)
+  else hy-split-ctors-at (cons c cur) r

@@ -1,0 +1,13 @@
+-- Under clams (n + r) and one cplam (path dimension i = cvar #0):
+-- field j is cvar ((r + n) - j), recursive hypothesis t is cforce (cvar (r - t))
+d-path-fields : (Word → Word → Code) → Lst (Word × Word) → Lst (Word × Word) → Word → Word → Word → Word → Lst Code
+d-path-fields pf lnil _ n r j t = lnil
+d-path-fields pf (lcons _ _) lnil n r j t = lnil
+d-path-fields pf (lcons k1 r1) (lcons k2 r2) n r j t =
+  let f = cvar (%wsub (%wadd r n) j)
+      h = cforce (cvar (%wsub r t))
+      v = (if %weq (fst k1) #1 then cpapp h (cvar #0)
+           else if %weq (fst k1) #2 then
+             (if %weq (snd k1) (snd k2) then f else cpapp (capp (pf (snd k1) (snd k2)) f) (cvar #0))
+           else f)
+  in lcons v (d-path-fields pf r1 r2 n r (%wsucc j) (if %weq (fst k1) #1 then %wsucc t else t))

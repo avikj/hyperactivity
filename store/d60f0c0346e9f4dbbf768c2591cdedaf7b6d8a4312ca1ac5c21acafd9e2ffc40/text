@@ -1,0 +1,10 @@
+-- bidirectional view: harvests both orientations of each theorem so rules-orient separates
+-- size-reducing rewrites (run to fixpoint) from structural commutativity/associativity steps
+view-of-bi : Lst Word → Lst Rule
+view-of-bi lnil = lnil
+view-of-bi (lcons g rest) =
+  let tail = view-of-bi rest
+      r1 = case rule-of g return (λ _ → Lst Rule) of some r → lcons r tail; none → tail
+  in case rule-of-sym g return (λ _ → Lst Rule) of
+       some rs → lcons rs r1
+       none → r1

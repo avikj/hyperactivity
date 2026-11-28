@@ -3503,7 +3503,7 @@ static void checked_group(Node **fs, int n, bool expect) {
         for (int i = 0; i < n; i++) { passes++; names_bind(fs[i]->it[1]->s, ks[i]); }
     } else {
         Node **ws = calloc((size_t)n + 1, sizeof(Node *));
-        for (int i = 0; i < n; i++) ws[i] = word(ix[i]);
+        for (int i = 0; i < n; i++) ws[i] = wordg(ix[i]);
         Node *grp = nl2("%raw", alist(ws, n)); free(ws);
         long total = 0;
         char **rs = calloc((size_t)n + 1, sizeof(char *)); Node **qs = calloc((size_t)n + 1, sizeof(Node *));
@@ -3566,14 +3566,31 @@ static void checked_group(Node **fs, int n, bool expect) {
         }
     }
     if (!all) for (int i = 0; i < n; i++) cofix_hide(gs[i], ix[i]);
-    else if (!stored && expect) {
-        int saved = kgroup_base; kgroup_base = ix[0];
-        for (int i = 0; i < n; i++) {
-            SBuf c = { 0 }, y = { 0 }; canon(&c, ds(fs[i]->it[3])); canon(&y, ds(fs[i]->it[2]));
-            store_put(fs[i]->it[1]->s, ks[i], c.b, y.b, 0, "");
-            free(c.b); free(y.b);
+    else {
+        if (!stored && expect) {
+            int saved = kgroup_base; kgroup_base = ix[0];
+            for (int i = 0; i < n; i++) {
+                SBuf c = { 0 }, y = { 0 }; canon(&c, ds(fs[i]->it[3])); canon(&y, ds(fs[i]->it[2]));
+                store_put(fs[i]->it[1]->s, ks[i], c.b, y.b, 0, "");
+                free(c.b); free(y.b);
+            }
+            kgroup_base = saved;
         }
-        kgroup_base = saved;
+        if (expect && n > 1 && store_dir() && (bind_work || keep_free)) {
+            if (!kobj_has(ks[0], "group")) {
+                bool sk = kser_on, sf = kfresh_on; int sd = cur_deps.n;
+                kser_on = kfresh_on = true; nkfresh = 0;
+                SBuf g = { 0 }; sb_fmt(&g, "%d\n", n);
+                for (int i = 0; i < n; i++) sb_fmt(&g, "%s %s\n", ks[i], fs[i]->it[1]->s);
+                for (int i = 0; i < n; i++) { canon(&g, fs[i]->it[2]); sb_put(&g, "\n"); canon(&g, fs[i]->it[3]); sb_put(&g, "\n"); }
+                kser_on = sk; kfresh_on = sf; cur_deps.n = sd;
+                if (g.b) { kobj_write(ks[0], "group", g.b); free(g.b); }
+            }
+            for (int i = 0; i < n; i++) {
+                char mb[96]; snprintf(mb, sizeof mb, "%s %d\n", ks[0], i);
+                kobj_write(ks[i], "member", mb);
+            }
+        }
     }
     free(ks); free(gs); free(ix); free(cT);
 }
@@ -5390,14 +5407,14 @@ int main(int argc, char **argv)
         }
         if (!strcmp(argv[i], "--carried")) {
             /* `--carried`: of the names this machine's paths and labels hold now (written/), how many have a key the pool can give back
-             * (forms, or a declaration), and the names of those it cannot (load_key has nothing to read) */
-            index_sync(); char *bd = path_in(idx_dir(), "written", ""); DIR *d = opendir(bd); free(bd); int n = 0, nf = 0, nd = 0, no = 0;
+             * (forms, decl, prim, or member), and the names of those it cannot (load_key has nothing to read) */
+            index_sync(); char *bd = path_in(idx_dir(), "written", ""); DIR *d = opendir(bd); free(bd); int n = 0, nf = 0, nd = 0, np = 0, nmc = 0, no = 0;
             if (d) { struct dirent *de; while ((de = readdir(d))) if (de->d_name[0] != '.' && !strstr(de->d_name, ".tmp")) {
                 char *k = store_read("bound", de->d_name); if (!k || strlen(k) < 64) { free(k); n++; no++; char *nm = w_unhex(de->d_name); printf("- %s (no key)\n", nm); free(nm); continue; } k[64] = 0; n++;
-                char *a = kobj_read(k, "forms"), *b = a ? NULL : kobj_read(k, "decl");
-                if (a) nf++; else if (b) nd++; else { no++; char *nm = w_unhex(de->d_name); printf("- %s\n", nm); free(nm); }
-                free(a); free(b); free(k); } closedir(d); }
-            printf("%d names: %d with forms, %d with a declaration, %d with neither\n", n, nf, nd, no); fflush(stdout); _Exit(0);
+                char *a = kobj_read(k, "forms"), *b = a ? NULL : kobj_read(k, "decl"), *c = (a || b) ? NULL : kobj_read(k, "prim"), *m = (a || b || c) ? NULL : kobj_read(k, "member");
+                if (a) nf++; else if (b) nd++; else if (c) np++; else if (m) nmc++; else { no++; char *nm = w_unhex(de->d_name); printf("- %s\n", nm); free(nm); }
+                free(a); free(b); free(c); free(m); free(k); } closedir(d); }
+            printf("%d names: %d with forms, %d with a declaration, %d with prim, %d with member, %d with none\n", n, nf, nd, np, nmc, no); fflush(stdout); _Exit(0);
         }
         if (!strcmp(argv[i], "--root")) {
             idx_lock(); index_sync(); char *h = root_make(); { SBuf l = {0}; sb_put(&l, h); sb_put(&l, "\n"); src_write("ROOT", "root", l.b); free(l.b); } idx_unlock();   /* named beside the pool, for a machine with no labels */

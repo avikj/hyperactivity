@@ -1,0 +1,45 @@
+usf-emit-node : UsfNode → List Word
+usf-emit-node usf-empty = nil
+usf-emit-node (usf-seq a b) = list-append (usf-emit-node a) (usf-emit-node b)
+usf-emit-node (usf-nav portalOnly) =
+  if portalOnly then
+    usf-ln "<nav class='hbar'>" (
+    usf-ln "  <a class='hmark' href='/'><span class='hsq'></span><span>hyperactivity</span></a>" (
+    usf-ln "  <div class='hlinks'><a href='/'>Overview</a><a href='/dag'>Proof DAG</a><a href='/grh'>Critical-Axis</a></div>" (
+    usf-ln "</nav>" nil)))
+  else
+    usf-ln "<nav class='hbar'>" (
+    usf-ln "  <a class='hmark' href='#top'><span class='hsq'></span><span>hyperactivity</span></a>" (
+    usf-ln "  <div class='hlinks'><a href='#workspace'>Workspace</a><a href='/dag'>Proof DAG</a><a href='/grh'>Critical-Axis</a><a href='/hyperfactor'>Hyperfactor</a><a href='/decentralized'>PoUW</a><a href='/archive'>Archive</a></div>" (
+    usf-ln "</nav>" nil)))
+usf-emit-node (usf-splash ttl sub who) =
+  usf-ln "<header class='hero' id='top'>" (
+  usf-ln "  <div class='hero-in'>" (
+  usf-ln (list-append "    <h1>" (list-append ttl "</h1>")) (
+  usf-ln (list-append "    <div class='sub'>" (list-append sub "</div>")) (
+  usf-ln (list-append "    <div class='who'>" (list-append who "</div>")) (
+  usf-ln "  </div>" (
+  usf-ln "</header>" nil))))))
+usf-emit-node usf-portal = usf-emit-portal-band
+usf-emit-node (usf-section secId secLbl pillars) =
+  usf-ln (list-append "<section class='sec' id='" (list-append secId "'>")) (
+  usf-ln (list-append "  <h2 class='sec-h'>" (list-append secLbl "</h2>")) (
+  usf-ln "  <div class='grid'>" (
+  list-append (usf-emit-pillars pillars) (
+  usf-ln "  </div>" (
+  usf-ln "</section>" nil)))))
+usf-emit-node (usf-benches secId secLbl rows) =
+  usf-ln (list-append "<section class='sec' id='" (list-append secId "'>")) (
+  usf-ln (list-append "  <h2 class='sec-h'>" (list-append secLbl "</h2>")) (
+  usf-ln "  <table class='tbl'>" (
+  usf-ln "    <thead><tr><th>Domain</th><th>Measured result</th><th>Baseline &amp; verification</th></tr></thead>" (
+  usf-ln "    <tbody>" (
+  list-append (usf-emit-benches rows) (
+  usf-ln "    </tbody>" (
+  usf-ln "  </table>" (
+  usf-ln "</section>" nil))))))))
+usf-emit-node usf-footer =
+  usf-ln "<footer class='foot'>" (
+  usf-ln "  <span>Hyperactive Labs, Inc. &middot; Open for non-commercial study; commercial compute requires a direct royalty license.</span>" (
+  usf-ln "  <span><a href='/portal'>Workspace</a> &middot; <a href='/dag'>Proof DAG</a> &middot; <a href='/grh'>Critical-Axis</a> &middot; <a href='/learn'>Learn</a> &middot; <a href='/silicon'>Silicon</a> &middot; <a href='/archive'>Archive</a> &middot; <a href='mailto:root@hyperactivity.ai'>root@hyperactivity.ai</a></span>" (
+  usf-ln "</footer>" nil)))

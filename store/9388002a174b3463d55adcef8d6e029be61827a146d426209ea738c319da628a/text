@@ -1,0 +1,15 @@
+pool-hyperfactor : Nat → Word → Lst Code → Lst (Word × Code) × Lst Code
+pool-hyperfactor zero gid defs = (lnil , defs)
+pool-hyperfactor (suc r) gid defs =
+  case pool-factor-step gid defs return (λ _ → Lst (Word × Code) × Lst Code) of
+    none → (lnil , defs)
+    some st →
+      let lem0 = fst st
+          defs1 = snd st
+          combined = lcons (snd lem0) defs1
+          rec-res = pool-hyperfactor r (%wsucc gid) combined
+          more-lems = fst rec-res
+          rewritten = snd rec-res
+      in case rewritten return (λ _ → Lst (Word × Code) × Lst Code) of
+           lnil → (lcons lem0 more-lems , defs1)
+           lcons lem0-body defs-final → (lcons (fst lem0 , lem0-body) more-lems , defs-final)

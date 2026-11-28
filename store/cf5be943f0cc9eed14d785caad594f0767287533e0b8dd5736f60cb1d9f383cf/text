@@ -1,0 +1,6 @@
+-- Top-down disjoint replacement of `tmpl` by `cglob gid` across all 44 Code constructors via `code-map`
+hf-replace-node : Code → Word → Code → Word → Opt Code
+hf-replace-node tmpl gid sub _ =
+  case code-abstract sub return (λ _ → Opt Code) of
+    some q → if code-eq (fst q) tmpl then some (code-app-vars (cglob gid) (snd (snd q))) else none
+    none → none

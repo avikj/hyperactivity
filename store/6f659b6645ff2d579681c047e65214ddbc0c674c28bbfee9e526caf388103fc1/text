@@ -1,0 +1,26 @@
+s-answer-site : List Word → List Word → List Word → List Word → Proc W (List Word) → Proc W (List Word)
+s-answer-site st m path p next =
+  if orB (h-eq p "/") (h-null path) then s-site-kept st "front" s-front else
+  if h-eq p "/dag" then s-dag-answer st (s-query path) else
+  if orB (h-eq p "/grh") (h-eq p "/rh") then s-mod-kept st "doc" "lib/ir/hx-grh-surface.hypercubical" (ret {lzero} {W} (s-response s-html (s-chrome-html "Critical-Axis Theorem · Hyperactive Labs" grh-treatise-html))) else
+  if h-eq p "/pay" then ret {lzero} {W} (s-response s-html x4-pay-console-html) else
+  if h-eq p "/api/x402/quote" then ret {lzero} {W} (s-response "text/plain; charset=utf-8" (x4-quote-hc (s-query path))) else
+  if h-eq p "/api/x402/verify" then bind (x4-verify-tx (s-query path) nil) (λ cert → ret {lzero} {W} (s-response "text/plain; charset=utf-8" cert)) else
+  if orB (h-eq p "/eval") (h-eq p "/api/eval") then (
+    if andB (h-eq p "/eval") (h-null (ue-qparam "code" (s-query path)))
+    then ret {lzero} {W} (s-response s-html ue-eval-console-html)
+    else bind (ue-eval-hypercubical (if h-null m then "./build/cubical" else if orB (h-prefix "/" m) (h-prefix "./" m) then m else list-append "./" m) (s-query path) nil) (λ cert → ret {lzero} {W} (s-response "text/plain; charset=utf-8" cert))) else
+  if h-eq p "/home" then s-mod-kept st "doc" "docs/home.html" s-home-legacy else
+  if h-eq p "/healthz" then ret {lzero} {W} (s-response "text/plain; charset=utf-8" "ok") else
+  if h-eq p "/archive" then s-site-kept st "archive" s-archive else
+  if h-eq p "/llms.txt" then s-site-kept st "llms-txt" s-llms-txt else
+  if h-eq p "/feed.xml" then s-site-kept st "feed-xml" s-feed-xml else
+  if h-eq p "/paper" then s-paper st m else
+  if orB (h-eq p "/ide") (orB (h-eq p "/studio") (h-eq p "/kernel")) then s-mod-kept st "doc" "docs/kernel.html" s-kernel else
+  if h-eq p "/cubical.wasm" then s-mod-kept st "bin" "docs/cubical.wasm.hex" s-cubical-wasm else
+  if h-eq p "/music" then s-mod-kept st "music" "lib/server.hypercubical" s-music else
+  if h-eq p "/search" then sx-answer st (s-unescape (s-param "q" (s-query path))) else
+  if h-eq p "/corpus" then ret {lzero} {W} (s-response "application/json" s-corpus-list) else
+  if h-prefix "/corpus/" path then s-corpus-kept-one st (h-drop "/corpus" p) else
+  if h-eq p "/synesthesia" then ret {lzero} {W} (sy-answer (s-query path)) else
+  next

@@ -1,0 +1,13 @@
+d-fields-iso : (Word → Word → Bool) → Lst (Word × Word) → Lst (Word × Word) → Bool
+d-fields-iso sub lnil lnil = true
+d-fields-iso sub lnil (lcons _ _) = false
+d-fields-iso sub (lcons _ _) lnil = false
+d-fields-iso sub (lcons k1 r1) (lcons k2 r2) =
+  if %weq (fst k1) (fst k2)
+  then (let ok = (if %weq (fst k1) #0 then true
+                  else if %weq (fst k1) #1 then true
+                  else if %weq (fst k1) #3 then %weq (snd k1) (snd k2)
+                  else if %weq (snd k1) (snd k2) then true
+                  else sub (snd k1) (snd k2))
+        in if ok then d-fields-iso sub r1 r2 else false)
+  else false
