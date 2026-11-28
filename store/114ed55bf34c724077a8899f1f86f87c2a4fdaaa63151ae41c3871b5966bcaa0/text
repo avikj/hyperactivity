@@ -1,0 +1,29 @@
+ce-world-run : List Word
+ce-world-run =
+  list-append "static uint64_t hy_run_step(uint64_t p) { for (;;) { uint64_t *s = (uint64_t *)(uintptr_t)p; if (s[0] == 0) return s[1]; if (s[0] != 1) abort(); uint64_t *cm = (uint64_t *)(uintptr_t)s[1]; uint64_t k = s[2], resp = 0; switch (cm[0]) { "
+  (list-append "case 0: { struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts); resp = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec; break; } "
+  (list-append "case 1: { size_t n = hy_nat(cm[2]); const uint64_t *bp = (const uint64_t *)(uintptr_t)cm[3]; size_t len = (size_t)bp[0]; if (n < len) len = n; fflush(stdout); ssize_t w = len ? write((int)cm[1], (const uint8_t *)bp + 8, len) : 0; resp = w < 0 ? 0 : (uint64_t)w; break; } "
+  (list-append "case 2: { size_t n = hy_nat(cm[2]); uint64_t b = hy_fresh_bytes((uint64_t)n); ssize_t r = n ? read((int)cm[1], (uint8_t *)(uintptr_t)b + 8, n) : 0; resp = hy_con(0, 2, (uint64_t[]){0, r < 0 ? 0 : (uint64_t)r, b}); break; } "
+  (list-append "case 3: { uint64_t ns = cm[1]; struct timespec ts = { (time_t)(ns / 1000000000ull), (long)(ns % 1000000000ull) }; nanosleep(&ts, 0); resp = hy_con(0, 0, 0); break; } "
+  (list-append "case 4: { fflush(stdout); exit((int)cm[1]); } "
+  (list-append "case 5: { size_t n = hy_nat(cm[1]); const uint64_t *bp = (const uint64_t *)(uintptr_t)cm[2]; size_t len = (size_t)bp[0]; if (n < len) len = n; char *path = malloc(len + 1); if (!path) abort(); if (len) memcpy(path, (const uint8_t *)bp + 8, len); path[len] = 0; int fd = open(path, (int)cm[3], (int)cm[4]); free(path); resp = (uint64_t)(int64_t)fd; break; } "
+  (list-append "case 6: { resp = (uint64_t)(int64_t)close((int)cm[1]); break; } "
+  (list-append "case 7: { resp = __atomic_load_n((uint64_t *)(uintptr_t)cm[1], __ATOMIC_ACQUIRE); break; } "
+  (list-append "case 8: { __atomic_store_n((uint64_t *)(uintptr_t)cm[1], cm[2], __ATOMIC_RELEASE); resp = hy_con(0, 0, 0); break; } "
+  (list-append "case 9: { uint64_t seen = cm[2]; __atomic_compare_exchange_n((uint64_t *)(uintptr_t)cm[1], &seen, cm[3], 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE); resp = seen; break; } "
+  (list-append "case 10: { __atomic_thread_fence(__ATOMIC_SEQ_CST); resp = hy_con(0, 0, 0); break; } "
+  (list-append "case 11: { fflush(stdout); errno = 0; uint64_t kb[35], kn = 0; if (cm[1] == 901) { const uint64_t *kp = (const uint64_t *)(uintptr_t)k; kn = kp[2] + 3; if (kn > 35) abort(); memcpy(kb, kp, kn * 8); } long sr = syscall((long)cm[1], cm[2], cm[3], cm[4], cm[5], cm[6], cm[7]); if (kn) { uint64_t *q = hy_alloc(kn * 8); memcpy(q, kb, kn * 8); k = (uint64_t)(uintptr_t)q; } resp = (sr == -1 && errno) ? (uint64_t)-(int64_t)errno : (uint64_t)sr; break; } "
+  (list-append "case 12: { void *m = calloc(cm[1] ? (size_t)cm[1] : 1, 1); if (!m) abort(); resp = (uint64_t)(uintptr_t)m; break; } "
+  (list-append "case 13: { resp = (uint64_t)(*(volatile uint8_t *)(uintptr_t)cm[1]); break; } "
+  (list-append "case 14: { *(volatile uint8_t *)(uintptr_t)cm[1] = (uint8_t)cm[2]; resp = hy_con(0, 0, 0); break; } "
+  (list-append "case 15: { posix_spawn_file_actions_t fa; posix_spawn_file_actions_init(&fa); int64_t out = (int64_t)cm[3]; if (out >= 0) { posix_spawn_file_actions_adddup2(&fa, (int)out, 1); posix_spawn_file_actions_adddup2(&fa, (int)out, 2); } char **av = (char **)(uintptr_t)cm[1]; pid_t pid = 0; fflush(stdout); int e = posix_spawn(&pid, av[0], &fa, 0, av, (char **)(uintptr_t)cm[2]); posix_spawn_file_actions_destroy(&fa); resp = e ? (uint64_t)-(int64_t)e : (uint64_t)pid; break; } "
+  (list-append "case 16: { size_t n = 0; char *b = hy_bytes_list(cm[2], &n); fflush(stdout); size_t w = 0; while (w < n) { ssize_t r = write((int)cm[1], b + w, n - w); if (r <= 0) break; w += (size_t)r; } free(b); resp = (uint64_t)w; break; } "
+  (list-append "case 17: { size_t pn = 0; char *path = hy_bytes_list(cm[1], &pn); FILE *f = fopen(path, "
+  (list-append (ce-qstr "rb")
+  (list-append "); free(path); uint64_t st = 0; unsigned char *b = 0; size_t n = 0, cap = 0; if (!f) { st = (uint64_t)-(int64_t)errno; } else { size_t r = 0; do { if (n + 65536 > cap) { cap = (n + 65536) * 2; b = realloc(b, cap); if (!b) abort(); } r = fread(b + n, 1, 65536, f); n += r; } while (r > 0); fclose(f); } uint64_t tl = hy_list_bytes(b, n); free(b); resp = hy_con(0, 2, (uint64_t[]){0, st, tl}); break; } "
+  (list-append "case 18: { size_t pn = 0, n = 0; char *path = hy_bytes_list(cm[1], &pn); char *b = hy_bytes_list(cm[2], &n); FILE *f = fopen(path, "
+  (list-append (ce-qstr "wb")
+  (list-append "); free(path); if (!f) { resp = (uint64_t)-(int64_t)errno; } else { size_t w = n ? fwrite(b, 1, n, f) : 0; fclose(f); resp = (uint64_t)w; } free(b); break; } "
+  (list-append "case 19: { free((void *)(uintptr_t)cm[1]); resp = hy_con(0, 0, 0); break; } "
+  (list-append "case 20: { size_t n = hy_nat(cm[1]); uint64_t b = hy_fresh_bytes((uint64_t)n); if (cm[2] && n) memcpy((uint8_t *)(uintptr_t)b + 8, (const void *)(uintptr_t)cm[2], n); resp = b; break; } "
+  (list-append "default: abort(); } p = hy_app(k, resp); } }" ce-nl))))))))))))))))))))))))))

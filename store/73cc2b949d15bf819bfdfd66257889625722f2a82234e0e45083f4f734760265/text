@@ -1,0 +1,8 @@
+-- the blocks a coded file holds, and the length decoded: from the 9-byte headers alone
+hxz-scan : Nat → Word → Word → Word → Word → Word → (Word → Word → Step W Word) → Step W Word
+hxz-scan zero _ _ _ nb tot k = k nb tot
+hxz-scan (suc f) buf n ipos nb tot k =
+  if %wlt (%wadd ipos #8) n
+  then hxz-get24b buf ipos (λ bl → hxz-get24b buf (%wadd ipos #6) (λ pl →
+         hxz-scan f buf n (%wadd ipos (%wadd #9 pl)) (%wsucc nb) (%wadd tot bl) k))
+  else k nb tot

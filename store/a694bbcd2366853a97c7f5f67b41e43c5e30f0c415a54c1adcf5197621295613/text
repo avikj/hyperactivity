@@ -1,0 +1,7 @@
+-- The files' coder, one block at a time. A file is read into a buffer and written from one; between
+-- the mark (w-sys #900) and each rewind (w-sys #901) the arena holds one block's coding and nothing
+-- else, so memory is that of one 4096-byte block whatever the file's length. What a rewind's
+-- continuation captures is words, the buffers (calloc'd, outside the arena) and the continuation
+-- bound before the mark; each iteration's body is built after its rewind, from those.
+hxz-rewind : (Word → Step W Word) → Step W Word
+hxz-rewind next = scmd (w-sys #901 #0 #0 #0 #0 #0 #0) next

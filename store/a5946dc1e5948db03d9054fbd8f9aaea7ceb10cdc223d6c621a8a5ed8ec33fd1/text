@@ -1,0 +1,24 @@
+hcm-enc-loop2 : Nat → Word → Word → Word → Word → Word → Word → Word → Word → (Word → Word → Step W Word) → Step W Word
+hcm-enc-loop2 zero _ _ _ _ _ lohi opos _ k = k (%wand lohi #4294967295) opos
+hcm-enc-loop2 (suc rem) tab inb outb pos hist lohi opos mpml_p k =
+  hcm-maybe-rewind pos (λ _ →
+    scmd (w-load8 (%wadd inb pos)) (λ x →
+    let am4  = hcm-addr-m4 tab hist
+        am6  = hcm-addr-m6 tab hist
+        h32  = %wand hist #4294967295
+        mpos = %wand mpml_p #4294967295
+        mlen = %wshr mpml_p #32
+    in scmd (w-load am6) (λ p6 →
+       scmd (w-load am4) (λ p4 →
+       let mpml = hcm-match-pick mlen mpos h32 p6 p4
+           use_mp = fst mpml
+           use_ml = snd mpml
+       in scmd (w-load8 (%wadd inb use_mp)) (λ mbyte →
+          hcm-enc-byte hcm-n8 tab hist (hcm-pack-pkt x mbyte use_ml #1 #7) lohi outb opos (λ lohi2 op2 ml_ok →
+          let tag = %wor (%wshl h32 #32) (%wsucc pos)
+          in scmd (w-store am6 tag) (λ _ →
+             scmd (w-store am4 tag) (λ _ →
+             let hist2 = %wand (%wor (%wshl hist #8) x) #281474976710655
+                 mp2   = if %wlt #0 ml_ok then %wsucc use_mp else #0
+                 ml2   = if %wlt #0 ml_ok then (if %wlt ml_ok #64 then %wsucc ml_ok else #64) else #0
+             in hcm-enc-loop2 rem tab inb outb (%wsucc pos) hist2 lohi2 op2 (%wor mp2 (%wshl ml2 #32)) k))))))))

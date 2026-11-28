@@ -1,0 +1,10 @@
+hxz-enc-file : List Word → List Word → Step W Word
+hxz-enc-file inp out =
+  scmd w-now (λ t0 →
+  hcm-read-raw inp (λ inb n →
+  let cap = %wadd (%wmul n #2) #64 in
+  scmd (w-alloc cap) (λ outb →
+  cli-poke outb "HXZ1" (λ _ →
+  let fin = hxz-fin "HXZ enc " out t0 n inb outb
+  in scmd (w-sys #900 #0 #0 #0 #0 #0 #0) (λ _ →
+     hxz-enc-loop (toNat (%wdiv (%wadd n #4095) #4096)) inb n outb cap #0 #4 fin)))))
