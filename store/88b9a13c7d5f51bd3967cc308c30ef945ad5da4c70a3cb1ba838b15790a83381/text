@@ -1,0 +1,30 @@
+-- Two-space copying round driver (`#build-loop`): splits [x21..x22] into two 16B-aligned halves,
+-- runs step(s) to sdone(s'), flips halves, copies s' into the fresh half via compiled copy, and repeats forever.
+a64-round-driver : Word → Word → Word → Word → Lst Word
+a64-round-driver init-off step-off copy-off apply-off =
+  let setup   = xcat6 a64-stp-fp-lr a64-mov-fp-sp (a64-insn #3506504703)
+                      (xcat3 (l-app (a64-imm32 #0 apply-off) (a64-insn #4162814880))
+                             (l-app (a64-imm32 #0 step-off) (a64-insn #4162749344))
+                             (l-app (a64-imm32 #0 copy-off) (a64-insn #4162716576)))
+                      (xcat6 (l-app (a64-mov-r #0 #21) (a64-insn #4162683808))
+                             (a64-sub #9 #22 #21) (l-app (a64-movz #10 #1 #0) (a64-lsrv #9 #9 #10))
+                             (a64-insn #2457660713) (l-app (a64-mov-r #0 #9) (a64-insn #4162651040))
+                             (xcat3 (a64-add #22 #21 #9) (a64-movz #0 #0 #0) (a64-insn #4162618272)))
+                      (a64-call-off init-off)
+      w-test  = l-app (a64-ldr-idx #1 #0 #0) (a64-cmp #1 #31)
+      w-step  = xcat4 (a64-ldr-idx #1 #0 #2) (a64-insn #4162782113) (a64-ldr-idx #1 #0 #1) (l-app a64-wcmd-body a64-step-cont)
+      flip    = xcat6 (a64-ldr-idx #2 #0 #1)
+                      (xcat4 (a64-insn #4166812576) (a64-movz #9 #1 #0) (a64-eor-r #0 #0 #9) (a64-insn #4162618272))
+                      (l-app (a64-insn #4166878112) (l-app (a64-mov-r #10 #0) (a64-insn #4166845344)))
+                      (xcat3 (a64-mov-r #11 #0) (a64-insn #4166812576) (a64-cmp #0 #31))
+                      (a64-if-cc a64-cc-eq a64-cc-ne
+                        (l-app (a64-mov-r #21 #10) (a64-add #22 #10 #11))
+                        (l-app (a64-add #21 #10 #11) (a64-add #22 #21 #11)))
+                      (xcat4 (l-app (a64-mov-r #0 #2) a64-push-x0)
+                             (l-app (a64-insn #4166910880) (l-app (a64-add #9 #23 #0) (a64-blr #9)))
+                             (a64-insn #2432713727) lnil)
+      r-step  = xcat4 a64-push-x0
+                      (l-app (a64-insn #4166943648) (l-app (a64-add #9 #23 #0) (a64-blr #9)))
+                      (a64-insn #2432713727)
+                      (l-app (a64-while-cc w-test a64-cc-eq w-step) flip)
+  in l-app setup (a64-while-cc (a64-cmp #0 #0) a64-cc-ne r-step)

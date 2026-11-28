@@ -1,0 +1,10 @@
+arm64-encode-loop : Word → Word → Word → Defs → Lst Word
+arm64-encode-loop gi gs gc defs =
+  let slen = l-count (a64-stub #0 #0)
+      ars = x-arities defs
+      dlen = l-count (a64-round-driver #0 #0 #0 #0)
+      aoff = slen
+      doff = %wadd slen (l-count a64-apply)
+      offs = lcons (x-apply-key , aoff) (a64-layout ars defs (%wadd doff dlen))
+      tbl = (ars , offs)
+  in xcat4 (a64-stub #0 doff) a64-apply (a64-round-driver (x-tbl tbl gi) (x-tbl tbl gs) (x-tbl tbl gc) aoff) (a64-fns tbl defs)

@@ -1518,7 +1518,7 @@ static void p_decl_in(void) {
         int di = -1; for (int i = 0; i < nchkdata; i++) if (CHKDATA[i] == data_lookup(dn->s)) di = i;
         if (di < 0) x_sem("deriving: the data type is not checked:", dn);
         long steps = 0;
-        char *r = readback(nl2("%%derive-eq", wordn(di)), &steps);
+        char *r = readback(nl2("%%derive-eq", wordd(di)), &steps);
         const char *saved = src; src = r; Node *rn = read_node(); src = saved;
         Node *code = rn && rn->list && rn->n == 2 && is(rn->it[0], "some") ? rn->it[1] : NULL;
         ncn = 0; Node *term = code ? cn(code) : NULL;
@@ -1766,10 +1766,14 @@ static void p_decl_in(void) {
             Node *b = nlist(5); b->it[0] = nsym("build"); for (int i = 0; i < 4; i++) b->it[i + 1] = nsym(fn[i]->s);
             ud_form(b); printf("build-loop %s: not performed (--read)\n", fn[0]->s); decl_end(); return;
         }
-        if (checked_index("build-loop-plan") < 0) x_sem("#build-loop: refused: the compiler it calls (build-loop-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn[0]);
+        const char *blplan = "build-loop-plan", *blcall = "%%build-loop-plan";
+#ifdef __aarch64__
+        if (checked_index("macho-build-loop-plan") >= 0) { blplan = "macho-build-loop-plan"; blcall = "%%macho-build-loop-plan"; }
+#endif
+        if (checked_index(blplan) < 0) x_sem("#build-loop: refused: the compiler it calls (build-loop-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn[0]);
         if (!checked_type_plain(ck[0])) { failures++; printf("FAIL: build-loop %s: its type is not first-order data without byte strings\n", fn[0]->s); decl_end(); return; }
         long steps = 0;
-        Node *call = nlist(5); call->it[0] = nsyml("%%build-loop-plan"); for (int i = 0; i < 4; i++) call->it[i + 1] = wordn(ck[i]);
+        Node *call = nlist(5); call->it[0] = nsyml(blcall); for (int i = 0; i < 4; i++) call->it[i + 1] = wordg(ck[i]);
         char *r = readback(call, &steps);
         const char *saved = src; src = r; Node *rn = read_node(); src = saved;
         Node *grp[3]; int ng = 0;
@@ -1811,7 +1815,7 @@ static void p_decl_in(void) {
 #endif
         if (checked_index(bplan) < 0) x_sem("#build: refused: the compiler it calls (build-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn);
         long steps = 0;
-        char *r = readback(nl2(bcall, wordn(ck)), &steps);
+        char *r = readback(nl2(bcall, wordg(ck)), &steps);
         const char *saved = src; src = r; Node *rn = read_node(); src = saved;
         Node *grp[3]; int ng = 0;
         for (Node *cur = rn; ng < 3; ) {
@@ -1862,9 +1866,9 @@ static void p_decl_in(void) {
         if (checked_index(jplan) < 0) x_sem("#jit: refused: the compiler it calls (jit-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/x86.cub loaded, for", fn);
         for (int attempt = 0; attempt < 2; attempt++) {
             int nt = attempt ? 0 : nth;
-            Node *rl = nsym("lnil"); for (int i = nt - 1; i >= 0; i--) rl = lst(3, nsym("lcons"), wordn(ths[i]), rl);
+            Node *rl = nsym("lnil"); for (int i = nt - 1; i >= 0; i--) rl = lst(3, nsym("lcons"), wordg(ths[i]), rl);
             long steps = 0;
-            char *r = readback(nl3(jcall, wordn(ck), nl2("%%view-of", rl)), &steps);
+            char *r = readback(nl3(jcall, wordg(ck), nl2("%%view-of", rl)), &steps);
             const char *saved = src; src = r; Node *rn = read_node(); src = saved;
             /* the plan's five parts: (pair a (pair b (pair c (pair d e)))) */
             Node *grp[5]; int ng = 0;
@@ -6655,7 +6659,6 @@ static bool lk_busy;
  * be named as a constructor is) */
 static void lk_label(const char *s, bool defs) {
     /* only in a text that is not a module of the work (a probe, one declaration being checked): a module declares its names in order, and one taken early would be declared again */
-    if (getenv("CUBICAL_LK") && (!strncmp(s, "nk-", 3) || !strncmp(s, "zq-", 3))) fprintf(stderr, "[lk] ask %s defs=%d work=%d busy=%d salt=%d known=%d\n", s, defs, bind_work, lk_busy, chk_salt[0] != 0, global_lookup(s) >= 0 || data_lookup(s) >= 0 || con_lookup(s) >= 0);
     if (lk_busy || !store_dir() || !chk_salt[0] || s[0] == '%' || s[0] == '#' || s[0] == '@') return;
     if (global_lookup(s) >= 0 || data_lookup(s) >= 0 || con_lookup(s) >= 0 || fld_lookup(s) >= 0) return;
     for (int i = 0; i < nxlater; i++) if (!strcmp(xlater[i], s)) return;   /* declared later in the file being read */

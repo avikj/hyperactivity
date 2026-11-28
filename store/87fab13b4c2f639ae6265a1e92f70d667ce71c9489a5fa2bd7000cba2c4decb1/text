@@ -1,0 +1,11 @@
+-- Unary conversions (PO_I64OFW..PO_WOFU64, sub-numbered 35..47; hardware UCVTF/SCVTF/FCVTZS for 39..41)
+a64-un : Enc → XEnv → Word → Word → Code → Lst Word
+a64-un ce env d sb a =
+  l-app (ce env d a)
+    (if %weq sb #37 then a64-zx32 #0 #0
+     else if %weq sb #44 then a64-zx32 #0 #0
+     else if %weq sb #45 then a64-zx32 #0 #0
+     else if %weq sb #39 then l-app a64-ucvtf-d0-x0 a64-fmov-x0-d0
+     else if %weq sb #40 then l-app a64-scvtf-d0-x0 a64-fmov-x0-d0
+     else if %weq sb #41 then l-app a64-fmov-d0-x0 a64-fcvtzs-x0-d0
+     else lnil)

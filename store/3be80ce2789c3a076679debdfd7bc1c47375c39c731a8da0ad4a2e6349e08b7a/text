@@ -1,0 +1,9 @@
+-- Copy Bytes cell in x0 to fresh arena cell in x13 (preserving x1=offset, x2=value):
+--   n = [x0,#0]; sz = (n + 15) & ~7; x13 = alloc(sz); 8-byte word copy [0..sz)
+a64-copy-bytes : Lst Word
+a64-copy-bytes =
+  let sz-calc = xcat5 (a64-ldr-idx #11 #0 #0) (a64-movz #9 #15 #0) (a64-adds #12 #11 #9) a64-over-if-hs (a64-insn #2457727372)
+      alloc   = xcat5 (a64-mov-r #13 #21) (a64-adds #21 #21 #12) a64-over-if-hs (a64-cmp #21 #22) a64-over-if-hi
+      cstep   = xcat6 (a64-add #10 #0 #9) (a64-ldr-idx #14 #10 #0) (a64-add #10 #13 #9) (a64-str-idx #14 #10 #0) (a64-movz #15 #8 #0) (a64-add #9 #9 #15)
+      cloop   = l-app (a64-movz #9 #0 #0) (a64-while-cc (a64-cmp #9 #12) a64-cc-hs cstep)
+  in xcat3 sz-calc alloc cloop

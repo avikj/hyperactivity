@@ -1,0 +1,6 @@
+s-swarm-stream : List Word → Proc W (List Word)
+s-swarm-stream st =
+  bind (h-read (list-append st "/trace.jsonl")) (λ r →
+    let body = the (List Word) (case r of inl _ → nil ; inr b → b)
+        tail = this-tail-bytes (toNat #4096) body
+    in ret {lzero} {W} (s-response "application/json" (h-concat (cons "{" (cons (s-cj-str "outbox") (cons ":" (cons (s-cj-str tail) (cons "}" nil))))))))

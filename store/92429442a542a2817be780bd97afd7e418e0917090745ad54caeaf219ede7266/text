@@ -1,0 +1,10 @@
+-- Single-run WCmd driver (`#build`): reserves 64B frame, calls main-off, loops until tag 0 (`sdone`), returns 0
+a64-driver : Word → Word → Lst Word
+a64-driver main-off apply-off =
+  let init-fr = xcat5 a64-stp-fp-lr a64-mov-fp-sp (a64-insn #3506504703)
+                      (l-app (a64-imm32 #0 apply-off) (a64-insn #4162814880))
+                      (a64-call-off main-off)
+      w-test  = l-app (a64-ldr-idx #1 #0 #0) (a64-cmp #1 #31)
+      w-step  = xcat4 (a64-ldr-idx #1 #0 #2) (a64-insn #4162782113) (a64-ldr-idx #1 #0 #1) (l-app a64-wcmd-body a64-step-cont)
+  in xcat3 init-fr (a64-while-cc w-test a64-cc-eq w-step)
+           (xcat4 (a64-movz #0 #0 #0) a64-mov-sp-fp a64-ldp-fp-lr a64-ret)

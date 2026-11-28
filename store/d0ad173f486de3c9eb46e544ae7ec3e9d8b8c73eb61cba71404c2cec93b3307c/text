@@ -1,0 +1,17 @@
+macho-build-loop-plan : Word → Word → Word → Word → BPlan
+macho-build-loop-plan gi gs gc gp =
+  let St = ty-of gi
+      tys = c-and (code-conv-at (code Type) (ty-of gs) (capp (code loop-step-ty) St))
+              (c-and (code-conv-at (code Type) (ty-of gc) (capp (code loop-copy-ty) St))
+                     (code-conv-at (code Type) (ty-of gp) (capp (capp (code loop-id-ty) St) (cglob gc))))
+      ei = loop-entry gi
+      es = loop-entry gs
+      ec = loop-entry gc
+      ok = c-and tys (c-and (snd ei) (c-and (snd es) (snd ec)))
+      p = program-of-all (lcons (gi , fst ei) (lcons (gs , fst es) (lcons (gc , fst ec) lnil))) #256
+      defs = x-erase-roots (lcons gi (lcons gs (lcons gc lnil))) (x-forms-all (snd p))
+  in case x-verdict (fst p) defs return (λ _ → BPlan) of
+       not-fo w at → (not-fo w at , (ok , lnil))
+       fo q → (if c-and (x-arity-is defs gi #0) (c-and (x-arity-is defs gs #1) (x-arity-is defs gc #1))
+                 then (fo (fst es) , (ok , macho-image (l-app a64-start (arm64-encode-loop gi gs gc defs))))
+                 else (not-fo reflect (fst es) , (ok , lnil)))

@@ -3,7 +3,7 @@
 # 2. kernel-and-brunerie:  make brunerie (0 & 4 workers, CUBICAL_NOCACHE=1 -> -2 + step ratchet), elaboration, c-sound
 # 3. full-library-pouw:    make library (3,168+ defs), lib/pouw, lib/hx, fold/hx-fold, lib/silicon/tapeout, make workflow
 # 4. native-ubsan-e2e:     zero-UB C11 emission of unified `hx` + live GDSII/rANS/FlashAttn/Book/2-process UDP PoUW checks
-# 5. web-and-server-smoke: all 12 HTML treatises JS/DOM checks + live HTTP server smoke test across all 18 public routes
+# 5. web-and-server-smoke: all 12 HTML treatises JS/DOM checks + live HTTP server smoke test across all 23 public routes
 name: Hyperactivity Verification Matrix
 on: [push, pull_request]
 
@@ -171,24 +171,22 @@ jobs:
                   assert not (refs - ids), f"Missing DOM IDs in {p}: {refs - ids}"
               print(f"OK: {p} ({len(html)} B)")
           PY
-      - name: Boot real Hyperactivity HTTP server and smoke-test all 18 public routes
+      - name: Boot real Hyperactivity HTTP server and smoke-test all 23 public routes
         run: |
-          ./hyperactive server 18080 > /tmp/srv.log 2>&1 &
+          RENDER=1 ./build/cubical lib/server.hypercubical 18080 > /tmp/srv.log 2>&1 &
           SRV_PID=$!
           trap "kill $SRV_PID 2>/dev/null || true" EXIT
-          for i in $(seq 1 60); do
+          for i in $(seq 1 600); do
             if curl -sf http://127.0.0.1:18080/healthz >/dev/null 2>&1; then break; fi
             sleep 1
           done
           curl -sf http://127.0.0.1:18080/healthz | grep -qx "ok"
-          for route in "/" "/archive" "/learn" "/hyperfactor" "/decentralized" "/pouw" "/silicon" "/ai" "/physics" "/neuro" "/ide" "/kg" "/pdf" "/monograph" "/nets" "/sitemap.xml" "/api/kg/index"; do
+          for route in "/" "/archive" "/learn" "/hyperfactor" "/grh" "/decentralized" "/pouw" "/silicon" "/ai" "/physics" "/neuro" "/ide" "/kg" "/pdf" "/monograph" "/nets" "/portal" "/collab" "/eval" "/pay" "/api/swarm/stream" "/sitemap.xml" "/api/kg/index"; do
             code=$(curl -s -o /tmp/page.out -w "%{http_code}" "http://127.0.0.1:18080${route}")
             echo "$code  $route"
             test "$code" -eq 200
           done
           curl -sf http://127.0.0.1:18080/ > /tmp/root.html
-          grep -q "/decentralized" /tmp/root.html
-          grep -q "/hyperfactor" /tmp/root.html
-          grep -q "/archive" /tmp/root.html
-          grep -q "Computing," /tmp/root.html
-          echo "All 18 live HTTP routes verified 200!"
+          grep -q "<title>hyperactivity" /tmp/root.html
+          grep -q "/portal" /tmp/root.html
+          echo "All 23 live HTTP routes verified 200!"

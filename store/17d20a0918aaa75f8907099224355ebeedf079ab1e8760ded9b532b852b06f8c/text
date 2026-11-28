@@ -1,0 +1,8 @@
+s-portal-push : List Word → List Word → Proc W (List Word)
+s-portal-push st req =
+  let body = h-take (toNat #262144) (h-after (list-append h-crlf h-crlf) req)
+      tgtF = the (List Word) (if h-eq (um-header "x-hx-portal-target" req) "home" then "/home-live.html" else "/portal-live.html")
+  in bind (if h-prefix "<!doctype html>" body then h-write (list-append st tgtF) body
+           else if h-prefix "{" (h-trim body) then h-write (list-append st "/portal-live.json") body
+           else ret {lzero} {W} false) (λ ok →
+     ret {lzero} {W} (s-response "application/json" (if ok then "1" else "0")))

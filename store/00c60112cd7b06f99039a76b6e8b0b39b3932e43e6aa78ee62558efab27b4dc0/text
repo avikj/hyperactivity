@@ -1,0 +1,25 @@
+-- Darwin ARM64 `_start`:
+--   1. Saves initial sp (pointing to [argc, argv...]) in x25 (skipping mh if >= 4096)
+--   2. Calls mmap(0, 1 GiB, PROT_READ|PROT_WRITE=3, MAP_PRIVATE|MAP_ANON=0x1002, -1, 0) via x16=197, svc #0x80
+--   3. Builds 48-byte 16B-aligned JitCtx on stack ([0]=flag, [8]=cur, [16]=end, [24]=stack_lim, [32]=orig_sp, [40]=eof)
+--   4. Calls compiled ARM64 process blob; exits 0 (or 3 on arena/word/mmap overflow) via x16=1, svc #0x80
+a64-start : Lst Word
+a64-start =
+  let save-sp   = xcat4 (a64-insn #2432697337) (a64-insn #4181721897) (l-app (a64-movz #10 #4096 #0) (a64-cmp #9 #10))
+                        (a64-if-cc a64-cc-hs a64-cc-lo (l-app (a64-movz #9 #8 #0) (a64-add #25 #25 #9)) lnil)
+      mmap-fail = xcat3 (a64-movz #0 #3 #0) (a64-movz #16 #1 #0) a64-svc-darwin
+      mmap-call = xcat6 (a64-movz #0 #0 #0) (a64-movz #1 #16384 #1) (a64-movz #2 #3 #0)
+                        (a64-movz #3 #4098 #0) (a64-insn #2457862148)
+                        (xcat4 (a64-movz #5 #0 #0) (a64-movz #16 #197 #0) a64-svc-darwin
+                               (a64-if-cc a64-cc-hs a64-cc-lo mmap-fail lnil))
+      ctx-setup = xcat6 (a64-insn #3506488319)
+                        (l-app (a64-str-idx #31 #31 #0) (a64-str-idx #0 #31 #1))
+                        (xcat3 (a64-movz #9 #16384 #1) (a64-add #9 #0 #9) (a64-str-idx #9 #31 #2))
+                        (xcat4 (a64-insn #2432697322) (a64-movz #9 #112 #1) (a64-sub #10 #10 #9) (a64-str-idx #10 #31 #3))
+                        (l-app (a64-str-idx #25 #31 #4) (a64-str-idx #31 #31 #5))
+                        (xcat3 (a64-insn #2432697314) (a64-movz #0 #0 #0) (a64-movz #1 #0 #0))
+      exit-seq  = xcat5 (a64-ldr-idx #9 #31 #0) (a64-movz #0 #0 #0) (a64-movz #10 #3 #0)
+                        (l-app (a64-cmp #9 #31) (a64-csel #0 #10 #0 a64-cc-ne))
+                        (l-app (a64-movz #16 #1 #0) a64-svc-darwin)
+      call-blob = a64-insn (a64-or #2483027968 (%wsucc (a64-shr (l-count exit-seq) #2)))
+  in xcat5 save-sp mmap-call ctx-setup call-blob exit-seq

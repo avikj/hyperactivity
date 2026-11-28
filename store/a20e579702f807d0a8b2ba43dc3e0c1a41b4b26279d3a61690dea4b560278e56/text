@@ -1,0 +1,9 @@
+-- Complete primitive dispatcher (classes 1..6: unary, binary, load, store, blen, fresh_bytes)
+a64-prim : Enc → XEnv → Word → Word → Lst Code → Lst Word
+a64-prim ce env d k as =
+  if %wlt k #512 then a64-un ce env d (%wsub k #256) (l-at (cwlit #0) as #0)
+  else if %wlt k #768 then a64-bin ce env d (l-at (cwlit #0) as #0) (l-at (cwlit #0) as #1) (a64-op2 (%wsub k #512))
+  else if %wlt k #1024 then a64-bin ce env d (l-at (cwlit #0) as #0) (l-at (cwlit #0) as #1) (l-app (a64-add #0 #0 #1) (a64-ld-bytes (%wsub k #768)))
+  else if %wlt k #1280 then a64-store ce env d (%wsub k #1024) (l-at (cwlit #0) as #0) (l-at (cwlit #0) as #1) (l-at (cwlit #0) as #2)
+  else if %wlt k #1536 then l-app (ce env d (l-at (cwlit #0) as #0)) (a64-ldr-idx #0 #0 #0)
+  else a64-fresh ce env d (l-at (cwlit #0) as #0)

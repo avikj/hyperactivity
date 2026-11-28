@@ -1,0 +1,28 @@
+macho-image : Lst Word → Lst Word
+macho-image code-bytes =
+  let csz   = l-count code-bytes
+      raw   = %wadd #576 csz
+      tsz   = macho-align16k raw
+      pad   = %wsub tsz raw
+      vm0   = #4294967296
+      ent   = #4294967872
+      hdr   = xcat4 (xb4 #207 #250 #237 #254) (xb4 #12 #0 #0 #1)
+                    (xcat3 (xle #0 #4) (xle #2 #4) (xle #4 #4))
+                    (xcat3 (xle #536 #4) (xle #1 #4) (xle #0 #4))
+      lc-pz = xcat5 (xle #25 #4) (xle #72 #4) macho-nm-pagezero
+                    (xcat4 (xle #0 #8) (xle vm0 #8) (xle #0 #8) (xle #0 #8))
+                    (xcat4 (xle #0 #4) (xle #0 #4) (xle #0 #4) (xle #0 #4))
+      sect  = xcat6 macho-nm-text-sec macho-nm-text-seg
+                    (l-app (xle ent #8) (xle csz #8))
+                    (l-app (xle #576 #4) (xle #4 #4))
+                    (xcat3 (xle #0 #4) (xle #0 #4) (xle #2147484672 #4))
+                    (xcat3 (xle #0 #4) (xle #0 #4) (xle #0 #4))
+      lc-tx = xcat6 (xle #25 #4) (xle #152 #4) macho-nm-text-seg
+                    (xcat4 (xle vm0 #8) (xle tsz #8) (xle #0 #8) (xle tsz #8))
+                    (xcat4 (xle #5 #4) (xle #5 #4) (xle #1 #4) (xle #0 #4))
+                    sect
+      lc-ut = xcat6 (xle #5 #4) (xle #288 #4) (l-app (xle #6 #4) (xle #68 #4))
+                    (macho-zeros #256) (xle ent #8) (macho-zeros #8)
+      lc-bv = xcat6 (xle #50 #4) (xle #24 #4) (xle #1 #4) (xle #983040 #4) (xle #983040 #4) (xle #0 #4)
+      pre   = xcat6 hdr lc-pz lc-tx lc-ut lc-bv (macho-zeros #8)
+  in xcat3 pre code-bytes (macho-zeros pad)

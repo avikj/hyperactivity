@@ -1,0 +1,9 @@
+s-post : List Word → List Word → List Word → List Word → Proc W (List Word)
+s-post st m path req =
+  if h-eq (h-before "?" path) "/api/portal/push" then s-portal-push st req else
+  if h-eq (h-before "?" path) "/peer/reduce" then s-peer-reduce st m (h-after (list-append h-crlf h-crlf) req) else
+  if h-prefix "/source/record?" path then s-change st m true (s-query path) (h-after (list-append h-crlf h-crlf) req) else
+  if h-eq path "/hi/write" then hi-write st m (h-after (list-append h-crlf h-crlf) req) else
+  if h-prefix "/source/unrecord?" path then s-change st m false (s-query path) nil else
+  if h-prefix "/source/object" path then s-take m (s-query path) (h-after (list-append h-crlf h-crlf) req) else
+  ret (s-respond "404 Not Found" "text/plain" "")

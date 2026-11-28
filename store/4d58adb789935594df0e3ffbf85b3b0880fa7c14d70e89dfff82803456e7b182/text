@@ -1,0 +1,6 @@
+-- Pure functional Bytes store (copies source Bytes to arena, writes w-byte value at [copy + off + 8], returns copy)
+a64-store : Enc → XEnv → Word → Word → Code → Code → Code → Lst Word
+a64-store ce env d w b off v =
+  xcat6 (ce env d b) a64-push-x0 (ce env (%wsucc d) off) a64-push-x0 (ce env (%wadd d #2) v)
+        (xcat6 (a64-mov-r #2 #0) a64-pop-x1 a64-pop-x0 a64-copy-bytes
+               (l-app (a64-add #0 #13 #1) (a64-st-bytes w)) (a64-mov-r #0 #13))
