@@ -1,0 +1,9 @@
+-- batches of steps. Each batch marks the slab, runs, and rewinds to its mark, giving back the
+-- closures its calls made (the net itself lives in the w-alloc block). The memory base is the same
+-- word throughout, so the rewind's continuation is a function of fb, book, m, n and k alone: it is
+-- made before the mark, and nothing made after the mark is used after the rewind.
+hr-run : Nat → List Hv2Def → Word → Nat → (Word → Step W Word) → Step W Word
+hr-run fb book m zero k = k m
+hr-run fb book m (suc n) k =
+  scmd (w-sys #900 #0 #0 #0 #0 #0 #0) (λ r0 →
+  hr-go fb (hv2-keep m r0) book k (λ m1 → scmd (w-sys #901 #0 #0 #0 #0 #0 #0) (λ r → hr-run fb book (hv2-keep m r) n k)))

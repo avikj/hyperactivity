@@ -1,0 +1,22 @@
+hio-fn-open : HioE → Word → Word → (Word → Step W Word) → Step W Word
+hio-fn-open e m argm k =
+  hio-tup (toNat #1) e m argm nil (λ m1 tup →
+  if not (%weq (cli-len tup) #2) then hio-err-type m1 k
+  else hio-bytes (hio-nb e) e m1 (hio-at #0 tup) nil (λ m2 name →
+       hio-bytes (hio-nb e) e m2 (hio-at #1 tup) nil (λ m3 md →
+       hio-slot (toNat #256) m3 #3 (λ slot →
+       if %wlt #255 slot then hio-err-no m3 #24 k
+       else (let mo = hio-mode md
+             in if %weq (fst mo) hv2-none then hio-err-no m3 #22 k
+                else if %weq (snd mo) #1
+                then scmd (w-file-write-named name nil) (λ w →
+                     if hio-neg w then hio-err-no (hv2-kp m3 w) (hio-errno w) k
+                     else hio-open-rec m3 slot name nil (fst mo) #0 k)
+                else scmd (w-file-read-named name) (λ rd →
+                     if hio-neg (fst rd)
+                     then (if andB (%weq (snd mo) #2) (%weq (hio-errno (fst rd)) #2)
+                           then scmd (w-file-write-named name nil) (λ w →
+                                if hio-neg w then hio-err-no (hv2-kp m3 w) (hio-errno w) k
+                                else hio-open-rec m3 slot name nil (fst mo) #0 k)
+                           else hio-err-no (hv2-kp m3 (fst rd)) (hio-errno (fst rd)) k)
+                     else hio-open-rec m3 slot name (snd rd) (fst mo) (if %weq (snd mo) #2 then #1 else #0) k))))))

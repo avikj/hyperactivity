@@ -1,0 +1,10 @@
+ief-sin : Word → Word
+ief-sin x =
+  if orB (ief-isnan x) (ief-isinf x) then ief-NAN
+  else if ief-iszero x then x
+  else (let rd = ief-reduce x
+            q = fst rd
+            sc = ief-sc (snd rd)
+            v = if %weq q #0 then fst sc else if %weq q #1 then snd sc
+                else if %weq q #2 then sx-neg (fst sc) else sx-neg (snd sc)
+        in ief-fix (%wxor (ief-sgn x) (fst v)) (snd v))

@@ -1,0 +1,24 @@
+ief-atan2 : Word → Word → Word
+ief-atan2 y x =
+  let sy = ief-sgn y
+      pi = ief-pi-P
+      hpi = bg-shr pi #1
+  in if orB (ief-isnan y) (ief-isnan x) then ief-NAN
+     else if ief-iszero y then (if %weq (ief-sgn x) #0 then y else ief-fix sy pi)
+     else if ief-isinf y
+     then (if ief-isinf x
+           then (if %weq (ief-sgn x) #0 then ief-fix sy (bg-shr pi #2) else ief-fix sy (bg-add hpi (bg-shr pi #2)))
+           else ief-fix sy hpi)
+     else if ief-iszero x then ief-fix sy hpi
+     else if ief-isinf x then (if %weq (ief-sgn x) #0 then ief-sbit sy else ief-fix sy pi)
+     else (let n = ief-scaled (ief-abs y) #300
+               d = ief-scaled (ief-abs x) #300
+               small = %wlt (%wadd (bg-bitlen n) #100) (bg-bitlen d)
+           in if andB small (%weq (ief-sgn x) #0)
+              then (let z = %wsub (%wadd #62 (bg-bitlen d)) (bg-bitlen n)
+                        qr = bg-divmod (bg-shl n z) d
+                    in if bg-is0 (snd qr)
+                       then ief-round sy (bg-lo (bg-sub (fst qr) bg-one)) (%wsub #4096 z) #1
+                       else ief-round sy (bg-lo (fst qr)) (%wsub #4096 z) #1)
+              else (let at = if bg-ge d n then ief-atan01 n d else bg-sub hpi (ief-atan01 d n)
+                    in if %weq (ief-sgn x) #0 then ief-fix sy at else ief-fix sy (bg-sub pi at)))

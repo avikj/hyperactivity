@@ -1,0 +1,11 @@
+-- room for at least n bytes
+hio-room : Word → Word → (Word → Step W Word) → Step W Word
+hio-room r n k =
+  scmd (w-load (%wadd r #8)) (λ cap →
+  if not (%wlt cap n) then k r
+  else scmd (w-load r) (λ old → scmd (w-load (%wadd r #16)) (λ len →
+       scmd (w-alloc (%wadd n cap)) (λ nb →
+       hio-copy (toNat len) old nb (λ e →
+       scmd (w-free old) (λ u →
+       scmd (w-store r (hv2-kp nb e)) (λ u1 →
+       scmd (w-store (%wadd r #8) (%wadd n cap)) (λ u2 → k (hv2-u (hv2-u r u1) u2)))))))))

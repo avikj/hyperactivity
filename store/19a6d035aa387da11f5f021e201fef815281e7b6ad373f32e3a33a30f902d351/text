@@ -1,0 +1,13 @@
+-- the digits c and the exponent t (biased) with |x| = c·10^(t-4096), x finite and nonzero
+ief-shortest : Word → Word × Word
+ief-shortest x =
+  let m = ief-m x
+      e = ief-e x
+      v = bg-of (%wmul m #4)
+      h = bg-of (%wadd (%wmul m #4) #2)
+      l = bg-of (%wsub (%wmul m #4) (if andB (%weq (ief-fr x) #0) (%wlt #1 (ief-ex x)) then #1 else #2))
+      a = %wsub e #2
+      k0 = %wsucc (ief-flog (%wsub (%wadd e (bg-wlen m)) #1))
+      k1 = if %weq (ief-cmp10 v a (%wsub k0 #1)) #0 then %wsub k0 #1 else k0
+      k = if %weq (ief-cmp10 v a k1) #0 then k1 else %wsucc k1
+  in ief-strip (toNat #12) (ief-short-go (toNat #12) v l h (%weq (%wand m #1) #0) a k #1)

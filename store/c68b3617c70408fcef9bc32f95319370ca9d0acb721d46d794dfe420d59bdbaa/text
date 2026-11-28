@@ -1,0 +1,8 @@
+-- the integer 2^k-th root of w if it is exact
+ief-iroot-go : Nat → Word → Word → Word → Word → Word
+ief-iroot-go zero lo hi w p = lo
+ief-iroot-go (suc n) lo hi w p =
+  if %wlt hi (%wsucc lo) then lo
+  else (let mid = %wdiv (%wadd (%wadd lo hi) #1) #2
+        in if bg-ge (bg-of w) (ief-powbg (bg-of mid) (toNat p)) then ief-iroot-go n mid hi w p
+           else ief-iroot-go n lo (%wsub mid #1) w p)

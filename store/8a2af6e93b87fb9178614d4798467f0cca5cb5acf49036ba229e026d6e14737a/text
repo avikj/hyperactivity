@@ -1,0 +1,560 @@
+
+-- ===========================================================================================
+-- Patterns and bodies. PVar [PVAR, s, k, i, q]  PCtr [PCTR, s, k, x]  Case [CASE, 0, p, f]
+-- Match [MATCH, s, e, r]  Local [LOCAL, 0, k, q, v, f]  (p, x, e, r, k, v arrays)
+-- The parser's state, a record: [file, pos, book, dir, stk, idx, frs, ann, aliases]; the file is
+-- [FILE, 0, string, namespace, alias pairs (a vector of [alias, target])].
+-- ===========================================================================================
+
+macro b2m-pv (k : Word) (i : Word) (q : Word) (s : Word) : Word
+  t <- b2m-n3 b2-PVAR s k i q
+  ret t
+
+-- a fresh index (p.frs++)
+fn b2-fresh (p : Word) : Word
+  n <- b2m-rd (%wadd p #6)
+  do b2m-wr (%wadd p #6) (%wsucc n)
+  ret n
+
+-- the array a without its first n items, and a ++ b
+fnrec b2-dropg (f : Nat) (a : Word) (ob : Word) (n : Word) (j : Word) (len : Word) : Word
+  zero: ret ob
+  if %weq (%wadd n j) len
+    ret ob
+  x <- b2m-at a (%wadd n j)
+  do b2m-put ob j x
+  jump b2-dropg f a ob n (%wsucc j) len
+
+fn b2-drop (a : Word) (n : Word) : Word
+  len <- b2m-len a
+  let m0 = the Word (if %wlt len n then len else n)
+  ob <- b2-arr (%wsub len m0)
+  r <- b2-dropg (toNat #4294967295) a ob m0 #0 len
+  ret r
+
+fn b2-atake (a : Word) (n : Word) : Word
+  ob <- b2-arr n
+  do b2-copyf (toNat #4294967295) (%wsucc a) (%wsucc ob) #0 n
+  ret ob
+
+fn b2-cat (a : Word) (b : Word) : Word
+  la <- b2m-len a
+  lb <- b2m-len b
+  ob <- b2-arr (%wadd la lb)
+  do b2-copyf (toNat #4294967295) (%wsucc a) (%wsucc ob) #0 la
+  do b2-copyf (toNat #4294967295) (%wsucc b) (%wadd (%wsucc ob) la) #0 lb
+  ret ob
+
+fn b2-arr1 (x : Word) : Word
+  a <- b2-arr #1
+  do b2m-put a #0 x
+  ret a
+
+-- a body no binder occurs in (a literal, a reference, a constructor of such, or a
+-- substitution into one): substituting into it changes nothing, so body_sub leaves it as it
+-- is (a match's default leaf otherwise gathers one Sub per level it is carried down)
+fnrec b2-closed (f : Nat) (t : Word) : Word
+  zero: ret #0
+  tg <- b2m-tag t
+  if orB (%weq tg b2-LIT) (%weq tg b2-REF)
+    ret #1
+  if %weq tg b2-SUB
+    g <- b2m-f t #2
+    jump b2-closed f g
+  if %weq tg b2-CTR
+    xs <- b2m-f t #1
+    n <- b2m-len xs
+    if %weq n #0
+      ret #1
+    if %weq n #1
+      x <- b2m-at xs #0
+      jump b2-closed f x
+  ret #0
+
+-- body_sub(b, i, v): md 0 a body; md 1 a scrutinee; md 2 the rows of array a from j into ob;
+-- md 3 the terms of array a from j into ob
+fnrec b2-bsub (f : Nat) (md : Word) (b : Word) (i : Word) (v : Word) (ob : Word) (j : Word) : Word
+  zero: ret b
+  if %weq md #1
+    tg <- b2m-tag b
+    if %weq tg b2-VAR
+      bi <- b2m-f b #1
+      if not (%weq bi i)
+        ret b
+      s <- b2m-span b
+      r <- b2-pterm v s
+      ret r
+    r <- b2m-n3 b2-SUB #0 i v b
+    ret r
+  if orB (%weq md #2) (%weq md #3)
+    n <- b2m-len b
+    if %weq j n
+      ret ob
+    x <- b2m-at b j
+    if %weq md #3
+      y <- b2-bsub f #1 x i v #0 #0
+      do b2m-put ob j y
+      jump b2-bsub f md b i v ob (%wsucc j)
+    rp <- b2m-f x #0
+    rf <- b2m-f x #1
+    g <- b2-bsub f #0 rf i v #0 #0
+    c <- b2m-n2 b2-CASE #0 rp g
+    do b2m-put ob j c
+    jump b2-bsub f md b i v ob (%wsucc j)
+  tg <- b2m-tag b
+  if %weq tg b2-MATCH
+    s <- b2m-span b
+    es <- b2m-f b #0
+    rs <- b2m-f b #1
+    ne <- b2m-len es
+    nr <- b2m-len rs
+    oe <- b2-arr ne
+    or1 <- b2-arr nr
+    e2 <- b2-bsub f #3 es i v oe #0
+    r2 <- b2-bsub f #2 rs i v or1 #0
+    r <- b2m-n2 b2-MATCH s e2 r2
+    ret r
+  if %weq tg b2-LOCAL
+    ks <- b2m-f b #0
+    q <- b2m-f b #1
+    vs <- b2m-f b #2
+    g <- b2m-f b #3
+    nv <- b2m-len vs
+    ov <- b2-arr nv
+    v2 <- b2-bsub f #3 vs i v ov #0
+    g2 <- b2-bsub f #0 g i v #0 #0
+    r <- b2m-n4 b2-LOCAL #0 ks q v2 g2
+    ret r
+  cl <- b2-closed (toNat #64) b
+  if %weq cl #1
+    ret b
+  r <- b2m-n3 b2-SUB #0 i v b
+  ret r
+
+fn b2-bodysub (b : Word) (i : Word) (v : Word) : Word
+  r <- b2-bsub (toNat #4294967295) #0 b i v #0 #0
+  ret r
+
+-- patt_mark(x, rows): x's quantity joined with every variable pattern heading a row
+fnrec b2-pmarkg (f : Nat) (rs : Word) (j : Word) (n : Word) (q : Word) : Word
+  zero: ret q
+  if %weq j n
+    ret q
+  row <- b2m-at rs j
+  ps <- b2m-f row #0
+  p0 <- b2m-at ps #0
+  tg <- b2m-tag p0
+  if %weq tg b2-PVAR
+    pq <- b2m-f p0 #2
+    jump b2-pmarkg f rs (%wsucc j) n (b2-qjoin q pq)
+  jump b2-pmarkg f rs (%wsucc j) n q
+
+fn b2-pmark (x : Word) (rs : Word) : Word
+  n <- b2m-len rs
+  q <- b2m-f x #2
+  r <- b2-pmarkg (toNat #4294967295) rs #0 n q
+  ret r
+
+-- the first constructor pattern heading a row (0 when none)
+fnrec b2-firstctr (f : Nat) (rs : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  row <- b2m-at rs j
+  ps <- b2m-f row #0
+  p0 <- b2m-at ps #0
+  tg <- b2m-tag p0
+  if %weq tg b2-PCTR
+    ret p0
+  jump b2-firstctr f rs (%wsucc j) n
+
+-- the index of the var whose index is i (hv2-none when none)
+fnrec b2-varidx (f : Nat) (vs : Word) (i : Word) (j : Word) (n : Word) : Word
+  zero: ret hv2-none
+  if %weq j n
+    ret hv2-none
+  w <- b2m-at vs j
+  wi <- b2m-f w #1
+  if %weq wi i
+    ret j
+  jump b2-varidx f vs i (%wsucc j) n
+
+-- a PVar copy with quantity q
+fn b2-pvq (v : Word) (q : Word) : Word
+  c <- b2-copy v
+  do b2m-setf c #2 q
+  ret c
+
+-- the rows of a variable column: each row's head a PVar, its body substituted (or an error)
+fnrec b2-varrows (f : Nat) (rs : Word) (w : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  row <- b2m-at rs j
+  ps <- b2m-f row #0
+  rf <- b2m-f row #1
+  p0 <- b2m-at ps #0
+  tg <- b2m-tag p0
+  if not (%weq tg b2-PVAR)
+    bk <- b2-booknil
+    s <- b2m-span p0
+    r <- b2-fail bk #0 "a variable pattern (this column has no constructor row)" #0 s #0
+    ret r
+  pi <- b2m-f p0 #1
+  g <- b2-bodysub rf pi w
+  ps2 <- b2-drop ps #1
+  c <- b2m-n2 b2-CASE #0 ps2 g
+  do b2m-put ob j c
+  jump b2-varrows f rs w ob (%wsucc j) n
+
+-- vars with v replaced by w
+fnrec b2-replg (f : Nat) (vs : Word) (v : Word) (w : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  u <- b2m-at vs j
+  do b2m-put ob j (the Word (if %weq u v then w else u))
+  jump b2-replg f vs v w ob (%wsucc j) n
+
+fn b2-repl (vs : Word) (v : Word) (w : Word) : Word
+  n <- b2m-len vs
+  ob <- b2-arr n
+  r <- b2-replg (toNat #4294967295) vs v w ob #0 n
+  ret r
+
+-- the constructor's field patterns as vars: a PVar joined with xq, else a fresh _i
+fnrec b2-ctrvars (f : Nat) (p : Word) (cx : Word) (xq : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  q <- b2m-at cx j
+  tg <- b2m-tag q
+  if %weq tg b2-PVAR
+    qq <- b2m-f q #2
+    c <- b2-pvq q (b2-qjoin qq xq)
+    do b2m-put ob j c
+    jump b2-ctrvars f p cx xq ob (%wsucc j) n
+  i <- b2-fresh p
+  nm <- b2-nm (cons #95 (ce-dec i))
+  s <- b2m-span q
+  c <- b2m-pv nm i xq s
+  do b2m-put ob j c
+  jump b2-ctrvars f p cx xq ob (%wsucc j) n
+
+-- the scans of match_flatten over its rows, each in its own closure region: its answer is a
+-- RAM word (register 29, or the vector it fills), so the closures it made are reclaimed on
+-- return (a match of n rows over d levels otherwise keeps n d scans of them)
+fn b2-rans (v : Word) : Word
+  halt (scmd (w-sys #901 #0 #0 #0 #0 #0 #0) kq_)
+
+fn b2-rfirstctr (rs : Word) (nr : Word) : Word
+  im <- b2-inner
+  if %weq im #0
+    c <- b2-firstctr (toNat #4294967295) rs #0 nr
+    wr (b2-HR M #29) c
+    ret #0
+  mk <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  c <- b2-firstctr (toNat #4294967295) rs #0 nr
+  wr (b2-HR M #29) c
+  jump b2-rans #0
+
+fn b2-rvaridx (b : Word) (si : Word) (nv : Word) : Word
+  im <- b2-inner
+  if %weq im #0
+    j0 <- b2-varidx (toNat #4294967295) b si #0 nv
+    wr (b2-HR M #29) j0
+    ret #0
+  mk <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  j0 <- b2-varidx (toNat #4294967295) b si #0 nv
+  wr (b2-HR M #29) j0
+  jump b2-rans #0
+
+fn b2-rpmark (x : Word) (rs : Word) : Word
+  im <- b2-inner
+  if %weq im #0
+    q <- b2-pmark x rs
+    wr (b2-HR M #29) q
+    ret #0
+  mk <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  q <- b2-pmark x rs
+  wr (b2-HR M #29) q
+  jump b2-rans #0
+
+fn b2-rctrrows (rs : Word) (ck : Word) (x : Word) (kx : Word) (xs : Word) (pv : Word) (nr : Word) : Word
+  im <- b2-inner
+  if %weq im #0
+    do b2-ctrrows (toNat #4294967295) rs ck x kx xs pv #0 nr
+    ret #0
+  mk <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  do b2-ctrrows (toNat #4294967295) rs ck x kx xs pv #0 nr
+  jump b2-rans #0
+
+fn b2-rotherrows (rs : Word) (ck : Word) (dv : Word) (nr : Word) : Word
+  im <- b2-inner
+  if %weq im #0
+    do b2-otherrows (toNat #4294967295) rs ck dv #0 nr
+    ret #0
+  mk <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  do b2-otherrows (toNat #4294967295) rs ck dv #0 nr
+  jump b2-rans #0
+
+-- the specialized rows of the constructor column (k, kx, xs) into the vector ob
+fnrec b2-ctrrows (f : Nat) (rs : Word) (ck : Word) (x : Word) (kx : Word) (xs : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  row <- b2m-at rs j
+  ps <- b2m-f row #0
+  rf <- b2m-f row #1
+  p0 <- b2m-at ps #0
+  rest <- b2-drop ps #1
+  tg <- b2m-tag p0
+  xi <- b2m-f x #1
+  if %weq tg b2-PCTR
+    pk <- b2m-f p0 #0
+    if not (%weq pk ck)
+      jump b2-ctrrows f rs ck x kx xs ob (%wsucc j) n
+    px <- b2m-f p0 #1
+    g <- b2-bodysub rf xi kx
+    np <- b2-cat px rest
+    c <- b2m-n2 b2-CASE #0 np g
+    do b2-vpush ob c
+    jump b2-ctrrows f rs ck x kx xs ob (%wsucc j) n
+  pi <- b2m-f p0 #1
+  g0 <- b2-bodysub rf pi x
+  g <- b2-bodysub g0 xi kx
+  np <- b2-cat xs rest
+  c <- b2m-n2 b2-CASE #0 np g
+  do b2-vpush ob c
+  jump b2-ctrrows f rs ck x kx xs ob (%wsucc j) n
+
+-- the rows that do not head with constructor k
+fnrec b2-otherrows (f : Nat) (rs : Word) (ck : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  row <- b2m-at rs j
+  ps <- b2m-f row #0
+  p0 <- b2m-at ps #0
+  tg <- b2m-tag p0
+  pk <- b2m-f p0 #0
+  if orB (not (%weq tg b2-PCTR)) (not (%weq pk ck))
+    do b2-vpush ob row
+  jump b2-otherrows f rs ck ob (%wsucc j) n
+
+-- the terms of patterns
+fnrec b2-pterms (f : Nat) (xs : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  x <- b2m-at xs j
+  t <- b2-pterm x #0
+  do b2m-put ob j t
+  jump b2-pterms f xs ob (%wsucc j) n
+
+-- the lambdas of vars [0, n) around t, the last innermost
+fnrec b2-lams (f : Nat) (vs : Word) (j : Word) (t : Word) : Word
+  zero: ret t
+  if %weq j #0
+    ret t
+  u <- b2m-at vs (%wsub j #1)
+  k <- b2m-f u #0
+  i <- b2m-f u #1
+  q <- b2m-f u #2
+  s <- b2m-span u
+  l <- b2-Lam k i t s q
+  jump b2-lams f vs (%wsub j #1) l
+
+-- the error of a match whose scrutinee is no var
+fnrec b2-unsub (f : Nat) (e : Word) : Word
+  zero: ret e
+  tg <- b2m-tag e
+  if %weq tg b2-SUB
+    g <- b2m-f e #2
+    jump b2-unsub f g
+  ret e
+
+b2-allname : List Word → Bool
+b2-allname nil = true
+b2-allname (cons c r) = andB (b2-ischar c) (b2-allname r)
+
+b2-ishead : Word → Bool
+b2-ishead n = orB (andB (%wlt #64 n) (%wlt n #91)) (orB (andB (%wlt #96 n) (%wlt n #123)) (%weq n #95))
+
+b2-ischar : Word → Bool
+b2-ischar n = orB (b2-ishead n) (orB (andB (%wlt #47 n) (%wlt n #58)) (%weq n #46))
+
+fn b2-nomatch (m : Word) : Word
+  es <- b2m-f m #0
+  e0 <- b2m-at es #0
+  e <- b2-unsub (toNat #4294967295) e0
+  bk <- b2-booknil
+  ms <- b2m-span m
+  es1 <- b2m-span e
+  tg <- b2m-tag e
+  k <- b2m-f e #0
+  kb <-[b2-dpl] b2-nbytes k
+  xs <-[b2-dpl] b2-spantext es1 (the (List Word) (if %weq tg b2-LIT then "undefined" else kb))
+  if %weq tg b2-VAR
+    r <- b2-fail bk #0 (list-append "'" (list-append xs "' can't be matched in this position (it is matched after a local statement or after a match on a later binder, it was already matched, or it is a def)")) #0 es1 #0
+    ret r
+  if orB (%weq tg b2-CTR) (%weq tg b2-LIT)
+    if andB (b2-ishead (hv2-nth #0 xs)) (b2-allname xs)
+      r <- b2-fail bk #0 (list-append "'" (list-append xs "' can't be matched here (match it in the same match as the pattern that introduced it)")) #0 ms #0
+      ret r
+    r <- b2-fail bk #0 (list-append "'" (list-append xs "' can't be matched (this value is already a constructor: bind its fields directly)")) #0 ms #0
+    ret r
+  r <- b2-fail bk #0 "a parameter or field scrutinee (a match cannot scrutinize a computed value: give it its own def)" #0 (the Word (if %weq es1 #0 then ms else es1)) #0
+  ret r
+
+-- body_flatten (md 0: body a, vars b) and match_flatten (md 1: match a, vars b); p the parser
+fnrec b2fl (f : Nat) (md : Word) (a : Word) (b : Word) (p : Word) : Word
+  zero: jump b2-fuelout
+  nv <- b2m-len b
+  if %weq md #0
+    tg <- b2m-tag a
+    if %weq tg b2-LOCAL
+      ks <- b2m-f a #0
+      q <- b2m-f a #1
+      vs <- b2m-f a #2
+      g <- b2m-f a #3
+      nk <- b2m-len ks
+      k0 <- b2m-at ks #0
+      k0t <- b2m-tag k0
+      if andB (%weq nk #1) (%weq k0t b2-PCTR)
+        v0 <- b2m-at vs #0
+        vs0 <- b2m-span v0
+        pa <- b2-arr1 k0
+        c <- b2m-n2 b2-CASE #0 pa g
+        e1 <- b2-arr1 v0
+        r1 <- b2-arr1 c
+        mt <- b2m-n2 b2-MATCH vs0 e1 r1
+        jump b2fl f #1 mt b p
+      g0 <-! b2fl f #0 g ks p
+      g1 <-! b2-unlams (toNat #4294967295) g0 ks #0 nk
+      kn <- b2-pvfield ks #0
+      ki <- b2-pvfield ks #1
+      kq <- b2-pvdem ks q
+      s0 <- b2m-span k0
+      lt <- b2m-n5 b2-LET s0 kn ki kq vs g1
+      jump b2fl f #0 lt b p
+    if %weq tg b2-MATCH
+      jump b2fl f #1 a b p
+    r <- b2-lams (toNat #4294967295) b nv a
+    ret r
+  -- match_flatten (a command each level: back to the trampoline, the C stack let go)
+  tw <- cmd w-now
+  es <- b2m-f a #0
+  rs <- b2m-f a #1
+  ms <- b2m-span a
+  ne <- b2m-len es
+  nr <- b2m-len rs
+  if %weq ne #0
+    if %weq nr #0
+      bk <- b2-booknil
+      r <- b2-fail bk #0 "a case (this match has no row to return)" #0 ms #0
+      ret r
+    r0 <- b2m-at rs #0
+    rf <- b2m-f r0 #1
+    jump b2fl f #0 rf b p
+  if %weq nv #0
+    r <- b2-nomatch a
+    ret r
+  x <- b2m-at b #0
+  scu <- b2m-at es #0
+  do b2-rfirstctr rs nr
+  c <- rd (b2-HR M #29)
+  st <- b2m-tag scu
+  si <- b2m-f scu #1
+  do b2-rvaridx b si nv
+  j0 <- rd (b2-HR M #29)
+  let j = the Word (if %weq st b2-VAR then j0 else hv2-none)
+  if andB (not (%weq j hv2-none)) (andB (%weq c #0) (%wlt #0 nr))
+    v <- b2m-at b j
+    do b2-rpmark v rs
+    vq <- rd (b2-HR M #29)
+    w <- b2-pvq v vq
+    ob <- b2-arr nr
+    rs2 <-! b2-varrows (toNat #4294967295) rs w ob #0 nr
+    es2 <- b2-drop es #1
+    m2 <- b2m-n2 b2-MATCH ms es2 rs2
+    vs2 <- b2-repl b v w
+    jump b2fl f #1 m2 vs2 p
+  if %weq j #0
+    if %weq c #0
+      r <- b2m-n0 b2-EFQ ms
+      ret r
+    do b2-rpmark x rs
+    xq <- rd (b2-HR M #29)
+    ck <- b2m-f c #0
+    cx <- b2m-f c #1
+    cs <- b2m-span c
+    ncx <- b2m-len cx
+    xo <- b2-arr ncx
+    xs <- b2-ctrvars (toNat #4294967295) p cx xq xo #0 ncx
+    xsp <- b2m-span x
+    kx <- b2m-n2 b2-PCTR xsp ck xs
+    pv <- b2-vec
+    do b2-rctrrows rs ck x kx xs pv nr
+    ps <- b2-vfreeze pv
+    to <- b2-arr ncx
+    xts <- b2-pterms (toNat #4294967295) xs to #0 ncx
+    erest <- b2-drop es #1
+    pe <- b2-cat xts erest
+    vrest <- b2-drop b #1
+    pvv <- b2-cat xs vrest
+    mp <- b2m-n2 b2-MATCH ms pe ps
+    pt <-! b2fl f #1 mp pvv p
+    dv <- b2-vec
+    do b2-rotherrows rs ck dv nr
+    ds <- b2-vfreeze dv
+    md2 <- b2m-n2 b2-MATCH ms es ds
+    dt <-! b2fl f #1 md2 b p
+    r <- b2m-n3 b2-MAT cs ck pt dt
+    ret r
+  let n = the Word (if %weq j hv2-none then nv else j)
+  vr <- b2-drop b n
+  t <-! b2fl f #1 a vr p
+  r <- b2-lams (toNat #4294967295) b n t
+  ret r
+
+-- the Let bodies under a parallel let: one lambda per binder (an error when it is not one)
+fnrec b2-unlams (f : Nat) (g : Word) (ws : Word) (j : Word) (n : Word) : Word
+  zero: ret g
+  if %weq j n
+    ret g
+  tg <- b2m-tag g
+  if not (%weq tg b2-LAM)
+    w <- b2m-at ws j
+    s <- b2m-span w
+    bk <- b2-booknil
+    r <- b2-fail bk #0 "a parameter or field scrutinee (a match cannot scrutinize a local binder: give it its own def)" #0 s #0
+    ret r
+  b <- b2m-f g #2
+  jump b2-unlams f b ws (%wsucc j) n
+
+-- the fields k (0) or i (1) of an array of PVars, and their quantities after quant_dem(q, .)
+fnrec b2-pvfg (f : Nat) (ws : Word) (fl : Word) (ob : Word) (j : Word) (n : Word) (q : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  w <- b2m-at ws j
+  x <- b2m-f w fl
+  do b2m-put ob j (the Word (if %weq fl #2 then b2-qdem q x else x))
+  jump b2-pvfg f ws fl ob (%wsucc j) n q
+
+fn b2-pvfield (ws : Word) (fl : Word) : Word
+  n <- b2m-len ws
+  ob <- b2-arr n
+  r <- b2-pvfg (toNat #4294967295) ws fl ob #0 n #0
+  ret r
+
+fn b2-pvdem (ws : Word) (q : Word) : Word
+  n <- b2m-len ws
+  ob <- b2-arr n
+  r <- b2-pvfg (toNat #4294967295) ws #2 ob #0 n q
+  ret r
+
+fn b2-flatten (b : Word) (vs : Word) (p : Word) : Word
+  r <- b2fl (toNat #4294967295) #0 b vs p
+  ret r

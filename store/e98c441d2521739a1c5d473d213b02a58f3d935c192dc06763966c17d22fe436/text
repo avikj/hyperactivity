@@ -1,0 +1,307 @@
+-- HVM4 in hyperactivity: the Interaction Calculus runtime of HigherOrderCO/HVM4 (src/hvm.c), its
+-- parser, its reduction to weak normal form, its normalizer, its collapser and its printer, on a
+-- flat heap of 64-bit terms laid out as the C lays them out: TAG (8 bits, the top bit the
+-- substitution mark) | EXT (24 bits) | VAL (32 bits). Every rule is the C's rule, and fresh labels
+-- and fresh names come in the C's order; where a rule allocates several blocks the order of the
+-- blocks may differ, which no output observes. hv4 FILE.hvm [-C[N]] prints what src/hvm runs.
+import "native-opt.hypercubical"
+import "hvm2.hypercubical"
+
+-- ===========================================================================================
+-- Terms
+-- ===========================================================================================
+
+h4-APP : Word
+h4-APP = #0
+h4-VAR : Word
+h4-VAR = #1
+h4-LAM : Word
+h4-LAM = #2
+h4-DP0 : Word
+h4-DP0 = #3
+h4-DP1 : Word
+h4-DP1 = #4
+h4-SUP : Word
+h4-SUP = #5
+h4-DUP : Word
+h4-DUP = #6
+h4-ALO : Word
+h4-ALO = #7
+h4-REF : Word
+h4-REF = #8
+h4-NAM : Word
+h4-NAM = #9
+h4-DRY : Word
+h4-DRY = #10
+h4-ERA : Word
+h4-ERA = #11
+h4-MAT : Word
+h4-MAT = #12
+h4-C00 : Word
+h4-C00 = #13
+h4-C01 : Word
+h4-C01 = #14
+h4-C02 : Word
+h4-C02 = #15
+h4-C16 : Word
+h4-C16 = #29
+h4-NUM : Word
+h4-NUM = #30
+h4-SWI : Word
+h4-SWI = #31
+h4-USE : Word
+h4-USE = #32
+h4-OP2 : Word
+h4-OP2 = #33
+h4-DSU : Word
+h4-DSU = #34
+h4-DDU : Word
+h4-DDU = #35
+h4-EQL : Word
+h4-EQL = #36
+h4-AND : Word
+h4-AND = #37
+h4-OR : Word
+h4-OR = #38
+h4-UNS : Word
+h4-UNS = #39
+h4-ANY : Word
+h4-ANY = #40
+h4-INC : Word
+h4-INC = #41
+h4-BJV : Word
+h4-BJV = #42
+h4-BJ0 : Word
+h4-BJ0 = #43
+h4-BJ1 : Word
+h4-BJ1 = #44
+-- WNF frames
+h4-FOP2 : Word
+h4-FOP2 = #67
+h4-FEQR : Word
+h4-FEQR = #69
+
+h4-ERAMASK : Word
+h4-ERAMASK = #8388608
+
+h4-EXTM : Word
+h4-EXTM = #16777215
+
+h4-VALM : Word
+h4-VALM = #4294967295
+
+h4-SUBB : Word
+h4-SUBB = #9223372036854775808
+
+h4-new : Word → Word → Word → Word
+h4-new tag ext val = %wor (%wshl (%wand tag #127) #56) (%wor (%wshl (%wand ext h4-EXTM) #32) (%wand val h4-VALM))
+
+h4-tag : Word → Word
+h4-tag t = %wand (%wshr t #56) #127
+
+h4-ext : Word → Word
+h4-ext t = %wand (%wshr t #32) h4-EXTM
+
+h4-val : Word → Word
+h4-val t = %wand t h4-VALM
+
+h4-sub : Word → Bool
+h4-sub t = not (%weq (%wand t h4-SUBB) #0)
+
+h4-setsub : Word → Word
+h4-setsub t = %wor t h4-SUBB
+
+h4-clrsub : Word → Word
+h4-clrsub t = %wand t #9223372036854775807
+
+h4-isctr : Word → Bool
+h4-isctr tg = andB (%wlt #12 tg) (%wlt tg #30)
+
+-- the number of fields (src/hvm.c TERM_ARITY)
+h4-arity-tag : Word → Word
+h4-arity-tag tg = if h4-isctr tg then %wsub tg #13 else h4-arity-nc tg
+
+h4-arity : Word → Word
+h4-arity t = h4-arity-tag (h4-tag t)
+
+h4-num : Word → Word
+h4-num n = h4-new h4-NUM #0 n
+
+h4-era : Word
+h4-era = h4-new h4-ERA #0 #0
+
+-- the value of a word, and a word that depends on another (so that what follows a step is not
+-- evaluated before it)
+h4-dep : Word → Word → Word
+h4-dep m x = if %weq x #0 then m else m
+
+h4-depl : {A : Type} → Word → A → A
+h4-depl m x = if %weq m #0 then x else x
+
+h4-dpw : {A : Type} → Word → A × Word → Word
+h4-dpw m p = h4-dep m (snd p)
+
+h4-dpww : {A : Type} → Word → A × (Word × Word) → Word
+h4-dpww m p = h4-dep m (fst (snd p))
+
+h4-dpl : Word → List Word → Word
+h4-dpl m xs = h4-dep m (cli-len xs)
+
+-- the memory: a header of 32 words (m+0 the next free heap word, m+8 the next fresh name, m+16
+-- the interactions, m+32.. scratch for the reducer's loops, m+64.. a suspended reduction, m+104..
+-- the collapser's queue, m+136.. the printer's state), then the book (2^16 words), the WNF stack
+-- (2^24), the heap (2^29), the visited set (2^23), the work area (2^24: the normalizer's stack or
+-- the collapser's queue), the printer's tables (2^16 lambda binds, 2^16 dup binds)
+h4-bookb : Word → Word
+h4-bookb m = %wadd m #256
+
+h4-stkb : Word → Word
+h4-stkb m = %wadd m #524544
+
+h4-heapb : Word → Word
+h4-heapb m = %wadd m #134742272
+
+h4-seenb : Word → Word
+h4-seenb m = %wadd m #4429709568
+
+h4-workb : Word → Word
+h4-workb m = %wadd m #4496818432
+
+h4-plamb : Word → Word
+h4-plamb m = %wadd m #4631036160
+
+h4-pdupb : Word → Word
+h4-pdupb m = %wadd m #4632084736
+
+h4-size : Word
+h4-size = #4633657600
+
+h4-ha : Word → Word → Word
+h4-ha m i = %wadd (h4-heapb m) (%wshl (%wand i h4-VALM) #3)
+
+h4-ba : Word → Word → Word
+h4-ba m i = %wadd (h4-bookb m) (%wshl (%wand i #65535) #3)
+
+h4-sa : Word → Word → Word
+h4-sa m i = %wadd (h4-stkb m) (%wshl (%wand i #16777215) #3)
+
+-- the (ascii) bytes of a natural number
+h4-dec : Word → List Word
+h4-dec n = ce-dec n
+
+-- the op code's symbol (src/hvm.c print op_syms)
+h4-opsym : Word → List Word
+h4-opsym o =
+  if %weq o #0 then "+" else if %weq o #1 then "-" else if %weq o #2 then "*" else if %weq o #3 then "/"
+  else if %weq o #4 then "%" else if %weq o #5 then "&&" else if %weq o #6 then "||" else if %weq o #7 then "^"
+  else if %weq o #8 then "<<" else if %weq o #9 then ">>" else if %weq o #10 then "~" else if %weq o #11 then "=="
+  else if %weq o #12 then "!=" else if %weq o #13 then "<" else if %weq o #14 then "<=" else if %weq o #15 then ">"
+  else if %weq o #16 then ">=" else list-append "?" (ce-dec o)
+
+h4-u32 : Word → Word
+h4-u32 x = %wand x h4-VALM
+
+-- src/hvm.c term_op2_u32 (u32 arithmetic; shifts by the count mod 32, as the machine does)
+h4-op : Word → Word → Word → Word
+h4-op o a b =
+  if %weq o #0 then h4-u32 (%wadd a b)
+  else if %weq o #1 then h4-u32 (%wsub (%wadd a #4294967296) b)
+  else if %weq o #2 then h4-u32 (%wmul a b)
+  else if %weq o #3 then (if %weq b #0 then #0 else %wdiv a b)
+  else if %weq o #4 then (if %weq b #0 then #0 else %wmod a b)
+  else if %weq o #5 then %wand a b
+  else if %weq o #6 then %wor a b
+  else if %weq o #7 then %wxor a b
+  else if %weq o #8 then h4-u32 (%wshl (%wand a #4294967295) (%wand b #31))
+  else if %weq o #9 then %wshr a (%wand b #31)
+  else if %weq o #10 then %wxor b #4294967295
+  else if %weq o #11 then hv2-b (%weq a b)
+  else if %weq o #12 then hv2-b (not (%weq a b))
+  else if %weq o #13 then hv2-b (%wlt a b)
+  else if %weq o #14 then hv2-b (not (%wlt b a))
+  else if %weq o #15 then hv2-b (%wlt b a)
+  else if %weq o #16 then hv2-b (not (%wlt a b))
+  else #0
+
+-- ===========================================================================================
+-- The heap
+-- ===========================================================================================
+
+fn h4-alloc (n : Word) : Word
+  at <- rd M
+  wr M (%wadd at n)
+  ret at
+
+fn h4-rd (i : Word) : Word
+  x <- rd (h4-ha M i)
+  ret x
+
+fn h4-wr (i : Word) (v : Word) : Word
+  wr (h4-ha M i) v
+  ret v
+
+fn h4-itr (z : Word) : Word
+  n <- rd (%wadd M #16)
+  wr (%wadd M #16) (%wsucc n)
+  ret z
+
+-- a node of two fields, and of one
+fn h4-mk2 (tag : Word) (ext : Word) (a : Word) (b : Word) : Word
+  at <- h4-alloc #2
+  wr (h4-ha M at) a
+  wr (h4-ha M (%wadd at #1)) b
+  ret (h4-new tag ext at)
+
+fn h4-mk2at (at : Word) (tag : Word) (ext : Word) (a : Word) (b : Word) : Word
+  wr (h4-ha M at) a
+  wr (h4-ha M (%wadd at #1)) b
+  ret (h4-new tag ext at)
+
+fn h4-mk1 (tag : Word) (ext : Word) (a : Word) : Word
+  at <- h4-alloc #1
+  wr (h4-ha M at) a
+  ret (h4-new tag ext at)
+
+fn h4-mk3 (tag : Word) (ext : Word) (a : Word) (b : Word) (c : Word) : Word
+  at <- h4-alloc #3
+  wr (h4-ha M at) a
+  wr (h4-ha M (%wadd at #1)) b
+  wr (h4-ha M (%wadd at #2)) c
+  ret (h4-new tag ext at)
+
+-- a constructor of the given fields (src/hvm.c term_new_ctr)
+fnrec h4-wrs (f : Nat) (at : Word) (xs : List Word) : Word
+  zero: ret at
+  if %weq (cli-len xs) #0
+    ret at
+  wr (h4-ha M at) (hv2-nth #0 xs)
+  jump h4-wrs f (%wsucc at) (hv2-drop1 xs)
+
+fn h4-ctr (nam : Word) (xs : List Word) : Word
+  let n = cli-len xs
+  if %weq n #0
+    ret (h4-new h4-C00 nam #0)
+  at <- h4-alloc n
+  e <- h4-wrs (toNat #17) at xs
+  ret (h4-new (%wadd h4-C00 n) nam (h4-depl e at))
+
+-- a dup node holding v: (DP0, DP1) of the given label
+fn h4-clone (lab : Word) (v : Word) : Word
+  at <- h4-alloc #1
+  wr (h4-ha M at) v
+  ret at
+
+h4-dp0 : Word → Word → Word
+h4-dp0 lab loc = h4-new h4-DP0 lab loc
+
+h4-dp1 : Word → Word → Word
+h4-dp1 lab loc = h4-new h4-DP1 lab loc
+
+-- src/hvm.c heap_subst_cop: the other side's value left for its twin, this side's returned
+fn h4-subcop (side : Word) (loc : Word) (r0 : Word) (r1 : Word) : Word
+  wr (h4-ha M loc) (h4-setsub (if %weq side #0 then r1 else r0))
+  ret (if %weq side #0 then r0 else r1)
+
+fn h4-subst (loc : Word) (v : Word) : Word
+  wr (h4-ha M loc) (h4-setsub v)
+  ret v

@@ -1,0 +1,11 @@
+-- ln x, x positive finite, signed, scaled by 2^P
+ief-lnfix : Word → Word × List Word
+ief-lnfix x =
+  let m = ief-nm x
+      big = %wlt #11863283 m
+      n = if big then %wadd (ief-ne x) #24 else %wadd (ief-ne x) #23
+      c = if big then #16777216 else #8388608
+      lz = the (Word × List Word) (if %wlt m c then (#1 , ief-atanh2 (bg-of (%wsub c m)) (bg-of (%wadd c m)))
+           else (#0 , ief-atanh2 (bg-of (%wsub m c)) (bg-of (%wadd c m))))
+      ln = the (Word × List Word) (if %wlt n #4096 then (#1 , bg-mulw ief-ln2-P (%wsub #4096 n)) else (#0 , bg-mulw ief-ln2-P (%wsub n #4096)))
+  in sx-add ln lz

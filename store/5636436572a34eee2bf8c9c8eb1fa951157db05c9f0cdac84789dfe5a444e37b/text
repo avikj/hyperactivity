@@ -1,0 +1,960 @@
+
+-- ===========================================================================================
+-- Reduction to weak normal form (src/hvm.c wnf): one loop over an explicit stack of frames in
+-- memory. st 0 enters cur, st 1 applies the frame on top of the stack to the weak normal form cur;
+-- st 2-6 are the loops some interactions run (ALO's list walk, ALO-NOD's fields, DUP-NOD's
+-- fields, APP-MAT-CTR's applications, EQL-CTR's fields). Every rule below is inlined, so a step
+-- allocates nothing outside the heap.
+-- ===========================================================================================
+
+macro h4m-rd (i : Word) : Word
+  x <- rd (h4-ha M i)
+  ret x
+
+macro h4m-wr (i : Word) (v : Word) : Word
+  wr (h4-ha M i) v
+  ret v
+
+macro h4m-alloc (n : Word) : Word
+  at <- rd M
+  wr M (%wadd at n)
+  ret at
+
+macro h4m-itr : Word
+  n <- rd (%wadd M #16)
+  wr (%wadd M #16) (%wsucc n)
+  ret n
+
+macro h4m-n2at (loc : Word) (tg : Word) (ex : Word) (a : Word) (b : Word) : Word
+  do h4m-wr loc a
+  do h4m-wr (%wadd loc #1) b
+  ret (h4-new tg ex loc)
+
+macro h4m-n2 (tg : Word) (ex : Word) (a : Word) (b : Word) : Word
+  at <- h4m-alloc #2
+  t <- h4m-n2at at tg ex a b
+  ret t
+
+macro h4m-n1 (tg : Word) (ex : Word) (a : Word) : Word
+  at <- h4m-alloc #1
+  do h4m-wr at a
+  ret (h4-new tg ex at)
+
+macro h4m-n3 (tg : Word) (ex : Word) (a : Word) (b : Word) (c : Word) : Word
+  at <- h4m-alloc #3
+  do h4m-wr at a
+  do h4m-wr (%wadd at #1) b
+  do h4m-wr (%wadd at #2) c
+  ret (h4-new tg ex at)
+
+-- term_clone: the cell holding v (its two halves are DP0/DP1 of a label at it)
+macro h4m-cell (v : Word) : Word
+  at <- h4m-alloc #1
+  do h4m-wr at v
+  ret at
+
+-- term_new_alo_at / term_new_alo (with len 0 the term points at the book directly)
+macro h4m-aloat (loc : Word) (ls : Word) (len : Word) (tm : Word) : Word
+  do h4m-wr loc (%wor (%wshl (%wand ls h4-VALM) #32) (%wand tm h4-VALM))
+  ret (the Word (the Word (if %weq len #0 then h4-new h4-ALO #0 tm else h4-new h4-ALO len loc)))
+
+macro h4m-alo (ls : Word) (len : Word) (tm : Word) : Word
+  at <- h4m-alloc (the Word (if %weq len #0 then #0 else #1))
+  t <- h4m-aloat at ls len tm
+  ret t
+
+macro h4m-subst (loc : Word) (v : Word) : Word
+  do h4m-wr loc (h4-setsub v)
+  ret v
+
+macro h4m-subcop (side : Word) (loc : Word) (r0 : Word) (r1 : Word) : Word
+  do h4m-wr loc (h4-setsub (the Word (if %weq side #0 then r1 else r0)))
+  ret (the Word (the Word (if %weq side #0 then r0 else r1)))
+
+macro h4m-push (sp : Word) (v : Word) : Word
+  wr (h4-sa M sp) v
+  ret v
+
+-- the class of a term entered: 1 VAR, 2 DP0/DP1, 3 a node whose first field is reduced first (APP OP2 EQL AND OR DSU DDU), 4 DUP, 5 UNS, 6 REF, 7 ALO, 0 a weak normal form
+h4-ecls : Word → Word
+h4-ecls tg =
+  let h = %wshr tg #4
+      w = the Word (if %weq h #0 then #27716100115 else if %weq h #1 then #0 else if %weq h #2 then #1395864368 else if %weq h #3 then #0 else #0)
+  in %wand (%wshr w (%wshl (%wand tg #15) #2)) #15
+
+-- the class of a frame: 1 APP, 2 MAT/SWI, 3 USE, 4 DP0/DP1, 5 OP2, 6 F_OP2_NUM, 7 EQL, 8 F_EQL_R, 9 DSU, 10 DDU, 11 AND, 12 OR
+h4-fcls : Word → Word
+h4-fcls tg =
+  let h = %wshr tg #4
+      w = the Word (if %weq h #0 then #562949953699841 else if %weq h #1 then #2305843009213693952 else if %weq h #2 then #213363027 else if %weq h #3 then #0 else #8413184)
+  in %wand (%wshr w (%wshl (%wand tg #15) #2)) #15
+
+-- the class of a weak normal form: 1 ERA, 2 NAM/BJV/BJ0/BJ1, 3 DRY, 4 LAM, 5 SUP, 6 INC, 7 MAT/SWI, 8 USE, 9 NUM, 10 a constructor, 11 ANY, 12 OP2, 13 DSU, 14 DDU, 0 other
+h4-wcls : Word → Word
+h4-wcls tg =
+  let h = %wshr tg #4
+      w = the Word (if %weq h #0 then #12296818335723553792 else if %weq h #1 then #8767007274614565546 else if %weq h #2 then #600792910327240 else if %weq h #3 then #0 else #0)
+  in %wand (%wshr w (%wshl (%wand tg #15) #2)) #15
+
+-- the class of a book term under ALO: 1 a variable (VAR BJV DP0 DP1 BJ0 BJ1), 2 LAM, 3 DUP, 4 a node ALO-NOD copies, 0 itself
+h4-bcls : Word → Word
+h4-bcls tg =
+  let h = %wshr tg #4
+      w = the Word (if %weq h #0 then #4919061091096531476 else if %weq h #1 then #4630901376837502020 else if %weq h #2 then #300442697614404 else if %weq h #3 then #0 else #0)
+  in %wand (%wshr w (%wshl (%wand tg #15) #2)) #15
+
+-- the fields of a tag that is not a constructor (src/hvm.c TERM_ARITY)
+h4-arity-nc : Word → Word
+h4-arity-nc tg =
+  let h = %wshr tg #4
+      w = the Word (if %weq h #0 then #565149012328706 else if %weq h #1 then #2305843009213693952 else if %weq h #2 then #69023707937 else if %weq h #3 then #0 else #0)
+  in %wand (%wshr w (%wshl (%wand tg #15) #2)) #15
+
+h4-NAMISH : Word → Bool
+h4-NAMISH tg = orB (%weq tg h4-NAM) (orB (%weq tg h4-BJV) (orB (%weq tg h4-BJ0) (%weq tg h4-BJ1)))
+
+h4-MATISH : Word → Bool
+h4-MATISH tg = orB (%weq tg h4-MAT) (%weq tg h4-SWI)
+
+-- the tags that are their own weak normal form (src/hvm.c wnf_at)
+h4-ISWHNF : Word → Bool
+h4-ISWHNF tg = orB (h4-NAMISH tg) (orB (%weq tg h4-DRY) (orB (%weq tg h4-ERA) (orB (%weq tg h4-SUP) (orB (%weq tg h4-LAM) (orB (%weq tg h4-NUM) (orB (h4-MATISH tg) (orB (%weq tg h4-USE) (orB (%weq tg h4-INC) (h4-isctr tg)))))))))
+
+-- the tags DUP-NOD copies (src/hvm.c wnf apply DP0/DP1)
+h4-DUPNOD : Word → Bool
+h4-DUPNOD tg = orB (%weq tg h4-DRY) (orB (h4-MATISH tg) (orB (%weq tg h4-USE) (orB (%weq tg h4-INC) (orB (%weq tg h4-OP2) (orB (%weq tg h4-DSU) (orB (%weq tg h4-DDU) (h4-isctr tg)))))))
+
+-- the book tags ALO-NOD copies
+h4-ALONOD : Word → Bool
+h4-ALONOD tg = orB (%weq tg h4-APP) (orB (%weq tg h4-DRY) (orB (%weq tg h4-SUP) (orB (h4-MATISH tg) (orB (%weq tg h4-USE) (orB (%weq tg h4-UNS) (orB (%weq tg h4-INC) (orB (h4-isctr tg) (orB (%weq tg h4-OP2) (orB (%weq tg h4-EQL) (orB (%weq tg h4-AND) (orB (%weq tg h4-OR) (orB (%weq tg h4-DSU) (%weq tg h4-DDU)))))))))))))
+
+h4-S0 : Word → Word
+h4-S0 m = %wadd m #32
+h4-S1 : Word → Word
+h4-S1 m = %wadd m #40
+h4-S2 : Word → Word
+h4-S2 m = %wadd m #48
+h4-S3 : Word → Word
+h4-S3 m = %wadd m #56
+
+-- a reduction out of steps: its registers kept for the next batch, and the mark of a suspension
+fn h4-wsusp (st : Word) (cur : Word) (sp : Word) (ra : Word) (rb : Word) : Word
+  wr (%wadd M #64) st
+  wr (%wadd M #72) cur
+  wr (%wadd M #80) sp
+  wr (%wadd M #88) ra
+  wr (%wadd M #96) rb
+  ret hv2-none
+
+fn h4-rterr (msg : List Word) : Word
+  halt (cli-say (list-append "RUNTIME_ERROR: " msg) (sdone #1))
+
+fnrec h4-wnf (f : Nat) (st : Word) (cur : Word) (sp : Word) (ra : Word) (rb : Word) : Word
+  zero: jump h4-wsusp st cur sp ra rb
+  -- ---------------------------------------------------------------------------------- enter
+  if %weq st #0
+    let ec = h4-ecls (h4-tag cur)
+    let loc = h4-val cur
+    if %weq ec #0
+      jump h4-wnf f #1 cur sp #0 #0
+    if %weq ec #1
+      cell <- h4m-rd loc
+      if h4-sub cell
+        jump h4-wnf f #0 (h4-clrsub cell) sp #0 #0
+      jump h4-wnf f #1 cur sp #0 #0
+    if %weq ec #2
+      cell <- h4m-rd loc
+      if h4-sub cell
+        jump h4-wnf f #0 (h4-clrsub cell) sp #0 #0
+      do h4m-push sp cur
+      jump h4-wnf f #0 cell (%wsucc sp) #0 #0
+    if %weq ec #3
+      x <- h4m-rd loc
+      do h4m-push sp cur
+      jump h4-wnf f #0 x (%wsucc sp) #0 #0
+    if %weq ec #4
+      x <- h4m-rd (%wadd loc #1)
+      jump h4-wnf f #0 x sp #0 #0
+    if %weq ec #5
+      do h4m-itr
+      bod <- h4m-rd loc
+      at <- h4m-alloc #2
+      do h4m-wr at (h4-new h4-VAR #0 (%wadd at #1))
+      do h4m-wr (%wadd at #1) (h4-new h4-LAM #0 at)
+      a1 <- h4m-n2 h4-APP #0 bod (h4-new h4-LAM #0 (%wadd at #1))
+      a2 <- h4m-n2 h4-APP #0 a1 (h4-new h4-VAR #0 at)
+      jump h4-wnf f #0 a2 sp #0 #0
+    if %weq ec #6
+      b <- rd (h4-ba M (h4-ext cur))
+      if %weq b #0
+        jump h4-wnf f #1 cur sp #0 #0
+      jump h4-wnf f #0 (h4-new h4-ALO #0 b) sp #0 #0
+    if %weq ec #7
+      let len = h4-ext cur
+      pr <- h4m-rd loc
+      let alo = the Word (the Word (if %weq len #0 then #0 else loc))
+      let ls = the Word (the Word (if %weq len #0 then #0 else %wshr pr #32))
+      let tm = the Word (the Word (if %weq len #0 then loc else %wand pr h4-VALM))
+      bk <- h4m-rd tm
+      let bt = h4-tag bk
+      let bc = h4-bcls bt
+      let lvl = h4-val bk
+      if %weq bc #1
+        if orB (%weq lvl #0) (%wlt len lvl)
+          jump h4-wnf f #0 (h4-new bt (h4-ext bk) lvl) sp #0 #0
+        jump h4-wnf f #2 ls sp (%wsub len lvl) bk
+      if %weq bc #2
+        bind <- h4m-alloc #2
+        at <- h4m-alloc (the Word (if %weq len #0 then #1 else #0))
+        a <- h4m-aloat (the Word (if %weq len #0 then at else alo)) bind (%wsucc len) lvl
+        do h4m-wr bind a
+        do h4m-wr (%wadd bind #1) (h4-num ls)
+        jump h4-wnf f #0 (h4-new h4-LAM (h4-ext bk) bind) sp #0 #0
+      if %weq bc #3
+        bind <- h4m-alloc #2
+        av <- h4m-aloat alo ls len lvl
+        do h4m-wr bind av
+        do h4m-wr (%wadd bind #1) (h4-num ls)
+        r <- h4m-alo bind (%wsucc len) (%wadd lvl #1)
+        jump h4-wnf f #0 r sp #0 #0
+      if %weq bc #4
+        let ari = h4-arity-tag bt
+        if %weq ari #0
+          jump h4-wnf f #0 bk sp #0 #0
+        out <- h4m-alloc ari
+        wr (h4-S0 M) bk
+        wr (h4-S1 M) alo
+        wr (h4-S2 M) ls
+        wr (h4-S3 M) len
+        jump h4-wnf f #3 cur sp #0 out
+      jump h4-wnf f #0 bk sp #0 #0
+    jump h4-wnf f #1 cur sp #0 #0
+  -- ---------------------------------------------------------------------------------- apply
+  if %weq st #1
+    if %wlt sp #2
+      ret cur
+    let sp1 = %wsub sp #1
+    fr <- rd (h4-sa M sp1)
+    let ft = h4-tag fr
+    let wt = h4-tag cur
+    let fc = h4-fcls ft
+    let wc = h4-wcls wt
+    let floc = h4-val fr
+    let wloc = h4-val cur
+    -- APP frame: (□ x)
+    if %weq fc #1
+      arg <- h4m-rd (%wadd floc #1)
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if orB (%weq wc #2) (%weq wc #3)
+        do h4m-wr floc cur
+        jump h4-wnf f #1 (h4-new h4-DRY #0 floc) sp1 #0 #0
+      if %weq wc #4
+        do h4m-itr
+        bod <- h4m-rd wloc
+        if not (%weq (%wand (h4-ext cur) h4-ERAMASK) #0)
+          jump h4-wnf f #0 bod sp1 #0 #0
+        do h4m-subst wloc arg
+        jump h4-wnf f #0 bod sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        tm1 <- h4m-rd (%wadd wloc #1)
+        cl <- h4m-cell arg
+        do h4m-wr (%wadd wloc #1) (h4-dp0 lab cl)
+        ap1 <- h4m-n2 h4-APP #0 tm1 (h4-dp1 lab cl)
+        s <- h4m-n2at floc h4-SUP lab (h4-new h4-APP #0 wloc) ap1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        x <- h4m-rd wloc
+        do h4m-wr floc x
+        do h4m-wr wloc (h4-new h4-APP #0 floc)
+        jump h4-wnf f #1 cur sp1 #0 #0
+      if orB (%weq wc #7) (%weq wc #8)
+        do h4m-push sp1 cur
+        jump h4-wnf f #0 arg sp #0 #0
+      if %weq wc #9
+        do h4-rterr "cannot apply a number"
+        ret #0
+      if %weq wc #10
+        do h4-rterr "cannot apply a constructor"
+        ret #0
+      do h4m-wr floc cur
+      jump h4-wnf f #1 fr sp1 #0 #0
+    -- MAT/SWI frame: (mat □)
+    if %weq fc #2
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        cl <- h4m-cell fr
+        a <- h4m-rd wloc
+        b <- h4m-rd (%wadd wloc #1)
+        ap0 <- h4m-n2 h4-APP #0 (h4-dp0 lab cl) a
+        ap1 <- h4m-n2 h4-APP #0 (h4-dp1 lab cl) b
+        s <- h4m-n2at wloc h4-SUP lab ap0 ap1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        x <- h4m-rd wloc
+        ap <- h4m-n2 h4-APP #0 fr x
+        do h4m-wr wloc ap
+        jump h4-wnf f #1 (h4-new h4-INC #0 wloc) sp1 #0 #0
+      if %weq wc #10
+        do h4m-itr
+        if %weq (h4-ext fr) (h4-ext cur)
+          let ari = %wsub wt h4-C00
+          res <- h4m-rd floc
+          if %weq ari #0
+            jump h4-wnf f #0 res sp1 #0 #0
+          a0 <- h4m-rd wloc
+          r1 <- h4m-n2at floc h4-APP #0 res a0
+          if %weq ari #1
+            jump h4-wnf f #0 r1 sp1 #0 #0
+          a1 <- h4m-rd (%wadd wloc #1)
+          r2 <- h4m-n2at wloc h4-APP #0 r1 a1
+          if %weq ari #2
+            jump h4-wnf f #0 r2 sp1 #0 #0
+          apps <- h4m-alloc (%wmul #2 (%wsub ari #2))
+          wr (h4-S0 M) wloc
+          wr (h4-S1 M) ari
+          jump h4-wnf f #5 r2 sp1 #2 apps
+        g <- h4m-rd (%wadd floc #1)
+        r <- h4m-n2at floc h4-APP #0 g cur
+        jump h4-wnf f #0 r sp1 #0 #0
+      if %weq wc #9
+        do h4m-itr
+        if %weq (h4-ext fr) wloc
+          x <- h4m-rd floc
+          jump h4-wnf f #0 x sp1 #0 #0
+        g <- h4m-rd (%wadd floc #1)
+        r <- h4m-n2at floc h4-APP #0 g cur
+        jump h4-wnf f #0 r sp1 #0 #0
+      if orB (%weq wc #2) (%weq wc #3)
+        d <- h4m-n2 h4-DRY #0 fr cur
+        jump h4-wnf f #1 d sp1 #0 #0
+      ap <- h4m-n2 h4-APP #0 fr cur
+      jump h4-wnf f #1 ap sp1 #0 #0
+    -- USE frame: (use □)
+    if %weq fc #3
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        u0 <- h4m-n1 h4-USE #0 (h4-dp0 lab floc)
+        u1 <- h4m-n1 h4-USE #0 (h4-dp1 lab floc)
+        a <- h4m-rd wloc
+        b <- h4m-rd (%wadd wloc #1)
+        ap0 <- h4m-n2 h4-APP #0 u0 a
+        ap1 <- h4m-n2 h4-APP #0 u1 b
+        s <- h4m-n2at wloc h4-SUP lab ap0 ap1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        x <- h4m-rd wloc
+        ap <- h4m-n2 h4-APP #0 fr x
+        do h4m-wr wloc ap
+        jump h4-wnf f #1 (h4-new h4-INC #0 wloc) sp1 #0 #0
+      do h4m-itr
+      g <- h4m-rd floc
+      ap <- h4m-n2 h4-APP #0 g cur
+      jump h4-wnf f #0 ap sp1 #0 #0
+    -- DP0/DP1 frame: a dup node whose value is now cur
+    if %weq fc #4
+      let side = the Word (the Word (if %weq ft h4-DP0 then #0 else #1))
+      let lab = h4-ext fr
+      if orB (%weq wc #2) (orB (%weq wc #1) (orB (%weq wc #11) (%weq wc #9)))
+        do h4m-itr
+        do h4m-subst floc cur
+        jump h4-wnf f #1 cur sp1 #0 #0
+      if %weq wc #4
+        do h4m-itr
+        let lext = h4-ext cur
+        bod <- h4m-rd wloc
+        if not (%weq (%wand lext h4-ERAMASK) #0)
+          a <- h4m-alloc #3
+          do h4m-wr (%wadd a #2) bod
+          do h4m-wr a (h4-dp0 lab (%wadd a #2))
+          do h4m-wr (%wadd a #1) (h4-dp1 lab (%wadd a #2))
+          r <- h4m-subcop side floc (h4-new h4-LAM lext a) (h4-new h4-LAM lext (%wadd a #1))
+          jump h4-wnf f #1 r sp1 #0 #0
+        a <- h4m-alloc #5
+        do h4m-wr (%wadd a #4) bod
+        do h4m-wr a (h4-dp0 lab (%wadd a #4))
+        do h4m-wr (%wadd a #1) (h4-dp1 lab (%wadd a #4))
+        do h4m-wr (%wadd a #2) (h4-new h4-VAR #0 a)
+        do h4m-wr (%wadd a #3) (h4-new h4-VAR #0 (%wadd a #1))
+        do h4m-subst wloc (h4-new h4-SUP lab (%wadd a #2))
+        r <- h4m-subcop side floc (h4-new h4-LAM lext a) (h4-new h4-LAM lext (%wadd a #1))
+        jump h4-wnf f #1 r sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        if %weq lab (h4-ext cur)
+          t0 <- h4m-rd wloc
+          t1 <- h4m-rd (%wadd wloc #1)
+          r <- h4m-subcop side floc t0 t1
+          jump h4-wnf f #0 r sp1 #0 #0
+        let sl = h4-ext cur
+        bs <- h4m-alloc #4
+        s0 <- h4m-n2at bs h4-SUP sl (h4-dp0 lab wloc) (h4-dp0 lab (%wadd wloc #1))
+        s1 <- h4m-n2at (%wadd bs #2) h4-SUP sl (h4-dp1 lab wloc) (h4-dp1 lab (%wadd wloc #1))
+        r <- h4m-subcop side floc s0 s1
+        jump h4-wnf f #0 r sp1 #0 #0
+      if orB (%weq wc #3) (orB (%weq wc #6) (orB (%weq wc #7) (orB (%weq wc #8) (orB (%weq wc #10) (orB (%weq wc #12) (orB (%weq wc #13) (%weq wc #14)))))))
+        do h4m-itr
+        let ari = h4-arity-tag wt
+        if %weq ari #0
+          do h4m-subst floc cur
+          jump h4-wnf f #0 cur sp1 #0 #0
+        blk <- h4m-alloc (%wmul #2 ari)
+        wr (h4-S0 M) fr
+        jump h4-wnf f #4 cur sp1 #0 blk
+      do h4m-wr floc cur
+      jump h4-wnf f #1 fr sp1 #0 #0
+    -- OP2 frame: (□ op y)
+    if %weq fc #5
+      let opr = h4-ext fr
+      y <- h4m-rd (%wadd floc #1)
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #9
+        if %weq (h4-tag y) h4-NUM
+          do h4m-itr
+          jump h4-wnf f #1 (h4-num (h4-op opr wloc (h4-val y))) sp1 #0 #0
+        do h4m-push sp1 (h4-new h4-FOP2 opr wloc)
+        jump h4-wnf f #0 y sp #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        cl <- h4m-cell y
+        a <- h4m-rd wloc
+        b <- h4m-rd (%wadd wloc #1)
+        o0 <- h4m-n2at floc h4-OP2 opr a (h4-dp0 lab cl)
+        o1 <- h4m-n2 h4-OP2 opr b (h4-dp1 lab cl)
+        s <- h4m-n2at wloc h4-SUP lab o0 o1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        x <- h4m-rd wloc
+        o <- h4m-n2 h4-OP2 opr x y
+        do h4m-wr wloc o
+        jump h4-wnf f #1 cur sp1 #0 #0
+      do h4m-wr floc cur
+      jump h4-wnf f #1 fr sp1 #0 #0
+    -- F_OP2_NUM frame: (#x op □)
+    if %weq fc #6
+      let opr = h4-ext fr
+      let xn = h4-num floc
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #9
+        do h4m-itr
+        jump h4-wnf f #1 (h4-num (h4-op opr floc wloc)) sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        a <- h4m-rd wloc
+        b <- h4m-rd (%wadd wloc #1)
+        o0 <- h4m-n2 h4-OP2 opr xn a
+        o1 <- h4m-n2 h4-OP2 opr xn b
+        s <- h4m-n2at wloc h4-SUP lab o0 o1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        y <- h4m-rd wloc
+        o <- h4m-n2 h4-OP2 opr xn y
+        do h4m-wr wloc o
+        jump h4-wnf f #1 cur sp1 #0 #0
+      o <- h4m-n2 h4-OP2 opr xn cur
+      jump h4-wnf f #1 o sp1 #0 #0
+    -- EQL frame: (□ === b)
+    if %weq fc #7
+      b <- h4m-rd (%wadd floc #1)
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #11
+        do h4m-itr
+        jump h4-wnf f #1 (h4-num #1) sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        a0 <- h4m-rd wloc
+        a1 <- h4m-rd (%wadd wloc #1)
+        cl <- h4m-cell b
+        e0 <- h4m-n2at floc h4-EQL #0 a0 (h4-dp0 lab cl)
+        e1 <- h4m-n2 h4-EQL #0 a1 (h4-dp1 lab cl)
+        s <- h4m-n2at wloc h4-SUP lab e0 e1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        a <- h4m-rd wloc
+        e <- h4m-n2at floc h4-EQL #0 a b
+        do h4m-wr wloc e
+        jump h4-wnf f #1 cur sp1 #0 #0
+      do h4m-wr floc cur
+      do h4m-push sp1 (h4-new h4-FEQR #0 floc)
+      jump h4-wnf f #0 b sp #0 #0
+    -- F_EQL_R frame: (a === □)
+    if %weq fc #8
+      a <- h4m-rd floc
+      let at = h4-tag a
+      let aloc = h4-val a
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #11
+        do h4m-itr
+        jump h4-wnf f #1 (h4-num #1) sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        b0 <- h4m-rd wloc
+        b1 <- h4m-rd (%wadd wloc #1)
+        cl <- h4m-cell a
+        e0 <- h4m-n2at floc h4-EQL #0 (h4-dp0 lab cl) b0
+        e1 <- h4m-n2 h4-EQL #0 (h4-dp1 lab cl) b1
+        s <- h4m-n2at wloc h4-SUP lab e0 e1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        b <- h4m-rd wloc
+        e <- h4m-n2at floc h4-EQL #0 a b
+        do h4m-wr wloc e
+        jump h4-wnf f #1 cur sp1 #0 #0
+      do h4m-itr
+      if orB (%weq at h4-ANY) (%weq wt h4-ANY)
+        jump h4-wnf f #1 (h4-num #1) sp1 #0 #0
+      if andB (%weq at h4-NUM) (%weq wt h4-NUM)
+        jump h4-wnf f #1 (h4-num (hv2-b (%weq aloc wloc))) sp1 #0 #0
+      if andB (%weq at h4-LAM) (%weq wt h4-LAM)
+        af <- h4m-rd aloc
+        bf <- h4m-rd wloc
+        fz <- rd (%wadd M #8)
+        wr (%wadd M #8) (%wsucc fz)
+        do h4m-subst aloc (h4-new h4-NAM fz #0)
+        do h4m-subst wloc (h4-new h4-NAM fz #0)
+        e <- h4m-n2 h4-EQL #0 af bf
+        jump h4-wnf f #0 e sp1 #0 #0
+      if andB (h4-isctr at) (h4-isctr wt)
+        if orB (not (%weq at wt)) (not (%weq (h4-ext a) (h4-ext cur)))
+          jump h4-wnf f #0 (h4-num #0) sp1 #0 #0
+        let ari = %wsub at h4-C00
+        if %weq ari #0
+          jump h4-wnf f #0 (h4-num #1) sp1 #0 #0
+        let ix = %wsub ari #1
+        x <- h4m-rd (%wadd aloc ix)
+        y <- h4m-rd (%wadd wloc ix)
+        e1 <- h4m-alloc (the Word (if %weq ix #0 then #0 else #2))
+        acc <- h4m-n2at (the Word (if %weq ix #0 then floc else e1)) h4-EQL #0 x y
+        wr (h4-S0 M) aloc
+        wr (h4-S1 M) wloc
+        wr (h4-S2 M) floc
+        jump h4-wnf f #6 acc sp1 ix #0
+      if andB (h4-MATISH at) (h4-MATISH wt)
+        if not (%weq (h4-ext a) (h4-ext cur))
+          jump h4-wnf f #0 (h4-num #0) sp1 #0 #0
+        ah <- h4m-rd aloc
+        am <- h4m-rd (%wadd aloc #1)
+        bh <- h4m-rd wloc
+        bm <- h4m-rd (%wadd wloc #1)
+        eh <- h4m-n2 h4-EQL #0 ah bh
+        em <- h4m-n2 h4-EQL #0 am bm
+        r <- h4m-n2at floc h4-AND #0 eh em
+        jump h4-wnf f #0 r sp1 #0 #0
+      if andB (%weq at h4-USE) (%weq wt h4-USE)
+        af <- h4m-rd aloc
+        bf <- h4m-rd wloc
+        r <- h4m-n2at floc h4-EQL #0 af bf
+        jump h4-wnf f #0 r sp1 #0 #0
+      if andB (h4-NAMISH at) (h4-NAMISH wt)
+        jump h4-wnf f #1 (h4-num (hv2-b (andB (%weq at wt) (andB (%weq (h4-ext a) (h4-ext cur)) (%weq aloc wloc))))) sp1 #0 #0
+      if andB (%weq at h4-DRY) (%weq wt h4-DRY)
+        af <- h4m-rd aloc
+        ax <- h4m-rd (%wadd aloc #1)
+        bf <- h4m-rd wloc
+        bx <- h4m-rd (%wadd wloc #1)
+        ef <- h4m-n2 h4-EQL #0 af bf
+        ex <- h4m-n2 h4-EQL #0 ax bx
+        r <- h4m-n2at floc h4-AND #0 ef ex
+        jump h4-wnf f #0 r sp1 #0 #0
+      jump h4-wnf f #1 (h4-num #0) sp1 #0 #0
+    -- DSU frame: &(□){a,b}
+    if %weq fc #9
+      a <- h4m-rd (%wadd floc #1)
+      b <- h4m-rd (%wadd floc #2)
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #9
+        do h4m-itr
+        s <- h4m-n2 h4-SUP wloc a b
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        cl <- h4m-alloc #2
+        do h4m-wr cl a
+        do h4m-wr (%wadd cl #1) b
+        x <- h4m-rd wloc
+        y <- h4m-rd (%wadd wloc #1)
+        d0 <- h4m-n3 h4-DSU #0 x (h4-dp0 lab cl) (h4-dp0 lab (%wadd cl #1))
+        d1 <- h4m-n3 h4-DSU #0 y (h4-dp1 lab cl) (h4-dp1 lab (%wadd cl #1))
+        s <- h4m-n2at wloc h4-SUP lab d0 d1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        x <- h4m-rd wloc
+        d <- h4m-n3 h4-DSU #0 x a b
+        do h4m-wr wloc d
+        jump h4-wnf f #1 cur sp1 #0 #0
+      do h4m-wr floc cur
+      jump h4-wnf f #1 fr sp1 #0 #0
+    -- DDU frame: ! X &(□) = val; bod
+    if %weq fc #10
+      v <- h4m-rd (%wadd floc #1)
+      bd <- h4m-rd (%wadd floc #2)
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #9
+        do h4m-itr
+        cl <- h4m-cell v
+        ap0 <- h4m-n2 h4-APP #0 bd (h4-dp0 wloc cl)
+        ap1 <- h4m-n2 h4-APP #0 ap0 (h4-dp1 wloc cl)
+        jump h4-wnf f #0 ap1 sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        cl <- h4m-alloc #2
+        do h4m-wr cl v
+        do h4m-wr (%wadd cl #1) bd
+        x <- h4m-rd wloc
+        y <- h4m-rd (%wadd wloc #1)
+        d0 <- h4m-n3 h4-DDU #0 x (h4-dp0 lab cl) (h4-dp0 lab (%wadd cl #1))
+        d1 <- h4m-n3 h4-DDU #0 y (h4-dp1 lab cl) (h4-dp1 lab (%wadd cl #1))
+        s <- h4m-n2at wloc h4-SUP lab d0 d1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        x <- h4m-rd wloc
+        d <- h4m-n3 h4-DDU #0 x v bd
+        do h4m-wr wloc d
+        jump h4-wnf f #1 cur sp1 #0 #0
+      do h4m-wr floc cur
+      jump h4-wnf f #1 fr sp1 #0 #0
+    -- AND frame: (□ .&. b)
+    if %weq fc #11
+      b <- h4m-rd (%wadd floc #1)
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        cl <- h4m-cell b
+        a0 <- h4m-rd wloc
+        a1 <- h4m-rd (%wadd wloc #1)
+        r0 <- h4m-n2at floc h4-AND #0 a0 (h4-dp0 lab cl)
+        r1 <- h4m-n2 h4-AND #0 a1 (h4-dp1 lab cl)
+        s <- h4m-n2at wloc h4-SUP lab r0 r1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        a <- h4m-rd wloc
+        do h4m-wr floc a
+        do h4m-wr wloc (h4-new h4-AND #0 floc)
+        jump h4-wnf f #1 cur sp1 #0 #0
+      if %weq wc #9
+        do h4m-itr
+        if %weq wloc #0
+          jump h4-wnf f #1 (h4-num #0) sp1 #0 #0
+        jump h4-wnf f #0 b sp1 #0 #0
+      do h4m-wr floc cur
+      jump h4-wnf f #1 fr sp1 #0 #0
+    -- OR frame: (□ .|. b)
+    if %weq fc #12
+      b <- h4m-rd (%wadd floc #1)
+      if %weq wc #1
+        do h4m-itr
+        jump h4-wnf f #1 h4-era sp1 #0 #0
+      if %weq wc #5
+        do h4m-itr
+        let lab = h4-ext cur
+        a0 <- h4m-rd wloc
+        a1 <- h4m-rd (%wadd wloc #1)
+        cl <- h4m-cell b
+        r0 <- h4m-n2at floc h4-OR #0 a0 (h4-dp0 lab cl)
+        r1 <- h4m-n2 h4-OR #0 a1 (h4-dp1 lab cl)
+        s <- h4m-n2at wloc h4-SUP lab r0 r1
+        jump h4-wnf f #1 s sp1 #0 #0
+      if %weq wc #6
+        do h4m-itr
+        a <- h4m-rd wloc
+        o <- h4m-n2at floc h4-OR #0 a b
+        do h4m-wr wloc o
+        jump h4-wnf f #1 cur sp1 #0 #0
+      if %weq wc #9
+        do h4m-itr
+        if %weq wloc #0
+          jump h4-wnf f #0 b sp1 #0 #0
+        jump h4-wnf f #1 (h4-num #1) sp1 #0 #0
+      do h4m-wr floc cur
+      jump h4-wnf f #1 fr sp1 #0 #0
+    jump h4-wnf f #1 cur sp1 #0 #0
+  -- ---------------------------------------------------------- ALO's walk down the binds list
+  if %weq st #2
+    if orB (%weq ra #0) (%weq cur #0)
+      let bt = h4-tag rb
+      if %weq cur #0
+        jump h4-wnf f #0 (h4-new bt (h4-ext rb) (h4-val rb)) sp #0 #0
+      if orB (%weq bt h4-VAR) (%weq bt h4-BJV)
+        jump h4-wnf f #0 (h4-new h4-VAR #0 cur) sp #0 #0
+      if orB (%weq bt h4-DP0) (%weq bt h4-BJ0)
+        jump h4-wnf f #0 (h4-dp0 (h4-ext rb) cur) sp #0 #0
+      jump h4-wnf f #0 (h4-dp1 (h4-ext rb) cur) sp #0 #0
+    nx <- h4m-rd (%wadd cur #1)
+    jump h4-wnf f #2 (h4-val nx) sp (%wsub ra #1) rb
+  -- ---------------------------------------------------------------- ALO-NOD's fields
+  if %weq st #3
+    bk <- rd (h4-S0 M)
+    let ari = h4-arity bk
+    if %weq ra ari
+      jump h4-wnf f #0 (h4-new (h4-tag bk) (h4-ext bk) rb) sp #0 #0
+    alo <- rd (h4-S1 M)
+    ls <- rd (h4-S2 M)
+    len <- rd (h4-S3 M)
+    let tm = %wadd (h4-val bk) ra
+    at <- h4m-alloc (the Word (if orB (%weq ra #0) (%weq len #0) then #0 else #1))
+    a <- h4m-aloat (the Word (if %weq ra #0 then alo else at)) ls len tm
+    do h4m-wr (%wadd rb ra) a
+    jump h4-wnf f #3 cur sp (%wsucc ra) rb
+  -- ---------------------------------------------------------------- DUP-NOD's fields
+  if %weq st #4
+    let ari = h4-arity cur
+    fr <- rd (h4-S0 M)
+    let lab = h4-ext fr
+    if %weq ra ari
+      r <- h4m-subcop (the Word (if %weq (h4-tag fr) h4-DP0 then #0 else #1)) (h4-val fr) (h4-new (h4-tag cur) (h4-ext cur) rb) (h4-new (h4-tag cur) (h4-ext cur) (%wadd rb ari))
+      jump h4-wnf f #0 r sp #0 #0
+    let tl = %wadd (h4-val cur) ra
+    do h4m-wr (%wadd rb ra) (h4-dp0 lab tl)
+    do h4m-wr (%wadd rb (%wadd ari ra)) (h4-dp1 lab tl)
+    jump h4-wnf f #4 cur sp (%wsucc ra) rb
+  -- ------------------------------------------------------- APP-MAT-CTR's applications
+  if %weq st #5
+    ari <- rd (h4-S1 M)
+    if %weq ra ari
+      jump h4-wnf f #0 cur sp #0 #0
+    cl <- rd (h4-S0 M)
+    x <- h4m-rd (%wadd cl ra)
+    r <- h4m-n2at (%wadd rb (%wmul #2 (%wsub ra #2))) h4-APP #0 cur x
+    jump h4-wnf f #5 r sp (%wsucc ra) rb
+  -- -------------------------------------------- EQL-CTR's fields, from the last to the first
+  if %weq st #6
+    if %weq ra #0
+      r <- h4m-n1 h4-INC #0 cur
+      jump h4-wnf f #0 r sp #0 #0
+    let i = %wsub ra #1
+    aloc <- rd (h4-S0 M)
+    bloc <- rd (h4-S1 M)
+    eloc <- rd (h4-S2 M)
+    x <- h4m-rd (%wadd aloc i)
+    y <- h4m-rd (%wadd bloc i)
+    e1 <- h4m-alloc (the Word (if %weq i #0 then #0 else #2))
+    eh <- h4m-n2at (the Word (if %weq i #0 then eloc else e1)) h4-EQL #0 x y
+    ic <- h4m-n1 h4-INC #0 cur
+    an <- h4m-n2 h4-AND #0 eh ic
+    jump h4-wnf f #6 an sp i #0
+  ret hv2-none
+
+-- weak normal form, in batches of steps (src/hvm.c wnf): the stack's base is 1
+fnrec h4-wnfr (n : Nat) (fu : Nat) (st : Word) (cur : Word) (sp : Word) (ra : Word) (rb : Word) : Word
+  zero: jump h4-rterr "out of steps"
+  tz <- cmd w-now
+  r <- h4-wnf fu st cur sp ra rb
+  if not (%weq r hv2-none)
+    ret r
+  s1 <- rd (%wadd M #64)
+  c1 <- rd (%wadd M #72)
+  p1 <- rd (%wadd M #80)
+  a1 <- rd (%wadd M #88)
+  b1 <- rd (%wadd M #96)
+  jump h4-wnfr n fu s1 c1 p1 a1 b1
+
+fn h4-whnf (fu : Nat) (fb : Nat) (t : Word) : Word
+  jump h4-wnfr fu fb #0 t #1 #0 #0
+
+-- src/hvm.c wnf_at
+fn h4-wnfat (fu : Nat) (fb : Nat) (loc : Word) : Word
+  cur <- h4m-rd loc
+  let wc = h4-wcls (h4-tag cur)
+  if andB (not (%weq wc #0)) (andB (not (%weq wc #11)) (%wlt wc #12))
+    ret cur
+  r <- h4-whnf fu fb cur
+  if not (%weq r cur)
+    do h4m-wr loc r
+    ret r
+  ret r
+
+-- ===========================================================================================
+-- Collapsed normal form (src/hvm.c cnf_at): md 0 the term a at depth b; md 1 the fields of the
+-- node a from index c (d the first SUP's index so far, 255 none), giving that index or 256 when a
+-- field erased; md 2 the lift of the SUP b out of the node a at field d, building the twin node
+-- at e from index c
+-- ===========================================================================================
+
+fnrec h4-cnf (f : Nat) (fu : Nat) (fb : Nat) (md : Word) (a : Word) (b : Word) (c : Word) (d : Word) (e : Word) : Word
+  zero: jump h4-rterr "cnf: too deep"
+  if %weq md #0
+    t <- h4-whnf fu fb a
+    let tg = h4-tag t
+    let loc = h4-val t
+    if %weq tg h4-LAM
+      bod <- h4m-rd loc
+      let lv = %wsucc b
+      do h4m-subst loc (h4-new h4-BJV #0 lv)
+      bc <- h4-cnf f fu fb #0 bod lv #0 #0 #0
+      bl <- h4m-cell bc
+      let lm = h4-new h4-LAM lv bl
+      let bt = h4-tag bc
+      if %weq bt h4-ERA
+        ret h4-era
+      if %weq bt h4-INC
+        x <- h4m-rd (h4-val bc)
+        do h4m-wr bl x
+        r <- h4m-n1 h4-INC #0 lm
+        ret r
+      if not (%weq bt h4-SUP)
+        ret lm
+      sa <- h4m-rd (h4-val bc)
+      sb <- h4m-rd (%wadd (h4-val bc) #1)
+      l0 <- h4m-cell sa
+      l1 <- h4m-cell sb
+      s <- h4m-n2 h4-SUP (h4-ext bc) (h4-new h4-LAM lv l0) (h4-new h4-LAM lv l1)
+      ret s
+    if orB (%weq tg h4-DUP) (orB (%weq tg h4-APP) (orB (%weq tg h4-DRY) (orB (h4-MATISH tg) (orB (%weq tg h4-USE) (orB (%weq tg h4-OP2) (orB (%weq tg h4-DSU) (orB (%weq tg h4-DDU) (orB (%weq tg h4-EQL) (orB (%weq tg h4-AND) (orB (%weq tg h4-OR) (orB (%weq tg h4-UNS) (andB (h4-isctr tg) (not (%weq tg h4-C00))))))))))))))
+      si <- h4-cnf f fu fb #1 t b #0 #255 #0
+      if %weq si #256
+        ret h4-era
+      if %weq si #255
+        ret t
+      sp <- h4m-rd (%wadd loc si)
+      blk <- h4m-alloc (h4-arity t)
+      sa <- h4m-rd (h4-val sp)
+      sb <- h4m-rd (%wadd (h4-val sp) #1)
+      do h4-cnf f fu fb #2 t sp #0 si blk
+      n0 <- h4m-rd loc
+      s <- h4m-n2 h4-SUP (h4-ext sp) t (h4-new (h4-tag t) (h4-ext t) blk)
+      ret (h4-depl n0 s)
+    ret t
+  if %weq md #1
+    let ari = h4-arity a
+    if %weq c ari
+      ret d
+    let loc = %wadd (h4-val a) c
+    tz <- cmd w-now
+    ch <- h4m-rd loc
+    cc <- h4-cnf f fu fb #0 ch b #0 #0 #0
+    if not (%weq cc ch)
+      do h4m-wr loc cc
+    if %weq (h4-tag cc) h4-ERA
+      ret #256
+    let d2 = the Word (if andB (%weq d #255) (%weq (h4-tag cc) h4-SUP) then c else d)
+    jump h4-cnf f fu fb #1 a b (%wsucc c) d2 #0
+  if %weq md #2
+    let ari = h4-arity a
+    if %weq c ari
+      ret #0
+    let loc = %wadd (h4-val a) c
+    let lab = h4-ext b
+    if %weq c d
+      sa <- h4m-rd (h4-val b)
+      sb <- h4m-rd (%wadd (h4-val b) #1)
+      do h4m-wr loc sa
+      do h4m-wr (%wadd e c) sb
+      jump h4-cnf f fu fb #2 a b (%wsucc c) d e
+    ch <- h4m-rd loc
+    cl <- h4m-cell ch
+    do h4m-wr loc (h4-dp0 lab cl)
+    do h4m-wr (%wadd e c) (h4-dp1 lab cl)
+    jump h4-cnf f fu fb #2 a b (%wsucc c) d e
+  ret #0
+
+-- ===========================================================================================
+-- Normalization (src/hvm.c eval_normalize): every reachable heap location reduced once, the
+-- visited set a bitset and the pending locations a stack in the work area
+-- ===========================================================================================
+
+h4-wka : Word → Word → Word
+h4-wka m i = %wadd (h4-workb m) (%wshl (%wand i #16777215) #3)
+
+macro h4m-seen (loc : Word) : Bool
+  w <- rd (%wadd (h4-seenb M) (%wshl (%wshr loc #6) #3))
+  let bit = %wshl #1 (%wand loc #63)
+  wr (%wadd (h4-seenb M) (%wshl (%wshr loc #6) #3)) (%wor w bit)
+  ret (not (%weq (%wand w bit) #0))
+
+-- a location left for later (a descent out of steps resumes from it)
+fn h4-normpush (loc : Word) (sl : Word) : Word
+  wr (h4-wka M sl) loc
+  ret (%wsucc sl)
+
+fnrec h4-normgo (f : Nat) (fu : Nat) (fb : Nat) (loc : Word) (sl : Word) : Word
+  zero: jump h4-normpush loc sl
+  if %weq loc #0
+    ret sl
+  was <- h4m-seen loc
+  if was
+    ret sl
+  t <- h4-wnfat fu fb loc
+  let tg = h4-tag t
+  let tl = h4-val t
+  if orB (%weq tg h4-DP0) (%weq tg h4-DP1)
+    jump h4-normgo f fu fb tl sl
+  let ari = h4-arity t
+  if %weq ari #0
+    ret sl
+  sl2 <- h4-pushfields (toNat #17) tl ari sl
+  jump h4-normgo f fu fb tl sl2
+
+-- push the locations tl+ari-1 .. tl+1 (src/hvm.c eval_normalize_go)
+fnrec h4-pushfields (f : Nat) (tl : Word) (i : Word) (sl : Word) : Word
+  zero: ret sl
+  if %wlt i #2
+    ret sl
+  wr (h4-wka M sl) (%wadd tl (%wsub i #1))
+  jump h4-pushfields f tl (%wsub i #1) (%wsucc sl)
+
+fnrec h4-normloop (f : Nat) (fu : Nat) (fb : Nat) (sl : Word) : Word
+  zero: ret (%wadd sl #1099511627776)
+  if %weq sl #0
+    ret #0
+  loc <- rd (h4-wka M (%wsub sl #1))
+  r0 <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  sl2 <- h4-normgo fb fu fb loc (%wsub sl #1)
+  r1 <- cmd (w-sys #901 #0 #0 #0 #0 #0 #0)
+  jump h4-normloop f fu fb sl2
+
+fnrec h4-normouter (n : Nat) (fu : Nat) (fb : Nat) (sl : Word) : Word
+  zero: jump h4-rterr "normalize: out of steps"
+  r <- h4-normloop fu fu fb sl
+  if %wlt r #1099511627776
+    ret r
+  jump h4-normouter n fu fb (%wsub r #1099511627776)
+
+fn h4-normalize (fu : Nat) (fb : Nat) (t : Word) : Word
+  root <- h4m-alloc #1
+  do h4m-wr root t
+  wr (h4-wka M #0) root
+  do h4-normouter fu fu fb #1
+  r <- h4m-rd root
+  ret r

@@ -1,0 +1,287 @@
+
+-- ===========================================================================================
+-- Names (src/hvm.c nick_*, table_find)
+-- ===========================================================================================
+
+h4-isinit : Word → Bool
+h4-isinit c = orB (andB (%wlt #96 c) (%wlt c #123)) (andB (%wlt #64 c) (%wlt c #91))
+
+h4-b64 : Word → Word
+h4-b64 c =
+  if %weq c #95 then #0
+  else if andB (%wlt #96 c) (%wlt c #123) then %wsub c #96
+  else if andB (%wlt #64 c) (%wlt c #91) then %wsub c #38
+  else if andB (%wlt #47 c) (%wlt c #58) then %wadd c #5
+  else if %weq c #36 then #63
+  else #64
+
+h4-ischar : Word → Bool
+h4-ischar c = %wlt (h4-b64 c) #64
+
+h4-alpha : Word → Word
+h4-alpha i = hv2-nth i "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$"
+
+-- src/hvm.c print_name: a number in the nick alphabet, most significant first
+h4-nick-go : Nat → Word → List Word → List Word
+h4-nick-go zero n acc = acc
+h4-nick-go (suc f) n acc = if %wlt n #64 then cons (h4-alpha n) acc else h4-nick-go f (%wdiv n #64) (cons (h4-alpha (%wmod n #64)) acc)
+
+h4-nick : Word → List Word
+h4-nick n = h4-nick-go (toNat #12) n nil
+
+-- src/hvm.c print_alpha_name: 1 a, 26 z, 27 aa, ...
+h4-alname-go : Nat → Word → Word → List Word → List Word
+h4-alname-go zero n base acc = acc
+h4-alname-go (suc f) n base acc =
+  if %weq n #0 then acc
+  else h4-alname-go f (%wdiv (%wsub n #1) #26) base (cons (%wadd base (%wmod (%wsub n #1) #26)) acc)
+
+h4-alname : Word → Word → List Word
+h4-alname n base = if %weq n #0 then "_" else h4-alname-go (toNat #12) n base nil
+
+h4-tfind-go : Word → List Word → List (List Word) → Word
+h4-tfind-go i s nil = hv2-none
+h4-tfind-go i s (cons x r) = if cli-eq s x then i else h4-tfind-go (%wsucc i) s r
+
+-- the table and the id: an existing name's id, or the next one with the name appended
+h4-tlen : List (List Word) → Word
+h4-tlen nil = #0
+h4-tlen (cons x r) = %wsucc (h4-tlen r)
+
+h4-tfind : List (List Word) → List Word → List (List Word) × Word
+h4-tfind tab s =
+  let i = h4-tfind-go #0 s tab
+  in if %weq i hv2-none then (list-append tab (cons s nil) , h4-tlen tab) else (tab , i)
+
+h4-tget-go : Word → List (List Word) → List Word
+h4-tget-go i nil = nil
+h4-tget-go i (cons x r) = if %weq i #0 then x else h4-tget-go (%wsub i #1) r
+
+-- the symbols src/hvm.c symbols_init makes first
+h4-tab0 : List (List Word)
+h4-tab0 = cons "ZER" (cons "SUC" (cons "NIL" (cons "CON" (cons "CHR" nil))))
+
+h4-ZER : Word
+h4-ZER = #0
+h4-SUC : Word
+h4-SUC = #1
+h4-NIL : Word
+h4-NIL = #2
+h4-CON : Word
+h4-CON = #3
+h4-CHR : Word
+h4-CHR = #4
+
+-- ===========================================================================================
+-- The parser's state: the text left, the binders (src/hvm.c PBind: name, level, label, forked,
+-- cloned, side 0/1 or 2 for none), the next fresh label, the fork side (2 for none), the name
+-- table, the captures handed to a sup-fork, the recursion bound
+-- ===========================================================================================
+
+data H4B = h4b (nm : Word) (lvl : Word) (lab : Word) (fk : Word) (cl : Word) (sd : Word)
+
+data H4S = h4s (src : List Word) (bs : List H4B) (flab : Word) (fside : Word) (tab : List (List Word)) (cap : List H4B) (fu : Nat)
+
+h4s-src : H4S → List Word
+h4s-src (h4s src bs fl fs tab cap fu) = src
+
+h4s-bs : H4S → List H4B
+h4s-bs (h4s src bs fl fs tab cap fu) = bs
+
+h4s-flab : H4S → Word
+h4s-flab (h4s src bs fl fs tab cap fu) = fl
+
+h4s-fside : H4S → Word
+h4s-fside (h4s src bs fl fs tab cap fu) = fs
+
+h4s-tab : H4S → List (List Word)
+h4s-tab (h4s src bs fl fs tab cap fu) = tab
+
+h4s-cap : H4S → List H4B
+h4s-cap (h4s src bs fl fs tab cap fu) = cap
+
+h4s-fu : H4S → Nat
+h4s-fu (h4s src bs fl fs tab cap fu) = fu
+
+h4s-wsrc : H4S → List Word → H4S
+h4s-wsrc (h4s src bs fl fs tab cap fu) x = h4s x bs fl fs tab cap fu
+
+h4s-wbs : H4S → List H4B → H4S
+h4s-wbs (h4s src bs fl fs tab cap fu) x = h4s src x fl fs tab cap fu
+
+h4s-wflab : H4S → Word → H4S
+h4s-wflab (h4s src bs fl fs tab cap fu) x = h4s src bs x fs tab cap fu
+
+h4s-wfside : H4S → Word → H4S
+h4s-wfside (h4s src bs fl fs tab cap fu) x = h4s src bs fl x tab cap fu
+
+h4s-wtab : H4S → List (List Word) → H4S
+h4s-wtab (h4s src bs fl fs tab cap fu) x = h4s src bs fl fs x cap fu
+
+h4s-wcap : H4S → List H4B → H4S
+h4s-wcap (h4s src bs fl fs tab cap fu) x = h4s src bs fl fs tab x fu
+
+h4-peek : H4S → Word
+h4-peek s = hv2-nth #0 (h4s-src s)
+
+h4-peek1 : H4S → Word
+h4-peek1 s = hv2-nth #1 (h4s-src s)
+
+h4-adv : H4S → H4S
+h4-adv s = h4s-wsrc s (hv2-drop1 (h4s-src s))
+
+h4-starts : List Word → List Word → Bool
+h4-starts p s = fst (hv2-pre p s)
+
+-- the text matched (and consumed), or the state unchanged
+h4-match : H4S → List Word → Bool × H4S
+h4-match s p = let r = hv2-pre p (h4s-src s) in if fst r then (true , h4s-wsrc s (snd r)) else (false , s)
+
+h4-isspace : Word → Bool
+h4-isspace c = orB (%weq c #32) (orB (%weq c #9) (orB (%weq c #10) (%weq c #13)))
+
+h4-sk : Word → List Word → List Word
+h4-sk md nil = nil
+h4-sk md (cons c r) =
+  if %weq md #1 then (if %weq c #10 then h4-sk #0 r else h4-sk #1 r)
+  else if h4-isspace c then h4-sk #0 r
+  else if andB (%weq c #47) (%weq (hv2-nth #0 r) #47) then h4-sk #1 r
+  else cons c r
+
+h4-skip : H4S → H4S
+h4-skip s = h4s-wsrc s (h4-sk #0 (h4s-src s))
+
+h4-sep : H4S → H4S
+h4-sep s = if orB (%weq (h4-peek s) #44) (%weq (h4-peek s) #59) then h4-adv s else s
+
+h4-isdig : Word → Bool
+h4-isdig c = andB (%wlt #47 c) (%wlt c #58)
+
+-- the name's text
+h4-namechars : List Word → List Word × List Word
+h4-namechars nil = (nil , nil)
+h4-namechars (cons c r) = if h4-ischar c then (let t = h4-namechars r in (cons c (fst t) , snd t)) else (nil , cons c r)
+
+-- a name as its base-64 number (src/hvm.c parse_name_num), hv2-none past 24 bits
+h4-b64num : List Word → Word → Word
+h4-b64num nil k = k
+h4-b64num (cons c r) k = let k2 = %wor (%wshl k #6) (h4-b64 c) in if %wlt h4-EXTM k2 then hv2-none else h4-b64num r k2
+
+-- a binder looked up (src/hvm.c parse_bind_lookup): (found, skipped, bind)
+h4-none-b : H4B
+h4-none-b = h4b #0 #0 #0 #0 #0 #2
+
+h4b-nm : H4B → Word
+h4b-nm (h4b nm lvl lab fk cl sd) = nm
+h4b-lvl : H4B → Word
+h4b-lvl (h4b nm lvl lab fk cl sd) = lvl
+h4b-lab : H4B → Word
+h4b-lab (h4b nm lvl lab fk cl sd) = lab
+h4b-fk : H4B → Word
+h4b-fk (h4b nm lvl lab fk cl sd) = fk
+h4b-cl : H4B → Word
+h4b-cl (h4b nm lvl lab fk cl sd) = cl
+h4b-sd : H4B → Word
+h4b-sd (h4b nm lvl lab fk cl sd) = sd
+
+h4-look-go : Word → Word → Word → List H4B → Word × H4B
+h4-look-go name side sk nil = (%wadd #2 sk , h4-none-b)
+h4-look-go name side sk (cons b r) =
+  if not (%weq (h4b-nm b) name) then h4-look-go name side sk r
+  else if %wlt (h4b-sd b) #2
+  then (if not (%weq side #2) then h4-look-go name side #1 r else (#0 , b))
+  else if andB (%weq side #2) (andB (not (%weq (h4b-lab b) #0)) (%weq (h4b-fk b) #0)) then h4-look-go name side #1 r
+  else if andB (not (%weq side #2)) (%weq (h4b-lab b) #0) then h4-look-go name side #1 r
+  else (#0 , b)
+
+-- (0 found | 2 not found | 3 not found, skipped , bind); the binders innermost first
+h4-look : H4S → Word → Word → Word × H4B
+h4-look s name side = h4-look-go name side #0 (h4s-bs s)
+
+h4-push : H4S → Word → Word → Word → Word → Word → Word → H4S
+h4-push s nm lvl lab fk cl sd = h4s-wbs s (cons (h4b nm lvl lab fk cl sd) (h4s-bs s))
+
+h4-pop : H4S → H4S
+h4-pop s = h4s-wbs s (h4-tailb (h4s-bs s))
+
+h4-tailb : List H4B → List H4B
+h4-tailb nil = nil
+h4-tailb (cons b r) = r
+
+h4-DYN : Word
+h4-DYN = h4-EXTM
+
+-- a parse error: the message and the stop (src/hvm.c parse_error*)
+h4-perr : List Word → Step W Word
+h4-perr msg = cli-say (list-append "PARSE_ERROR" (cons #10 (list-append "- " msg))) (sdone #1)
+
+h4-perr-affine : H4S → Word → Word → Step W Word
+h4-perr-affine s nam uses =
+  h4-perr (list-append "variable '" (list-append (h4-tget-go nam (h4s-tab s)) (list-append "' used " (list-append (ce-dec uses) " times"))))
+
+-- ===========================================================================================
+-- Uses and auto-dup (src/hvm.c count_uses, auto_dup_go, parse_auto_dup), over the heap
+-- ===========================================================================================
+
+h4-istgt : Word → Word → Word → Word → Bool
+h4-istgt t lvl tgt ext = andB (%weq (h4-tag t) tgt) (andB (%weq (h4-val t) lvl) (orB (%weq tgt h4-BJV) (%weq (h4-ext t) ext)))
+
+-- mode 0: the uses in the term t; mode 1: in the fields at loc, from i to n
+fnrec h4-cu (f : Nat) (md : Word) (t : Word) (loc : Word) (i : Word) (n : Word) (lvl : Word) (tgt : Word) (ext : Word) : Word
+  zero: ret #0
+  if %weq md #0
+    if h4-istgt t lvl tgt ext
+      ret #1
+    jump h4-cu f #1 #0 (h4-val t) #0 (h4-arity t) lvl tgt ext
+  if not (%wlt i n)
+    ret #0
+  c <- h4-rd (%wadd loc i)
+  a <- h4-cu f #0 c #0 #0 #0 lvl tgt ext
+  b <- h4-cu f #1 #0 loc (%wsucc i) n lvl tgt ext
+  ret (%wadd a b)
+
+fn h4-uses (s : H4S) (t : Word) (lvl : Word) (tgt : Word) (ext : Word) : Word
+  jump h4-cu (h4s-fu s) #0 t #0 #0 #0 lvl tgt ext
+
+-- mode 0: rewrite the term at loc; mode 1: the fields at loc from i to n. The result is the
+-- count of target occurrences replaced so far
+fnrec h4-ad (f : Nat) (md : Word) (loc : Word) (i : Word) (n : Word) (lvl : Word) (base : Word) (use : Word) (kk : Word) (lab : Word) (tgt : Word) (ext : Word) : Word
+  zero: ret use
+  if %weq md #1
+    if not (%wlt i n)
+      ret use
+    u1 <- h4-ad f #0 (%wadd loc i) #0 #0 lvl base use kk lab tgt ext
+    jump h4-ad f #1 loc (%wsucc i) n lvl base u1 kk lab tgt ext
+  t <- h4-rd loc
+  let tg = h4-tag t
+  let vl = h4-val t
+  if h4-istgt t lvl tgt ext
+    if %wlt use kk
+      do h4-wr loc (h4-new h4-BJ0 (%wadd lab use) (%wadd (%wadd base #1) use))
+      ret (%wsucc use)
+    do h4-wr loc (h4-new h4-BJ1 (%wsub (%wadd lab kk) #1) (%wadd base kk))
+    ret (%wsucc use)
+  if andB (orB (%weq tg h4-BJV) (orB (%weq tg h4-BJ0) (%weq tg h4-BJ1))) (%wlt base vl)
+    do h4-wr loc (h4-new tg (h4-ext t) (%wadd vl kk))
+    ret use
+  jump h4-ad f #1 vl #0 (h4-arity t) lvl base use kk lab tgt ext
+
+-- the dup chain for a binder of `uses` uses: the body rewritten, wrapped in uses-1 dups
+fnrec h4-adwrap (f : Nat) (i : Word) (kk : Word) (lab : Word) (lvl : Word) (base : Word) (tgt : Word) (ext : Word) (res : Word) : Word
+  zero: ret res
+  if %weq i #0
+    ret res
+  let j = %wsub i #1
+  let v = if %weq j #0 then h4-new tgt ext lvl else h4-new h4-BJ1 (%wsub (%wadd lab j) #1) (%wadd base j)
+  r <- h4-mk2 h4-DUP (%wadd lab j) v res
+  jump h4-adwrap f j kk lab lvl base tgt ext r
+
+fn h4-autodup (s : H4S) (body : Word) (lvl : Word) (base : Word) (tgt : Word) (ext : Word) (uses : Word) : H4S × Word
+  if not (%wlt #1 uses)
+    ret (s , body)
+  let kk = %wsub uses #1
+  let lab = h4s-flab s
+  let s1 = h4s-wflab s (%wadd lab kk)
+  do h4-ad (h4s-fu s) #1 (h4-val body) #0 (h4-arity body) lvl base #0 kk lab tgt ext
+  r <- h4-adwrap (h4s-fu s) kk kk lab lvl base tgt ext body
+  ret (s1 , r)

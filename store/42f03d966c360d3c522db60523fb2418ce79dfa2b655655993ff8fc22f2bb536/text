@@ -1,0 +1,12 @@
+ief-tan : Word → Word
+ief-tan x =
+  if orB (ief-isnan x) (ief-isinf x) then ief-NAN
+  else if ief-iszero x then x
+  else (let rd = ief-reduce x
+            q = fst rd
+            sc = ief-sc (snd rd)
+            sn = fst sc
+            cs = snd sc
+        in if %weq (%wand q #1) #0
+           then ief-ratio (%wxor (ief-sgn x) (%wxor (fst sn) (fst cs))) (snd sn) (snd cs) #4096 #1
+           else ief-ratio (%wxor (ief-sgn x) (%wxor #1 (%wxor (fst sn) (fst cs)))) (snd cs) (snd sn) #4096 #1)

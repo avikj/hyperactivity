@@ -1,0 +1,13 @@
+ief-add-fin : Word → Word → Word → Word → Word → Word → Word
+ief-add-fin sx mx ex sy my ey =
+  let d = %wsub ex ey
+  in if %wlt d #39
+     then (if %weq sx sy then ief-round sx (%wadd (%wshl mx d) my) ey #0
+           else (let r = %wsub (%wshl mx d) my in if %weq r #0 then #0 else ief-round sx r ey #0))
+     else (let a = %wshl mx #38
+               k = %wsub d #38
+               b = %wshr my k
+               st = if %wlt #62 k then (if %weq my #0 then #0 else #1)
+                    else (if %weq (%wshl b k) my then #0 else #1)
+           in if %weq sx sy then ief-round sx (%wadd a b) (%wsub ex #38) st
+              else ief-round sx (%wsub (%wsub a b) st) (%wsub ex #38) st)

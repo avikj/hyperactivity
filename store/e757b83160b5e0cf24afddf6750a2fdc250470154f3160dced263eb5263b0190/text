@@ -1,0 +1,13 @@
+-- OPER: a number meets an operator node
+hv2-oper : Hv2Net → Word → Word → Hv2Net
+hv2-oper net a b =
+  let w = hv2-node-get net (hv2-val b)
+      net1 = hv2-node-del net (hv2-val b)
+      b1 = hv2-fst w
+      e = hv2-enter net1 (hv2-snd w)
+      net2 = fst e
+      b2 = snd e
+  in if %weq (hv2-tag b1) hv2-NUM
+     then hv2-ln net2 (hv2-port hv2-NUM (hv2-operate (hv2-val a) (hv2-val b1))) b2
+     else (let n0 = hv2-nn net2
+           in hv2-ln (hv2-node-set (hv2-alloc net2 #1 #0) n0 (hv2-pair a b2)) b1 (hv2-port hv2-OPR n0))

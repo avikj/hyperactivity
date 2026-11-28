@@ -1,0 +1,14 @@
+-- the book: @name = net, any number of times
+hv2-book-go : Nat → List Word → List (List Word × Hv2Ast) → List (List Word × Hv2Ast)
+hv2-book-go zero s acc = hv2-revb acc nil
+hv2-book-go (suc n) s0 acc =
+  case hv2-sk s0 of
+    nil → hv2-revb acc nil
+    cons c r →
+      if %weq c #64 then
+        (let m = hv2-name r
+             s1 = hv2-drop1 (hv2-sk (snd m))
+             t = hv2-tree n s1
+             b = hv2-rbag-go n (snd t) nil
+         in hv2-book-go n (snd b) (cons (fst m , hv2ast (fst t) (fst b)) acc))
+      else hv2-revb acc nil

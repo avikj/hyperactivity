@@ -1,0 +1,6 @@
+-- a string's list is all escapable characters (print_ctr's check)
+h4-isstr : Word → Nat → Word → (Bool → Step W Word) → Step W Word
+h4-isstr mm_ zero x kq_ =
+  kq_ (h4-depl mm_ (true))
+h4-isstr mm_ (suc f) x kq_ =
+  if (andB (%weq (h4-tag x) h4-C02) (%weq (h4-ext x) h4-CON)) then (scmd (w-load ((h4-ha mm_ (h4-val x)))) (λ h → let mm_2799 = h4-dep mm_ h in if (not (andB (%weq (h4-tag h) h4-C01) (%weq (h4-ext h) h4-CHR))) then (kq_ (h4-depl mm_2799 (false))) else (scmd (w-load ((h4-ha mm_2799 (h4-val h)))) (λ hv → let mm_2800 = h4-dep mm_2799 hv in if (not (%weq (h4-tag hv) h4-NUM)) then (kq_ (h4-depl mm_2800 (false))) else (if (not (h4-canesc (h4-val hv) #1)) then (kq_ (h4-depl mm_2800 (false))) else (scmd (w-load ((h4-ha mm_2800 (%wadd (h4-val x) #1)))) (λ nx → let mm_2801 = h4-dep mm_2800 nx in h4-isstr mm_2801 f nx kq_))))))) else (kq_ (h4-depl mm_ (true)))

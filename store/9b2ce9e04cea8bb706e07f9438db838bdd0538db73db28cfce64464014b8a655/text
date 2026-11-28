@@ -1,0 +1,7 @@
+h4-autocaps : List H4B → Word → List H4B → List H4B
+h4-autocaps nil saved acc = acc
+h4-autocaps (cons b r) saved acc =
+  if andB (not (%weq (h4b-lab b) #0)) (andB (%weq (h4b-fk b) #0) (not (%wlt (h4b-sd b) #2)))
+  then h4-autocaps r saved acc
+  else (let c = h4-capof b (h4b-nm b) #1 saved
+        in h4-autocaps r saved (if h4-hascap acc (h4b-nm b) then h4-setcap acc c else list-append acc (cons c nil)))

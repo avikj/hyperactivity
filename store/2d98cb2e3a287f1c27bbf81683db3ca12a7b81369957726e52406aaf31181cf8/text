@@ -1,0 +1,11 @@
+-- n/d (naturals, d nonzero) times 2^(eb-4096), rounded; st 1 adds a positive amount too small
+-- to be seen otherwise
+ief-ratio : Word → List Word → List Word → Word → Word → Word
+ief-ratio s n d eb st =
+  if bg-is0 n then ief-sbit s
+  else (let z = %wsub (%wadd #4158 (bg-bitlen d)) (bg-bitlen n)
+            ns = if %wlt z #4096 then n else bg-shl n (%wsub z #4096)
+            ds = if %wlt z #4096 then bg-shl d (%wsub #4096 z) else d
+            qr = bg-divmod ns ds
+            st1 = if bg-is0 (snd qr) then st else #1
+        in ief-round s (bg-lo (fst qr)) (%wsub (%wadd eb #4096) z) st1)

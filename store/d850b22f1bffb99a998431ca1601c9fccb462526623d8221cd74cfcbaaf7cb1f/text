@@ -1,0 +1,9 @@
+-- the mantissa digits D, the count of digits read, the exponent (4096 + exponent) of D's unit,
+-- and whether the text was well formed
+ief-num : List Word → List Word × (Word × (Word × Bool))
+ief-num s =
+  let a = ief-digs s nil #0
+      c = ief-digs (ief-num-dot (snd (snd a))) (fst a) (fst (snd a))
+      nfrac = %wsub (fst (snd c)) (fst (snd a))
+      ex = ief-expo (snd (snd c))
+  in (fst c , (fst (snd c) , (%wsub (fst ex) nfrac , andB (not (%weq (fst (snd c)) #0)) (snd ex))))

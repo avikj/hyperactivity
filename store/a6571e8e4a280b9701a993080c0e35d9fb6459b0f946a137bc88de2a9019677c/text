@@ -1,0 +1,15 @@
+-- bytes written at the record's position (at its end when appending)
+hio-put : Word → Word → List Word → (Word → Step W Word) → Step W Word
+hio-put m r bs k =
+  scmd (w-load (%wadd r #32)) (λ md →
+  scmd (w-load (%wadd r #16)) (λ len →
+  scmd (w-load (%wadd r #24)) (λ pos0 →
+  let pos = if %weq (%wand md #4) #0 then pos0 else len
+      end = %wadd pos (cli-len bs)
+  in hio-room r end (λ r1 →
+     scmd (w-load r1) (λ buf →
+     hio-zero (if %wlt len pos then toNat (%wsub pos len) else zero) (%wadd buf len) (λ z →
+     hio-poke (%wadd buf pos) bs (λ a →
+     scmd (w-store (%wadd r1 #24) (hv2-kp end a)) (λ u1 →
+     scmd (w-store (%wadd r1 #16) (if %wlt len end then end else len)) (λ u2 →
+     scmd (w-store (%wadd r1 #40) #1) (λ u3 → k (hv2-u (hv2-u (hv2-u (hv2-kp m z) u1) u2) u3)))))))))))

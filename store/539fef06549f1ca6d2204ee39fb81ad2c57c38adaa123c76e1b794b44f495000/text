@@ -1,0 +1,21 @@
+-- x^y exactly when y > 0 is n/2^k with k at most 3 and y at most 32, and x's odd part has an exact
+-- 2^k-th root: (true, float), else (false, _). x positive finite nonzero.
+ief-pow-exact : Word → Word → Bool × Word
+ief-pow-exact x y =
+  let oy = ief-odd bg-d32 (ief-m y) #0
+      ey = %wadd (ief-e y) (snd oy)
+      kd = if %wlt ey #4096 then %wsub #4096 ey else #0
+  in if orB (%wlt #3 kd) (%wlt #32 (ief-trunc y)) then (false , #0)
+     else (let n = if %wlt ey #4096 then fst oy else %wshl (fst oy) (%wsub ey #4096)
+               om = ief-odd bg-d32 (ief-m x) #0
+               mo = fst om
+               ex = %wadd (ief-e x) (snd om)
+               p = %wshl #1 kd
+               t = ief-iroot-go bg-d32 #1 mo mo p
+               exact = %weq (bg-lo (ief-powbg (bg-of t) (toNat p))) mo
+               en = if %wlt ex #4096 then %wmul (%wsub #4096 ex) n else %wmul (%wsub ex #4096) n
+               ediv = %weq (%wmod en p) #0
+           in if andB (andB exact ediv) (%wlt (%wdiv en p) #2000)
+              then (true , ief-round-bg #0 (ief-powbg (bg-of t) (toNat n))
+                             (if %wlt ex #4096 then %wsub #4096 (%wdiv en p) else %wadd #4096 (%wdiv en p)) #0)
+              else (false , #0))

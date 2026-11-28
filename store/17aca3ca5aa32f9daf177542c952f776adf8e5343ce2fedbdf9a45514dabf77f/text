@@ -1,0 +1,13 @@
+-- Rust's {:?}: inf, NaN, the decimal form for 1e-4 ≤ |x| < 1e16 and zero, else the exponential
+ief-show : Word → List Word
+ief-show x =
+  let sg = the (List Word) (if %weq (ief-sgn x) #1 then "-" else nil)
+  in if ief-isnan x then "NaN"
+     else if ief-isinf x then list-append sg "inf"
+     else if ief-iszero x then list-append sg "0.0"
+     else (let ct = ief-shortest x
+               ds = ce-dec (fst ct)
+               kp = %wadd (snd ct) (cli-len ds)
+           in list-append sg
+                (if andB (%wlt #953267990 (ief-abs x)) (%wlt (ief-abs x) #1510874058) then ief-dec-form ds kp
+                 else ief-exp-form ds kp))

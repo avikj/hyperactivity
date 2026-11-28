@@ -1,0 +1,975 @@
+-- Bend in hyperactivity: the language of HigherOrderCO/bend (bend2/bend.ts: its parser, its
+-- pattern flattener, its machine, its checker and its printer), on a flat memory of words. A term
+-- is a node in the memory; a binder's body is a closure record (the TypeScript holds JavaScript
+-- functions there); a share cell is a node written in place, as the TypeScript writes its object.
+-- `bend FILE` prints what `bun bend2/main.ts FILE` prints: the verdict on a book with no main, the
+-- error under SOME PROOFS FAIL with its excerpt and location, a value main at normal form, and an
+-- IO main run on the scheduler, called by value as the JS lane is (print, write, print_err,
+-- args, args_bytes, get_env, now, sleep, random_u32, spawn, channels, files, TCP and UDP; the
+-- lanes' U32, Nat, F32 and String operations natively, Strings as ropes, Arrays as in-place JS
+-- arrays). Process.run, Window, Audio and a test's own foreign JS do not run here (no fork or
+-- exec syscall, no JS). Base is BEND_DIR's base.bend (or a second argument).
+--
+-- The binary is b2-c compiled; its C is made in pieces, one run each, so no run holds the whole
+-- emission (lib/emit-slices):
+--   n = ./hyperactive view in lib/bend.hypercubical b2-c-count       (the functions, k < n/1000)
+--   ./hyperactive view in lib/bend.hypercubical b2-c-head          > bend.c
+--   ./hyperactive view in lib/bend.hypercubical b2-c-protos       >> bend.c
+--   ./hyperactive view in lib/bend.hypercubical "b2-c-part #k"    >> bend.c   (k = 0, 1, ..)
+--   ./hyperactive view in lib/bend.hypercubical b2-c-main         >> bend.c
+--   cc -O2 -o bend bend.c
+import "native-opt.hypercubical"
+import "hvm2.hypercubical"
+import "hvm4.hypercubical"
+import "emit-slices.hypercubical"
+
+-- The sequencing deps: the memory word after a step depends on the step's value by one strict
+-- operation, so a chain of n steps is a term of size n (a branch on the value would copy the rest).
+b2-dep : Word → Word → Word
+b2-dep m x = %wadd m (%wand x #0)
+
+b2-dpl : Word → List Word → Word
+b2-dpl m xs = b2-dep m (cli-len xs)
+
+b2-dpb : Word → Bool → Word
+b2-dpb m b = b2-dep m (if b then #1 else #0)
+
+-- ===========================================================================================
+-- The memory: a header of 512 words, then the heap (2^29 words), then the machine's frame stack
+-- (2^24 words). A node is [tag | fields << 8, span, field0, field1, ..]; an array is [length,
+-- item0, ..]; index 0 is no node (JavaScript's undefined and null).
+-- ===========================================================================================
+
+b2-heapb : Word → Word
+b2-heapb m = %wadd m #4096
+
+b2-stkb : Word → Word
+b2-stkb m = %wadd m #4299165696
+
+b2-size : Word
+b2-size = #4433383424
+
+b2-a : Word → Word → Word
+b2-a m i = %wadd (b2-heapb m) (%wshl (%wand i #536870911) #3)
+
+b2-sa : Word → Word → Word
+b2-sa m i = %wadd (b2-stkb m) (%wshl (%wand i #16777215) #3)
+
+-- the header: m+0 the next free heap word, m+8 the error raised (an Err record), m+16 the
+-- interned names (a map), m+24 the names by id (a vector), m+32 the frame stack's top, m+40
+-- RIGID (the empty book), m+48 the trampoline counter, m+56.. registers
+b2-HN : Word → Word
+b2-HN m = m
+b2-HERR : Word → Word
+b2-HERR m = %wadd m #8
+b2-HNAMES : Word → Word
+b2-HNAMES m = %wadd m #16
+b2-HIDS : Word → Word
+b2-HIDS m = %wadd m #24
+b2-HSP : Word → Word
+b2-HSP m = %wadd m #32
+b2-HRIGID : Word → Word
+b2-HRIGID m = %wadd m #40
+b2-HR : Word → Word → Word
+b2-HR m j = %wadd m (%wadd #64 (%wshl j #3))
+
+-- the failure a function answers when it raised an Err (stored at m+8)
+b2-ERR : Word
+b2-ERR = #18446744073709551615
+
+b2-iserr : Word → Bool
+b2-iserr x = %weq x b2-ERR
+
+-- ===========================================================================================
+-- Tags
+-- ===========================================================================================
+
+b2-VAR : Word
+b2-VAR = #1
+b2-REF : Word
+b2-REF = #2
+b2-SUB : Word
+b2-SUB = #3
+b2-LET : Word
+b2-LET = #4
+b2-TYP : Word
+b2-TYP = #5
+b2-QNT : Word
+b2-QNT = #6
+b2-QUA : Word
+b2-QUA = #7
+b2-MIN : Word
+b2-MIN = #8
+b2-ALL : Word
+b2-ALL = #9
+b2-LAM : Word
+b2-LAM = #10
+b2-APP : Word
+b2-APP = #11
+b2-ADT : Word
+b2-ADT = #12
+b2-CTR : Word
+b2-CTR = #13
+b2-LIT : Word
+b2-LIT = #14
+b2-MAT : Word
+b2-MAT = #15
+b2-EFQ : Word
+b2-EFQ = #16
+b2-EQL : Word
+b2-EQL = #17
+b2-RFL : Word
+b2-RFL = #18
+b2-RWT : Word
+b2-RWT = #19
+b2-HOL : Word
+b2-HOL = #20
+b2-ANN : Word
+b2-ANN = #21
+-- records
+b2-CLO : Word
+b2-CLO = #32
+b2-STR : Word
+b2-STR = #33
+b2-SPAN : Word
+b2-SPAN = #34
+b2-FILE : Word
+b2-FILE = #35
+b2-PVAR : Word
+b2-PVAR = #36
+b2-PCTR : Word
+b2-PCTR = #37
+b2-MATCH : Word
+b2-MATCH = #38
+b2-LOCAL : Word
+b2-LOCAL = #39
+b2-TADT : Word
+b2-TADT = #40
+b2-TDEF : Word
+b2-TDEF = #41
+b2-TCTR : Word
+b2-TCTR = #42
+b2-ERRR : Word
+b2-ERRR = #43
+b2-BOOK : Word
+b2-BOOK = #44
+b2-CASE : Word
+b2-CASE = #45
+
+-- quantities: None 0, Lone 1, Many 2; a lambda with no quantity carries 3
+b2-NONE : Word
+b2-NONE = #0
+b2-LONE : Word
+b2-LONE = #1
+b2-MANY : Word
+b2-MANY = #2
+b2-NOQ : Word
+b2-NOQ = #3
+
+-- literal kinds
+b2-LNAT : Word
+b2-LNAT = #0
+b2-LU32 : Word
+b2-LU32 = #1
+b2-LF32 : Word
+b2-LF32 = #2
+b2-LSTR : Word
+b2-LSTR = #3
+
+-- a Var's index as a word: -1 and -2 are the share cells
+b2-M1 : Word
+b2-M1 = #18446744073709551615
+b2-M2 : Word
+b2-M2 = #18446744073709551614
+
+b2-neg : Word → Bool
+b2-neg i = %wlt #9223372036854775807 i
+
+-- ===========================================================================================
+-- Memory steps (inlined)
+-- ===========================================================================================
+
+macro b2m-rd (i : Word) : Word
+  x <- rd (b2-a M i)
+  ret x
+
+macro b2m-wr (i : Word) (v : Word) : Word
+  wr (b2-a M i) v
+  ret v
+
+macro b2m-alloc (n : Word) : Word
+  at <- rd M
+  wr M (%wadd at n)
+  ret at
+
+-- a node's tag, span and j-th field
+macro b2m-tag (t : Word) : Word
+  x <- rd (b2-a M t)
+  ret (%wand x #255)
+
+macro b2m-span (t : Word) : Word
+  x <- rd (b2-a M (%wadd t #1))
+  ret x
+
+macro b2m-f (t : Word) (j : Word) : Word
+  x <- rd (b2-a M (%wadd t (%wadd #2 j)))
+  ret x
+
+macro b2m-setf (t : Word) (j : Word) (v : Word) : Word
+  wr (b2-a M (%wadd t (%wadd #2 j))) v
+  ret v
+
+macro b2m-n0 (tg : Word) (s : Word) : Word
+  at <- b2m-alloc #2
+  do b2m-wr at tg
+  do b2m-wr (%wadd at #1) s
+  ret at
+
+macro b2m-n1 (tg : Word) (s : Word) (a : Word) : Word
+  at <- b2m-alloc #3
+  do b2m-wr at (%wor tg #256)
+  do b2m-wr (%wadd at #1) s
+  do b2m-wr (%wadd at #2) a
+  ret at
+
+macro b2m-n2 (tg : Word) (s : Word) (a : Word) (b : Word) : Word
+  at <- b2m-alloc #4
+  do b2m-wr at (%wor tg #512)
+  do b2m-wr (%wadd at #1) s
+  do b2m-wr (%wadd at #2) a
+  do b2m-wr (%wadd at #3) b
+  ret at
+
+macro b2m-n3 (tg : Word) (s : Word) (a : Word) (b : Word) (c : Word) : Word
+  at <- b2m-alloc #5
+  do b2m-wr at (%wor tg #768)
+  do b2m-wr (%wadd at #1) s
+  do b2m-wr (%wadd at #2) a
+  do b2m-wr (%wadd at #3) b
+  do b2m-wr (%wadd at #4) c
+  ret at
+
+macro b2m-n4 (tg : Word) (s : Word) (a : Word) (b : Word) (c : Word) (e : Word) : Word
+  at <- b2m-alloc #6
+  do b2m-wr at (%wor tg #1024)
+  do b2m-wr (%wadd at #1) s
+  do b2m-wr (%wadd at #2) a
+  do b2m-wr (%wadd at #3) b
+  do b2m-wr (%wadd at #4) c
+  do b2m-wr (%wadd at #5) e
+  ret at
+
+macro b2m-n5 (tg : Word) (s : Word) (a : Word) (b : Word) (c : Word) (e : Word) (g : Word) : Word
+  at <- b2m-alloc #7
+  do b2m-wr at (%wor tg #1280)
+  do b2m-wr (%wadd at #1) s
+  do b2m-wr (%wadd at #2) a
+  do b2m-wr (%wadd at #3) b
+  do b2m-wr (%wadd at #4) c
+  do b2m-wr (%wadd at #5) e
+  do b2m-wr (%wadd at #6) g
+  ret at
+
+-- a copy of a node (JavaScript's { ...v })
+fnrec b2-copyf (f : Nat) (src : Word) (dst : Word) (j : Word) (n : Word) : Word
+  zero: ret dst
+  if %weq j n
+    ret dst
+  x <- b2m-rd (%wadd src j)
+  do b2m-wr (%wadd dst j) x
+  jump b2-copyf f src dst (%wsucc j) n
+
+fn b2-copy (t : Word) : Word
+  h <- b2m-rd t
+  let n = %wadd #2 (%wshr h #8)
+  at <- b2m-alloc n
+  r <- b2-copyf (toNat #16) t at #0 n
+  ret r
+
+-- ===========================================================================================
+-- Arrays: [length, items..]; a growing vector is [length, capacity, array]
+-- ===========================================================================================
+
+macro b2m-len (a : Word) : Word
+  x <- rd (b2-a M a)
+  ret x
+
+macro b2m-at (a : Word) (j : Word) : Word
+  x <- rd (b2-a M (%wadd a (%wsucc j)))
+  ret x
+
+macro b2m-put (a : Word) (j : Word) (v : Word) : Word
+  wr (b2-a M (%wadd a (%wsucc j))) v
+  ret v
+
+fn b2-arr (n : Word) : Word
+  at <- b2m-alloc (%wsucc n)
+  do b2m-wr at n
+  ret at
+
+-- an array from a list
+fnrec b2-arrfill (f : Nat) (a : Word) (j : Word) (xs : List Word) : Word
+  zero: ret a
+  if h4-isnil xs
+    ret a
+  do b2m-put a j (hv2-nth #0 xs)
+  jump b2-arrfill f a (%wsucc j) (hv2-drop1 xs)
+
+fn b2-arrl (xs : List Word) : Word
+  a <- b2-arr (cli-len xs)
+  r <- b2-arrfill (toNat #4294967295) a #0 xs
+  ret r
+
+-- the items of an array as a list
+fnrec b2-arrlist (f : Nat) (a : Word) (j : Word) (acc : List Word) : List Word
+  zero: ret acc
+  if %weq j #0
+    ret acc
+  x <- b2m-at a (%wsub j #1)
+  jump b2-arrlist f a (%wsub j #1) (cons x acc)
+
+fn b2-list (a : Word) : List Word
+  if %weq a #0
+    ret nil
+  n <- b2m-len a
+  r <-[b2-dpl] b2-arrlist (toNat #4294967295) a n nil
+  ret r
+
+fn b2-vec : Word
+  d <- b2-arr #8
+  at <- b2m-alloc #3
+  do b2m-wr at #0
+  do b2m-wr (%wadd at #1) #8
+  do b2m-wr (%wadd at #2) d
+  ret at
+
+fn b2-vgrow (v : Word) : Word
+  n <- b2m-rd v
+  c <- b2m-rd (%wadd v #1)
+  d <- b2m-rd (%wadd v #2)
+  e <- b2-arr (%wmul c #2)
+  do b2-copyf (toNat #4294967295) (%wsucc d) (%wsucc e) #0 n
+  do b2m-wr (%wadd v #1) (%wmul c #2)
+  do b2m-wr (%wadd v #2) e
+  ret v
+
+fn b2-vpush (v : Word) (x : Word) : Word
+  n <- b2m-rd v
+  c <- b2m-rd (%wadd v #1)
+  if %weq n c
+    do b2-vgrow v
+  d <- b2m-rd (%wadd v #2)
+  do b2m-put d n x
+  do b2m-wr v (%wsucc n)
+  ret x
+
+macro b2m-vlen (v : Word) : Word
+  x <- rd (b2-a M v)
+  ret x
+
+macro b2m-vat (v : Word) (j : Word) : Word
+  d <- rd (b2-a M (%wadd v #2))
+  x <- rd (b2-a M (%wadd d (%wsucc j)))
+  ret x
+
+-- the vector's items as an array of their own
+fn b2-vfreeze (v : Word) : Word
+  n <- b2m-rd v
+  d <- b2m-rd (%wadd v #2)
+  a <- b2-arr n
+  do b2-copyf (toNat #4294967295) (%wsucc d) (%wsucc a) #0 n
+  ret a
+
+-- ===========================================================================================
+-- Maps from words (names, keys) to words: [table, count, parent]; a table is [capacity, keys..,
+-- values..], key 0 empty. A miss reads the parent (JavaScript's Object.create(parent)).
+-- ===========================================================================================
+
+b2-hash : Word → Word
+b2-hash k = %wand (%wxor (%wmul (%wand k #4294967295) #2654435761) (%wshr k #32)) #4294967295
+
+fn b2-tab (cap : Word) : Word
+  at <- b2m-alloc (%wadd #1 (%wmul cap #2))
+  do b2m-wr at cap
+  ret at
+
+fn b2-map (parent : Word) : Word
+  t <- b2-tab #16
+  at <- b2m-alloc #3
+  do b2m-wr at t
+  do b2m-wr (%wadd at #1) #0
+  do b2m-wr (%wadd at #2) parent
+  ret at
+
+-- the slot of k in a table: its own, or the empty one where it would go
+fnrec b2-slot (f : Nat) (t : Word) (cap : Word) (k : Word) (j : Word) : Word
+  zero: ret hv2-none
+  x <- b2m-rd (%wadd t (%wsucc j))
+  if orB (%weq x k) (%weq x #0)
+    ret j
+  jump b2-slot f t cap k (%wmod (%wsucc j) cap)
+
+-- the value of k in this map alone (0 when absent), and whether it is there
+fn b2-mget1 (mp : Word) (k : Word) : Word
+  t <- b2m-rd mp
+  cap <- b2m-rd t
+  j <- b2-slot (toNat #4294967295) t cap k (%wmod (b2-hash k) cap)
+  x <- b2m-rd (%wadd t (%wsucc j))
+  if %weq x #0
+    ret hv2-none
+  v <- b2m-rd (%wadd t (%wadd (%wsucc j) cap))
+  ret v
+
+-- through the parents: hv2-none when absent everywhere
+fnrec b2-mgetp (f : Nat) (mp : Word) (k : Word) : Word
+  zero: ret hv2-none
+  if %weq mp #0
+    ret hv2-none
+  v <- b2-mget1 mp k
+  if not (%weq v hv2-none)
+    ret v
+  p <- b2m-rd (%wadd mp #2)
+  jump b2-mgetp f p k
+
+fn b2-mget (mp : Word) (k : Word) : Word
+  r <- b2-mgetp (toNat #64) mp k
+  ret r
+
+-- put k = v in a table; 1 when k is new there
+fn b2-tput (t : Word) (k : Word) (v : Word) : Word
+  cap <- b2m-rd t
+  j <- b2-slot (toNat #4294967295) t cap k (%wmod (b2-hash k) cap)
+  x <- b2m-rd (%wadd t (%wsucc j))
+  do b2m-wr (%wadd t (%wadd (%wsucc j) cap)) v
+  if not (%weq x #0)
+    ret #0
+  do b2m-wr (%wadd t (%wsucc j)) k
+  ret #1
+
+fnrec b2-rehash (f : Nat) (t : Word) (cap : Word) (t2 : Word) (j : Word) : Word
+  zero: ret t2
+  if %weq j cap
+    ret t2
+  k <- b2m-rd (%wadd t (%wsucc j))
+  if %weq k #0
+    jump b2-rehash f t cap t2 (%wsucc j)
+  v <- b2m-rd (%wadd t (%wadd (%wsucc j) cap))
+  do b2-tput t2 k v
+  jump b2-rehash f t cap t2 (%wsucc j)
+
+-- set k to v in this map (its own layer)
+fn b2-mset (mp : Word) (k : Word) (v : Word) : Word
+  t <- b2m-rd mp
+  nw <- b2-tput t k v
+  if %weq nw #0
+    ret v
+  cnt <- b2m-rd (%wadd mp #1)
+  do b2m-wr (%wadd mp #1) (%wsucc cnt)
+  cap <- b2m-rd t
+  if %wlt (%wmul (%wsucc cnt) #10) (%wmul cap #7)
+    ret v
+  t2 <- b2-tab (%wmul cap #2)
+  do b2-rehash (toNat #4294967295) t cap t2 #0
+  do b2m-wr mp t2
+  ret v
+
+-- ===========================================================================================
+-- Strings: arrays of UTF-16 code units (JavaScript's strings); text from the code is UTF-8 bytes
+-- ===========================================================================================
+
+-- the code points of UTF-8 bytes
+b2-cpsg : Nat → List Word → List Word
+b2-cpsg zero r = nil
+b2-cpsg (suc f) nil = nil
+b2-cpsg (suc f) (cons b0 r) =
+  if %wlt b0 #128 then cons b0 (b2-cpsg f r)
+  else if %weq (%wand b0 #224) #192 then cons (%wor (%wshl (%wand b0 #31) #6) (%wand (hv2-nth #0 r) #63)) (b2-cpsg f (hv2-drop1 r))
+  else if %weq (%wand b0 #240) #224 then cons (%wor (%wshl (%wand b0 #15) #12) (%wor (%wshl (%wand (hv2-nth #0 r) #63) #6) (%wand (hv2-nth #1 r) #63))) (b2-cpsg f (hv2-drop1 (hv2-drop1 r)))
+  else cons (%wor (%wshl (%wand b0 #7) #18) (%wor (%wshl (%wand (hv2-nth #0 r) #63) #12) (%wor (%wshl (%wand (hv2-nth #1 r) #63) #6) (%wand (hv2-nth #2 r) #63)))) (b2-cpsg f (hv2-drop1 (hv2-drop1 (hv2-drop1 r))))
+
+b2-cps : List Word → List Word
+b2-cps s = b2-cpsg (toNat (cli-len s)) s
+
+-- code points as UTF-16 units
+b2-u16 : List Word → List Word
+b2-u16 nil = nil
+b2-u16 (cons c r) =
+  if %wlt c #65536 then cons c (b2-u16 r)
+  else (let d = %wsub c #65536 in cons (%wadd #55296 (%wshr d #10)) (cons (%wadd #56320 (%wand d #1023)) (b2-u16 r)))
+
+-- UTF-16 units as UTF-8 bytes (a lone surrogate as the replacement character, as a write does)
+b2-utf8g : Nat → List Word → List Word
+b2-utf8g zero r = nil
+b2-utf8g (suc f) nil = nil
+b2-utf8g (suc f) (cons u r) =
+  if andB (%wlt #55295 u) (%wlt u #56320) then
+    (let v = hv2-nth #0 r in
+     if andB (%wlt #56319 v) (%wlt v #57344)
+     then list-append (h4-utf8enc (%wadd #65536 (%wor (%wshl (%wsub u #55296) #10) (%wsub v #56320)))) (b2-utf8g f (hv2-drop1 r))
+     else list-append (h4-utf8enc #65533) (b2-utf8g f r))
+  else if andB (%wlt #56319 u) (%wlt u #57344) then list-append (h4-utf8enc #65533) (b2-utf8g f r)
+  else list-append (h4-utf8enc u) (b2-utf8g f r)
+
+b2-utf8 : List Word → List Word
+b2-utf8 s = b2-utf8g (toNat (cli-len s)) s
+
+-- a RAM string from UTF-8 text
+fn b2-str (s : List Word) : Word
+  a <- b2-arrl (b2-u16 (b2-cps s))
+  ret a
+
+-- a String literal's text: an array of units, or (made by String.append on the IO lane) a rope
+-- [ROPE, left, right, total] of two texts, flattened to an array the first time it is read
+-- (and kept: [FWD, the array, 0, total])
+b2-ROPE : Word
+b2-ROPE = #4611686018427387904
+
+b2-FWD : Word
+b2-FWD = #4611686018427387905
+
+fn b2-slen (v : Word) : Word
+  h <- b2m-rd v
+  if orB (%weq h b2-ROPE) (%weq h b2-FWD)
+    n <- b2m-rd (%wadd v #3)
+    ret n
+  ret h
+
+-- a text's units into o from off, the texts still to copy on the worklist
+fnrec b2-sflat (f : Nat) (ws : List Word) (o : Word) (off : Word) : Word
+  zero: ret o
+  if h4-isnil ws
+    ret o
+  let v = hv2-nth #0 ws
+  h <- b2m-rd v
+  if %weq h b2-ROPE
+    l <- b2m-rd (%wadd v #1)
+    r <- b2m-rd (%wadd v #2)
+    jump b2-sflat f (cons l (cons r (hv2-drop1 ws))) o off
+  a2 <- b2m-rd (%wadd v #1)
+  let arr = the Word (if %weq h b2-FWD then a2 else v)
+  n <- b2m-len arr
+  do b2-scopy (toNat #4294967295) arr o #0 off n
+  jump b2-sflat f (hv2-drop1 ws) o (%wadd off n)
+
+fnrec b2-scopy (f : Nat) (src : Word) (dst : Word) (j : Word) (off : Word) (n : Word) : Word
+  zero: ret dst
+  if %weq j n
+    ret dst
+  x <- b2m-at src j
+  do b2m-put dst (%wadd off j) x
+  jump b2-scopy f src dst (%wsucc j) off n
+
+-- a text as an array (a rope flattened once)
+fn b2-sarr (v : Word) : Word
+  h <- b2m-rd v
+  if %weq h b2-FWD
+    a <- b2m-rd (%wadd v #1)
+    ret a
+  if not (%weq h b2-ROPE)
+    ret v
+  n <- b2m-rd (%wadd v #3)
+  o <- b2-arr n
+  do b2-sflat (toNat #4294967295) (cons v nil) o #0
+  do b2m-wr v b2-FWD
+  do b2m-wr (%wadd v #1) o
+  ret o
+
+fn b2-sarrk (k : Word) (v : Word) : Word
+  if not (%weq k b2-LSTR)
+    ret v
+  a <- b2-sarr v
+  ret a
+
+-- a RAM string's units, and its UTF-8 bytes
+fn b2-units (a0 : Word) : List Word
+  a <- b2-sarr a0
+  r <-[b2-dpl] b2-list a
+  ret r
+
+fn b2-bytes (a : Word) : List Word
+  r <-[b2-dpl] b2-list a
+  ret (b2-utf8 r)
+
+-- the units [beg, end) of a RAM string
+fnrec b2-slicel (f : Nat) (a : Word) (j : Word) (beg : Word) (acc : List Word) : List Word
+  zero: ret acc
+  if %wlt j (%wsucc beg)
+    ret acc
+  x <- b2m-at a (%wsub j #1)
+  jump b2-slicel f a (%wsub j #1) beg (cons x acc)
+
+fn b2-slice (a : Word) (beg : Word) (end : Word) : List Word
+  n <- b2m-len a
+  let e = the Word (if %wlt n end then n else end)
+  r <-[b2-dpl] b2-slicel (toNat #4294967295) a e beg nil
+  ret r
+
+-- string equality and hashing
+fnrec b2-streqg (f : Nat) (a : Word) (b : Word) (j : Word) (n : Word) : Word
+  zero: ret #1
+  if %weq j n
+    ret #1
+  x <- b2m-at a j
+  y <- b2m-at b j
+  if not (%weq x y)
+    ret #0
+  jump b2-streqg f a b (%wsucc j) n
+
+fn b2-streq (a0 : Word) (b0 : Word) : Word
+  a <- b2-sarr a0
+  b <- b2-sarr b0
+  n <- b2m-len a
+  o <- b2m-len b
+  if not (%weq n o)
+    ret #0
+  r <- b2-streqg (toNat #4294967295) a b #0 n
+  ret r
+
+fnrec b2-strhg (f : Nat) (a : Word) (j : Word) (n : Word) (h : Word) : Word
+  zero: ret h
+  if %weq j n
+    ret h
+  x <- b2m-at a j
+  jump b2-strhg f a (%wsucc j) n (%wand (%wadd (%wmul h #31) x) #4294967295)
+
+fn b2-strhash (a : Word) : Word
+  n <- b2m-len a
+  h <- b2-strhg (toNat #4294967295) a #0 n #7
+  ret (%wor (%wshl h #1) #1)
+
+-- ===========================================================================================
+-- Names: interned strings. m+16 maps a string's hash to the latest id with it; m+24 is a vector
+-- of [string, the previous id with the same hash]; id 0 is no name.
+-- ===========================================================================================
+
+fnrec b2-chain (f : Nat) (ids : Word) (id : Word) (s : Word) : Word
+  zero: ret #0
+  if %weq id #0
+    ret #0
+  r <- b2m-vat ids (%wsub id #1)
+  t <- b2m-rd r
+  e <- b2-streq t s
+  if %weq e #1
+    ret id
+  nx <- b2m-rd (%wadd r #1)
+  jump b2-chain f ids nx s
+
+-- the id of a RAM string
+fn b2-intern (s : Word) : Word
+  names <- rd (b2-HNAMES M)
+  ids <- rd (b2-HIDS M)
+  h <- b2-strhash s
+  top <- b2-mget names h
+  let t0 = the Word (if %weq top hv2-none then #0 else top)
+  id <- b2-chain (toNat #4294967295) ids t0 s
+  if not (%weq id #0)
+    ret id
+  r <- b2m-alloc #2
+  do b2m-wr r s
+  do b2m-wr (%wadd r #1) t0
+  do b2-vpush ids r
+  n <- b2m-vlen ids
+  do b2-mset names h n
+  ret n
+
+-- the id of UTF-8 text, and the string of an id
+fn b2-nm (s : List Word) : Word
+  a <- b2-str s
+  r <- b2-intern a
+  ret r
+
+fn b2-nstr (id : Word) : Word
+  ids <- rd (b2-HIDS M)
+  r <- b2m-vat ids (%wsub id #1)
+  s <- b2m-rd r
+  ret s
+
+fn b2-nbytes (id : Word) : List Word
+  s <- b2-nstr id
+  r <-[b2-dpl] b2-bytes s
+  ret r
+
+-- the names the kernel spells, interned first in this order, so each id is a constant
+b2-fixed : List (List Word)
+b2-fixed = cons "_" (cons "Zero" (cons "Succ" (cons "SNil" (cons "SCon" (cons "Chr" (cons "WNil" (cons "WCon" (cons "True" (cons "False" (cons "Nat" (cons "U32" (cons "F32" (cons "String" (cons "Con" (cons "Nil" (cons "Tuple" (cons "Exists" (cons "Pair" (cons "Or" (cons "Bool.or" (cons "Bool.and" (cons "String.append" (cons "Empty" (cons "Array.new" (cons "Array.get" (cons "Array.set" (cons "Nat.add" (cons "Unit" (cons "ALeaf" (cons "ANode" (cons "IO" (cons "Sigma" (cons "TODO" (cons "main" (cons "e" (cons "" (cons "Bool" nil)))))))))))))))))))))))))))))))))))))
+
+b2-N_ : Word
+b2-N_ = #1
+b2-NZero : Word
+b2-NZero = #2
+b2-NSucc : Word
+b2-NSucc = #3
+b2-NSNil : Word
+b2-NSNil = #4
+b2-NSCon : Word
+b2-NSCon = #5
+b2-NChr : Word
+b2-NChr = #6
+b2-NWNil : Word
+b2-NWNil = #7
+b2-NWCon : Word
+b2-NWCon = #8
+b2-NTrue : Word
+b2-NTrue = #9
+b2-NFalse : Word
+b2-NFalse = #10
+b2-NNat : Word
+b2-NNat = #11
+b2-NU32 : Word
+b2-NU32 = #12
+b2-NF32 : Word
+b2-NF32 = #13
+b2-NString : Word
+b2-NString = #14
+b2-NCon : Word
+b2-NCon = #15
+b2-NNil : Word
+b2-NNil = #16
+b2-NTuple : Word
+b2-NTuple = #17
+b2-NExists : Word
+b2-NExists = #18
+b2-NPair : Word
+b2-NPair = #19
+b2-NOr : Word
+b2-NOr = #20
+b2-NBoolor : Word
+b2-NBoolor = #21
+b2-NBooland : Word
+b2-NBooland = #22
+b2-NStrapp : Word
+b2-NStrapp = #23
+b2-NEmpty : Word
+b2-NEmpty = #24
+b2-NArrnew : Word
+b2-NArrnew = #25
+b2-NArrget : Word
+b2-NArrget = #26
+b2-NArrset : Word
+b2-NArrset = #27
+b2-NNatadd : Word
+b2-NNatadd = #28
+b2-NUnit : Word
+b2-NUnit = #29
+b2-NALeaf : Word
+b2-NALeaf = #30
+b2-NANode : Word
+b2-NANode = #31
+b2-NIO : Word
+b2-NIO = #32
+b2-NSigma : Word
+b2-NSigma = #33
+b2-NTODO : Word
+b2-NTODO = #34
+b2-Nmain : Word
+b2-Nmain = #35
+b2-Ne : Word
+b2-Ne = #36
+b2-NEMPTYSTR : Word
+b2-NEMPTYSTR = #37
+b2-NBool : Word
+b2-NBool = #38
+
+fnrec b2-internall (f : Nat) (xs : List (List Word)) : Word
+  zero: ret #0
+  if h4-stknil0 xs
+    ret #0
+  do b2-nm (h4-tget-go #0 xs)
+  jump b2-internall f (h4-tl0 xs)
+
+h4-stknil0 : List (List Word) → Bool
+h4-stknil0 nil = true
+h4-stknil0 (cons x r) = false
+
+h4-tl0 : List (List Word) → List (List Word)
+h4-tl0 nil = nil
+h4-tl0 (cons x r) = r
+
+-- ===========================================================================================
+-- Quantities (quant_add, quant_join, quant_dem)
+-- ===========================================================================================
+
+b2-qadd : Word → Word → Word
+b2-qadd a b = if %weq a b2-NONE then b else if %weq b b2-NONE then a else b2-MANY
+
+b2-qjoin : Word → Word → Word
+b2-qjoin a b = if orB (%weq a b2-MANY) (%weq b b2-MANY) then b2-MANY else if %weq a b2-NONE then b else a
+
+b2-qdem : Word → Word → Word
+b2-qdem q qt = if %weq q b2-NONE then b2-NONE else qt
+
+-- quant_show
+b2-qshow : Word → List Word
+b2-qshow q = if %weq q b2-NONE then "-" else if %weq q b2-MANY then "+" else ""
+
+-- ===========================================================================================
+-- PMap (a persistent map on numbers: [has, value, left, right], 0 the empty one)
+-- ===========================================================================================
+
+fnrec b2-pget (f : Nat) (mp : Word) (k : Word) : Word
+  zero: ret hv2-none
+  if %weq mp #0
+    ret hv2-none
+  if %weq k #0
+    h <- b2m-rd mp
+    if %weq h #0
+      ret hv2-none
+    v <- b2m-rd (%wadd mp #1)
+    ret v
+  let odd = %weq (%wmod k #2) #1
+  nx <- b2m-rd (%wadd mp (the Word (if odd then #2 else #3)))
+  jump b2-pget f nx (the Word (if odd then %wdiv (%wsub k #1) #2 else %wdiv (%wsub k #2) #2))
+
+macro b2m-pnode (h : Word) (v : Word) (l : Word) (r : Word) : Word
+  at <- b2m-alloc #4
+  do b2m-wr at h
+  do b2m-wr (%wadd at #1) v
+  do b2m-wr (%wadd at #2) l
+  do b2m-wr (%wadd at #3) r
+  ret at
+
+fnrec b2-pset (f : Nat) (mp : Word) (k : Word) (v : Word) : Word
+  zero: ret mp
+  h <- b2m-rd mp
+  x <- b2m-rd (%wadd mp #1)
+  l <- b2m-rd (%wadd mp #2)
+  r <- b2m-rd (%wadd mp #3)
+  let bin = not (%weq mp #0)
+  let h1 = the Word (if bin then h else #0)
+  let x1 = the Word (if bin then x else #0)
+  let l1 = the Word (if bin then l else #0)
+  let r1 = the Word (if bin then r else #0)
+  if %weq k #0
+    n <- b2m-pnode #1 v l1 r1
+    ret n
+  if %weq (%wmod k #2) #1
+    l2 <- b2-pset f l1 (%wdiv (%wsub k #1) #2) v
+    n <- b2m-pnode h1 x1 l2 r1
+    ret n
+  r2 <- b2-pset f r1 (%wdiv (%wsub k #2) #2) v
+  n <- b2m-pnode h1 x1 l1 r2
+  ret n
+
+-- pmap_union with f: 0 quant_add, 1 quant_join
+fnrec b2-punion (f : Nat) (a : Word) (b : Word) (md : Word) : Word
+  zero: ret a
+  if %weq a #0
+    ret b
+  if %weq b #0
+    ret a
+  ah <- b2m-rd a
+  av <- b2m-rd (%wadd a #1)
+  al <- b2m-rd (%wadd a #2)
+  ar <- b2m-rd (%wadd a #3)
+  bh <- b2m-rd b
+  bv <- b2m-rd (%wadd b #1)
+  bl <- b2m-rd (%wadd b #2)
+  br <- b2m-rd (%wadd b #3)
+  let h = the Word (if orB (%weq ah #1) (%weq bh #1) then #1 else #0)
+  let v = the Word (if %weq ah #0 then bv else if %weq bh #0 then av else if %weq md #0 then b2-qadd av bv else b2-qjoin av bv)
+  l <- b2-punion f al bl md
+  r <- b2-punion f ar br md
+  n <- b2m-pnode h v l r
+  ret n
+
+-- pmap_to_array: the (key, value) pairs in its order, into a vector of pairs
+fnrec b2-parr (f : Nat) (mp : Word) (acc : Word) (scl : Word) (ob : Word) : Word
+  zero: ret ob
+  if %weq mp #0
+    ret ob
+  h <- b2m-rd mp
+  if %weq h #1
+    v <- b2m-rd (%wadd mp #1)
+    do b2-vpush ob acc
+    do b2-vpush ob v
+  l <- b2m-rd (%wadd mp #2)
+  r <- b2m-rd (%wadd mp #3)
+  do b2-parr f l (%wadd acc scl) (%wmul scl #2) ob
+  jump b2-parr f r (%wadd acc (%wmul scl #2)) (%wmul scl #2) ob
+
+fn b2-pairs (mp : Word) : Word
+  v <- b2-vec
+  do b2-parr (toNat #64) mp #0 #1 v
+  ret v
+
+-- ===========================================================================================
+-- Lists (an environment: [key, value, next], 0 the empty one)
+-- ===========================================================================================
+
+fnrec b2-lget (f : Nat) (l : Word) (k : Word) : Word
+  zero: ret hv2-none
+  if %weq l #0
+    ret hv2-none
+  x <- b2m-rd l
+  if %weq x k
+    v <- b2m-rd (%wadd l #1)
+    ret v
+  nx <- b2m-rd (%wadd l #2)
+  jump b2-lget f nx k
+
+fn b2-lset (l : Word) (k : Word) (v : Word) : Word
+  at <- b2m-alloc #3
+  do b2m-wr at k
+  do b2m-wr (%wadd at #1) v
+  do b2m-wr (%wadd at #2) l
+  ret at
+
+-- the values of a list, last pushed first (list_to_array)
+fnrec b2-lvals (f : Nat) (l : Word) (acc : List Word) : List Word
+  zero: ret acc
+  if %weq l #0
+    ret acc
+  v <- b2m-rd (%wadd l #1)
+  nx <- b2m-rd (%wadd l #2)
+  jump b2-lvals f nx (cons v acc)
+
+fn b2-ltoarr (l : Word) : Word
+  xs <-[b2-dpl] b2-lvals (toNat #4294967295) l nil
+  a <- b2-arrl (hv2-rev xs)
+  ret a
+
+-- ===========================================================================================
+-- Spans, files and errors
+-- ===========================================================================================
+
+-- a file: [FILE, 0, string, namespace (a name), aliases (a map name -> name)]
+-- a span: [SPAN, 0, file, beg, end]
+fn b2-span (file : Word) (beg : Word) (end : Word) : Word
+  s <- b2m-n3 b2-SPAN #0 file beg end
+  ret s
+
+-- a message (a STR node holding a RAM string)
+fn b2-msg (s : List Word) : Word
+  a <- b2-str s
+  t <- b2m-n1 b2-STR #0 a
+  ret t
+
+-- raise: an Err [ERRR, 0, book, ctx, exp, obs, spn, def, nte] stored at m+8, and the failure
+fn b2-raise (bok : Word) (ctx : Word) (exp : Word) (obs : Word) (spn : Word) (def : Word) (nte : Word) : Word
+  at <- b2m-alloc #9
+  do b2m-wr at (%wor b2-ERRR #1792)
+  do b2m-wr (%wadd at #1) #0
+  do b2m-wr (%wadd at #2) bok
+  do b2m-wr (%wadd at #3) ctx
+  do b2m-wr (%wadd at #4) exp
+  do b2m-wr (%wadd at #5) obs
+  do b2m-wr (%wadd at #6) spn
+  do b2m-wr (%wadd at #7) def
+  do b2m-wr (%wadd at #8) nte
+  wr (b2-HERR M) at
+  ret b2-ERR
+
+-- raise with a message for exp (and obs a message too when given)
+fn b2-fail (bok : Word) (ctx : Word) (exp : List Word) (obs : Word) (spn : Word) (def : Word) : Word
+  e <- b2-msg exp
+  r <- b2-raise bok ctx e obs spn def #0
+  ret r
+
+fn b2-failn (bok : Word) (ctx : Word) (exp : List Word) (obs : Word) (spn : Word) (def : Word) (nte : List Word) : Word
+  e <- b2-msg exp
+  n <- b2-str nte
+  r <- b2-raise bok ctx e obs spn def n
+  ret r
+
+b2-dpe : Word → Bool × List Word → Word
+b2-dpe m p = b2-dep m (cli-len (snd p))

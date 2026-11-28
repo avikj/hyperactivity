@@ -1,0 +1,8 @@
+-- IOError: Type (0), Name (1), Inner val (2), as Result/Err
+hio-ioerr : Word → Word → Word → (Word → Step W Word) → Step W Word
+hio-ioerr m tag val k =
+  if %wlt tag #2
+  then hio-new-var m (λ v →
+       hio-node (hv2-kp m v) (hio-num tag) (hv2-port hv2-VAR v) (λ n1 →
+       hio-node (hv2-kp m n1) (hio-con n1) (hv2-port hv2-VAR v) (λ n2 → hio-res (hv2-kp m n2) #1 (hio-con n2) k)))
+  else hio-res m #2 val (λ p → hio-res (hv2-kp m p) #1 p k)

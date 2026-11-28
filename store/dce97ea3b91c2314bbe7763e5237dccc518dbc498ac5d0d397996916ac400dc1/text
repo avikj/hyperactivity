@@ -1,0 +1,10 @@
+hv2-build : List (List Word) → Hv2Tree → Hv2B → Word × Hv2B
+hv2-build names (hv2-tvar n) st = hv2-bvar n st
+hv2-build names (hv2-tref n) st = (hv2-port hv2-REF (hv2-index n names) , st)
+hv2-build names hv2-tera st = (hv2-port hv2-ERA #0 , st)
+hv2-build names (hv2-tnum v) st = (hv2-port hv2-NUM v , st)
+hv2-build names (hv2-tnode t a b) st =
+  let i = hv2b-nn st
+      x = hv2-build names a (hv2b-reserve t st)
+      y = hv2-build names b (snd x)
+  in (hv2-port t i , hv2b-node i (hv2-pair (fst x) (fst y)) (snd y))

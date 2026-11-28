@@ -1,0 +1,9 @@
+-- the integer part of |x|, saturated at 2^24
+ief-trunc : Word → Word
+ief-trunc x =
+  let m = ief-m x
+      e = ief-e x
+  in if ief-isinf x then #16777216
+     else if %wlt #4096 e then #16777216
+     else if %weq e #4096 then m
+     else %wshr m (%wsub #4096 e)

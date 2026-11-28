@@ -1,0 +1,7 @@
+-- the exponent after e: (4096 + exponent, well formed: digits and nothing after them)
+ief-expo-s : List Word → Word × Bool
+ief-expo-s nil = (#4096 , false)
+ief-expo-s (cons c r) =
+  if %weq c #43 then (let w = ief-wdigs r #0 in (%wadd #4096 (fst w) , andB (%wlt (cli-len (snd w)) (cli-len r)) (%weq (cli-len (snd w)) #0)))
+  else if %weq c #45 then (let w = ief-wdigs r #0 in (%wsub #4096 (fst w) , andB (%wlt (cli-len (snd w)) (cli-len r)) (%weq (cli-len (snd w)) #0)))
+  else (let w = ief-wdigs (cons c r) #0 in (%wadd #4096 (fst w) , andB (%wlt (cli-len (snd w)) (%wsucc (cli-len r))) (%weq (cli-len (snd w)) #0)))

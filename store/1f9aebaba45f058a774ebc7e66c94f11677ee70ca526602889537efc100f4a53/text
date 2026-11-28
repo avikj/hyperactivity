@@ -1,0 +1,8 @@
+b2-cpsg : Nat → List Word → List Word
+b2-cpsg zero r = nil
+b2-cpsg (suc f) nil = nil
+b2-cpsg (suc f) (cons b0 r) =
+  if %wlt b0 #128 then cons b0 (b2-cpsg f r)
+  else if %weq (%wand b0 #224) #192 then cons (%wor (%wshl (%wand b0 #31) #6) (%wand (hv2-nth #0 r) #63)) (b2-cpsg f (hv2-drop1 r))
+  else if %weq (%wand b0 #240) #224 then cons (%wor (%wshl (%wand b0 #15) #12) (%wor (%wshl (%wand (hv2-nth #0 r) #63) #6) (%wand (hv2-nth #1 r) #63))) (b2-cpsg f (hv2-drop1 (hv2-drop1 r)))
+  else cons (%wor (%wshl (%wand b0 #7) #18) (%wor (%wshl (%wand (hv2-nth #0 r) #63) #12) (%wor (%wshl (%wand (hv2-nth #1 r) #63) #6) (%wand (hv2-nth #2 r) #63)))) (b2-cpsg f (hv2-drop1 (hv2-drop1 (hv2-drop1 r))))

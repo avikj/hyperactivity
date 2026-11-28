@@ -1,0 +1,18 @@
+-- a record for a stream opened on the bytes bs at slot, its answer Ok(slot)
+hio-open-rec : Word → Word → List Word → List Word → Word → Word → (Word → Step W Word) → Step W Word
+hio-open-rec m slot name bs mo atend k =
+  scmd (w-alloc #64) (λ r →
+  scmd (w-alloc (%wadd (cli-len bs) #64)) (λ buf →
+  hio-poke buf bs (λ e1 →
+  scmd (w-alloc (%wadd (cli-len name) #1)) (λ pa →
+  hio-poke pa name (λ e2 →
+  scmd (w-store r (hv2-kp buf e1)) (λ u0 →
+  scmd (w-store (%wadd r #8) (%wadd (cli-len bs) #64)) (λ u1 →
+  scmd (w-store (%wadd r #16) (cli-len bs)) (λ u2 →
+  scmd (w-store (%wadd r #24) (if %weq atend #1 then cli-len bs else #0)) (λ u3 →
+  scmd (w-store (%wadd r #32) mo) (λ u4 →
+  scmd (w-store (%wadd r #40) #0) (λ u5 →
+  scmd (w-store (%wadd r #48) (hv2-kp pa e2)) (λ u6 →
+  scmd (w-store (%wadd r #56) (cli-len name)) (λ u7 →
+  hr-st (hv2-u (hv2-u (hv2-u (hv2-u (hv2-u (hv2-u (hv2-u (hv2-u m u0) u1) u2) u3) u4) u5) u6) u7) (hr-fta m slot) r (λ m1 →
+  hio-ok m1 (hio-num slot) k))))))))))))))

@@ -1,0 +1,15 @@
+-- a cast symbol applied to a number (src/hvm.rs Numb::cast)
+hv2-cast : Word → Word → Word
+hv2-cast c b =
+  let t = hv2-sym c
+      bt = hv2-typ b
+      f = ief-of-f24 (hv2-u24 b)
+  in if %weq t hv2-TY-U24
+     then (if %weq bt hv2-TY-F24 then hv2-new hv2-TY-U24 (ief-to-u24 f) else hv2-new hv2-TY-U24 (hv2-u24 b))
+     else if %weq t hv2-TY-I24
+     then (if %weq bt hv2-TY-F24 then hv2-new hv2-TY-I24 (ief-to-i24 f) else hv2-new hv2-TY-I24 (hv2-u24 b))
+     else if %weq t hv2-TY-F24
+     then (if %weq bt hv2-TY-U24 then hv2-new hv2-TY-F24 (ief-f24 (ief-of-u24 (hv2-u24 b)))
+           else if %weq bt hv2-TY-I24 then hv2-new hv2-TY-F24 (ief-f24 (ief-of-i24 (hv2-u24 b)))
+           else b)
+     else hv2-new hv2-TY-U24 #0

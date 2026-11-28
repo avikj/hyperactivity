@@ -1,0 +1,14 @@
+-- the functions src/run.c book_init names
+hio-ffn : HioE → Word → List Word → Word → (Word → Step W Word) → Step W Word
+hio-ffn e m name argm k =
+  if cli-eq name "READ" then hio-fn-read e m argm k
+  else if cli-eq name "OPEN" then hio-fn-open e m argm k
+  else if cli-eq name "CLOSE" then hio-fn-close e m argm k
+  else if cli-eq name "FLUSH" then hio-fn-flush e m argm k
+  else if cli-eq name "WRITE" then hio-fn-write e m argm k
+  else if cli-eq name "SEEK" then hio-fn-seek e m argm k
+  else if cli-eq name "GET_TIME" then hio-fn-time e m argm k
+  else if cli-eq name "SLEEP" then hio-fn-sleep e m argm k
+  else if orB (cli-eq name "DL_OPEN") (orB (cli-eq name "DL_CALL") (cli-eq name "DL_CLOSE"))
+  then hio-err-str m "dynamic libraries call into HVM2's C runtime, which this machine is not" k
+  else hio-err-name m k

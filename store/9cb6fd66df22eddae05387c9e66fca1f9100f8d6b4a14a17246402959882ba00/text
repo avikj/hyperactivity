@@ -1,0 +1,60 @@
+ce-cli-wexp : Nat → Lst (Word × Word) → Word → Code → List Word → List Word
+ce-cli-wexp zero ars d c acc = list-append "hy_bad()" acc
+ce-cli-wexp (suc k) ars d (cvar n) acc = list-append "v" (list-append (ce-dec (%wsub (%wsub d #1) n)) acc)
+ce-cli-wexp (suc k) ars d (cwlit n) acc = list-append (ce-dec n) (list-append "ull" acc)
+ce-cli-wexp (suc k) ars d (cplit j b) acc = list-append (ce-dec b) (list-append "ull" acc)
+ce-cli-wexp (suc k) ars d (cwsucc a) acc = list-append "hy_add(" (ce-cli-wexp k ars d a (list-append ", 1ull)" acc))
+ce-cli-wexp (suc k) ars d (cwop j a b) acc = list-append (ce-opname j) (list-append "(" (ce-cli-wexp k ars d a (list-append ", " (ce-cli-wexp k ars d b (list-append ")" acc)))))
+ce-cli-wexp (suc k) ars d (clet t b) acc = list-append "({ uint64_t v" (list-append (ce-dec d) (list-append " = " (ce-cli-wexp k ars d t (list-append "; " (ce-cli-wexp k ars (%wsucc d) b (list-append "; })" acc))))))
+ce-cli-wexp (suc k) ars d (cann t T) acc = ce-cli-wexp k ars d t acc
+ce-cli-wexp (suc k) ars d (capp f a) acc = ce-apply ars (λ x tl → ce-cli-wexp k ars d x tl) (fst (x-spine (capp f a))) (snd (x-spine (capp f a))) acc
+ce-cli-wexp (suc k) ars d (cglob g) acc = ce-gcall (λ x tl → ce-cli-wexp k ars d x tl) g (x-look ars g) #0 lnil acc
+ce-cli-wexp (suc k) ars d (cpair a b) acc = list-append "hy_con(0, 2, (uint64_t[]){0, " (ce-cli-wexp k ars d a (list-append ", " (ce-cli-wexp k ars d b (list-append "})" acc))))
+ce-cli-wexp (suc k) ars d (cfst p) acc = list-append "((uint64_t *)" (ce-cli-wexp k ars d p (list-append ")[1]" acc))
+ce-cli-wexp (suc k) ars d (csnd p) acc = list-append "((uint64_t *)" (ce-cli-wexp k ars d p (list-append ")[2]" acc))
+ce-cli-wexp (suc k) ars d (cproj dd j p) acc = list-append "((uint64_t *)" (ce-cli-wexp k ars d p (list-append ")[" (list-append (ce-dec (%wsucc j)) (list-append "]" acc))))
+ce-cli-wexp (suc k) ars d (crec dd fs) acc = list-append "hy_con(0, " (list-append (ce-dec (l-count fs)) (list-append ", (uint64_t[]){0" (ce-args (λ x tl → ce-cli-wexp k ars d x tl) fs false (list-append "})" acc))))
+ce-cli-wexp (suc k) ars d (ccon dd j fs ds) acc =
+  if %weq dd ce-nat-dd then
+    if %weq j #0 then list-append "0ull" acc
+    else case fs of
+           lcons a _ → list-append "hy_add(" (ce-cli-wexp k ars d a (list-append ", 1ull)" acc))
+           lnil → list-append "0ull" acc
+  else if %weq dd ce-list-dd then
+    if %weq j #1 then
+      case ce-try-str (λ x tl → ce-cli-wexp k ars d x tl) (ccon dd j fs ds) acc of
+        some out → out
+        none → list-append "hy_con(" (list-append (ce-dec j) (list-append ", " (list-append (ce-dec (l-count fs)) (list-append ", (uint64_t[]){0" (ce-args (λ x tl → ce-cli-wexp k ars d x tl) fs false (list-append "})" acc))))))
+    else list-append "hy_con(0, 0, (uint64_t[]){0})" acc
+  else
+    case ce-cli-try-inline ars (λ x tl → ce-cli-wexp k ars d x tl) dd j fs acc of
+      some out → out
+      none → list-append "hy_con(" (list-append (ce-dec j) (list-append ", " (list-append (ce-dec (l-count fs)) (list-append ", (uint64_t[]){0" (ce-args (λ x tl → ce-cli-wexp k ars d x tl) fs false (list-append "})" acc))))))
+ce-cli-wexp (suc k) ars d (ccase dd B x) acc =
+  if %weq dd ce-nat-dd then
+    case B of
+      lcons br0 rB →
+        case rB of
+          lcons br1 _ →
+            let ds = ce-dec d
+            in list-append "({ uint64_t n" (list-append ds (list-append " = " (ce-cli-wexp k ars d x
+               (list-append "; uint64_t r" (list-append ds (list-append "; if (n" (list-append ds (list-append " == 0ull) { r" (list-append ds (list-append " = "
+                 (ce-cli-wexp k ars d br0 (list-append "; } else { uint64_t v" (list-append ds (list-append " = n" (list-append ds (list-append " - 1ull; r" (list-append ds (list-append " = "
+                   (ce-cli-wexp k ars (%wsucc d) (x-strip #1 br1) (list-append "; } r" (list-append ds (list-append "; })" acc))))))))))))))))))))))
+          lnil → list-append "hy_bad()" acc
+      lnil → list-append "hy_bad()" acc
+  else
+    list-append "({ uint64_t *p" (list-append (ce-dec d) (list-append " = (uint64_t *)" (ce-cli-wexp k ars d x (list-append "; uint64_t r" (list-append (ce-dec d) (list-append "; switch (p" (list-append (ce-dec d) (list-append "[0]) { " (ce-brs B (λ e c tl → ce-cli-wexp k ars e c tl) dd d #0 (list-append "default: abort(); } r" (list-append (ce-dec d) (list-append "; })" acc))))))))))))
+ce-cli-wexp (suc k) ars d (cprim j as) acc = ce-prim (λ x tl → ce-cli-wexp k ars d x tl) j as acc
+ce-cli-wexp (suc k) ars d (cwelim w z (clam (clam b)) mo) acc =
+  if ce-succ-step b then
+    list-append "hy_add(" (ce-cli-wexp k ars d z (list-append ", " (ce-cli-wexp k ars d w (list-append ")" acc))))
+  else
+    let d0 = ce-dec d
+        d1 = ce-dec (%wsucc d)
+        t4 = list-append "; } v" (list-append d1 (list-append "; })" acc))
+        t3 = ce-cli-wexp k ars (%wadd d #2) b t4
+        t2 = list-append "; for (uint64_t v" (list-append d0 (list-append " = 0; v" (list-append d0 (list-append " < w" (list-append d0 (list-append "; v" (list-append d0 (list-append "++) { v" (list-append d1 (list-append " = " t3))))))))))
+        t1 = list-append "; uint64_t v" (list-append d1 (list-append " = " (ce-cli-wexp k ars d z t2)))
+    in list-append "({ uint64_t w" (list-append d0 (list-append " = " (ce-cli-wexp k ars d w t1)))
+ce-cli-wexp (suc k) ars d c acc = if ce-box c then list-append "0ull" acc else list-append "hy_bad()" acc

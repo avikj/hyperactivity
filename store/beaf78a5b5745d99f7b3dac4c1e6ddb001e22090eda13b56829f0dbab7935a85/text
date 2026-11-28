@@ -1,0 +1,6 @@
+hio-fn-sleep : HioE → Word → Word → (Word → Step W Word) → Step W Word
+hio-fn-sleep e m argm k =
+  hio-tup (toNat #1) e m argm nil (λ m1 tup →
+  if not (%weq (cli-len tup) #2) then hio-err-type m1 k
+  else scmd (w-sleep (%wor (%wshl (hio-u24 (hio-at #0 tup)) #24) (hio-u24 (hio-at #1 tup)))) (λ u →
+       hio-ok (hv2-u m1 u) hio-era k))

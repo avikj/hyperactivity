@@ -1,0 +1,7 @@
+hio-fn-flush : HioE → Word → Word → (Word → Step W Word) → Step W Word
+hio-fn-flush e m argm k =
+  if not (hio-isnum argm) then hio-err-no m #9 k
+  else if %wlt (hio-u24 argm) #3 then hio-ok m hio-era k
+  else hio-rec m (hio-u24 argm) (λ r →
+       if %weq r #0 then hio-err-no m #9 k
+       else hio-sync r (λ er → if %weq er #0 then hio-ok (hv2-kp m er) hio-era k else hio-err-no (hv2-kp m er) er k))

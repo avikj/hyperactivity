@@ -1,0 +1,13 @@
+b2-facos : Word → Word
+b2-facos x =
+  if ief-isnan x then x
+  else if ief-isinf x then ief-NAN
+  else (let xx = b2-fxfix x
+            one = bg-pow2 ief-P
+            pi = ief-pi-P
+            hpi = bg-shr pi #1
+        in if bg-ge xx (bg-add one bg-one) then ief-NAN
+           else (let d = b2-fcomp xx
+                     base = the (List Word) (if bg-is0 xx then hpi else if bg-ge xx d then ief-atan01 d xx else bg-sub hpi (ief-atan01 xx d))
+                     v = the (List Word) (if %weq (ief-sgn x) #1 then bg-sub pi base else base)
+                 in if bg-is0 v then #0 else ief-round-bg #0 v (%wsub #4096 ief-P) #1))

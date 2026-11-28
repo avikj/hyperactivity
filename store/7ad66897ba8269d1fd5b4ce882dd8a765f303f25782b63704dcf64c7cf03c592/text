@@ -1,0 +1,22 @@
+-- k 0 sinh, 1 cosh, 2 tanh
+b2-fhyp : Word → Word → Word
+b2-fhyp k x =
+  let sg = ief-sgn x
+  in if ief-isnan x then x
+     else if ief-isinf x then (if %weq k #1 then ief-INF else if %weq k #0 then x else %wor (%wshl sg #31) #1065353216)
+     else if ief-iszero x then (if %weq k #1 then #1065353216 else x)
+     else (let z = b2-fxfix x
+           in if bg-ge z (bg-shl (bg-of #100) ief-P)
+              then (if %weq k #1 then ief-INF else if %weq k #0 then ief-inf sg else %wor (%wshl sg #31) #1065353216)
+              else if andB (not (%weq k #1)) (%wlt (bg-bitlen z) (%wsub ief-P #12))
+              then x
+              else (let es = b2-fexps z
+                        nw = fst es
+                        a = bg-shl (fst (snd es)) (%wshl nw #1)
+                        b = snd (snd es)
+                        n = bg-sub a b
+                        d = bg-add a b
+                        ex = %wsub (%wsub #4096 nw) (%wadd #1 ief-P)
+                    in if %weq k #0 then ief-round-bg sg n ex #1
+                       else if %weq k #1 then ief-round-bg #0 d ex #1
+                       else ief-ratio sg n d #4096 #1))

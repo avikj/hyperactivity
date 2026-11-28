@@ -1,0 +1,10 @@
+-- a character of a literal (src/hvm.c parse_char_esc): (ok, code, rest)
+h4-chesc : List Word → Bool × (Word × List Word)
+h4-chesc nil = (false , (#0 , nil))
+h4-chesc (cons c r) =
+  if %weq c #92
+  then (if %weq (cli-len r) #0 then (false , (#0 , nil))
+        else (let e = hv2-nth #0 r
+              in (true , (if %weq e #110 then #10 else if %weq e #116 then #9 else if %weq e #114 then #13
+                          else if %weq e #48 then #0 else e , hv2-drop1 r))))
+  else (let u = h4-utf8 (cons c r) in (true , (fst u , snd u)))

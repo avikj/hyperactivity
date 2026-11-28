@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Order the definitions of a generated module so that each follows the definitions it uses."""
+import re,sys
+src=open(sys.argv[1]).read().split('\n')
+# header: lines until first sig
+sig=re.compile(r'^([^\s:()]+)\s*:\s')
+dat=re.compile(r'^data\s+(\S+)')
+blocks=[];cur=[];head=[];started=False;pend=[]
+for ln in src:
+    m=sig.match(ln) or dat.match(ln)
+    if m and not ln.startswith(' '):
+        nm=m.group(1)
+        if cur and cur[0]!=nm or not cur:
+            if cur: blocks.append(cur)
+            cur=[nm,pend+[ln]];pend=[];started=True;continue
+    if not started: head.append(ln);continue
+    if ln.startswith('--') or ln.strip()=='' :
+        pend.append(ln);continue
+    cur[1]+=pend+[ln];pend=[]
+if cur: blocks.append(cur)
+names={b[0] for b in blocks}
+# data constructors
+ctor={}
+for b in blocks:
+    for ln in b[1]:
+        for c in re.findall(r'(?:=|\|)\s*([a-z][\w-]*)',ln) if ln.startswith('data') else []:
+            ctor[c]=b[0]
+tok=re.compile(r'[^\s()λ→,;:]+')
+deps={}
+for b in blocks:
+    body='\n'.join(l for l in b[1] if not l.strip().startswith('--'))
+    body=re.sub(r'"(\\.|[^"\\])*"','',body)
+    d=set()
+    for t in tok.findall(body):
+        if t in names and t!=b[0]: d.add(t)
+        elif t in ctor and ctor[t]!=b[0]: d.add(ctor[t])
+    deps[b[0]]=d
+order=[];done=set();vis=set()
+def go(n):
+    if n in done: return
+    if n in vis: return
+    vis.add(n)
+    for x in sorted(deps[n],key=lambda k:[b[0] for b in blocks].index(k)): go(x)
+    done.add(n);order.append(n)
+for b in blocks: go(b[0])
+bm={b[0]:b[1] for b in blocks}
+out=head+[l for n in order for l in bm[n]]+pend
+print('\n'.join(out))

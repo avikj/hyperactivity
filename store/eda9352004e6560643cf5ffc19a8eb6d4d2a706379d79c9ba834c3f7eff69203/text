@@ -1,0 +1,11 @@
+hio-ctr : HioE → Word → Word → (Word → Word → List Word → Step W Word) → Step W Word
+hio-ctr e m p k =
+  hio-expand e m p (λ m1 lm →
+  if not (hio-iscon lm) then k m1 hv2-none nil
+  else scmd (w-load (hr-na m1 (hv2-val lm))) (λ lw →
+       hio-expand e m1 (hv2-fst lw) (λ m2 ap →
+       if not (hio-iscon ap) then k m2 hv2-none nil
+       else scmd (w-load (hr-na m2 (hv2-val ap))) (λ aw →
+            hio-expand e m2 (hv2-fst aw) (λ m3 arg →
+            if not (hio-isnum arg) then k m3 hv2-none nil
+            else hio-args (toNat #16) e m3 aw nil (λ m4 args → k m4 (hio-u24 arg) args))))))
