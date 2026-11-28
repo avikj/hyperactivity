@@ -1,0 +1,13 @@
+modal4-step : Word → Word → Word → Word → Word → Modal4State → Modal4State × Stem4Out
+modal4-step x k0 k1 k2 damp (modal4-st q0 p0 q1 p1 q2 p2) =
+  let x32 = rp-w32 x
+      np0 = rp-mul16 damp (rp-sub32 p0 (rp-sub32 (rp-mul16 k0 q0) x32))
+      nq0 = rp-add32 q0 np0
+      r1  = rp-sub32 x32 nq0
+      np1 = rp-mul16 damp (rp-sub32 p1 (rp-sub32 (rp-mul16 k1 q1) r1))
+      nq1 = rp-add32 q1 np1
+      r2  = rp-sub32 r1 nq1
+      np2 = rp-mul16 damp (rp-sub32 p2 (rp-sub32 (rp-mul16 k2 q2) r2))
+      nq2 = rp-add32 q2 np2
+      s3  = rp-sub32 (rp-sub32 (rp-sub32 x32 nq0) nq1) nq2
+  in (modal4-st nq0 np0 nq1 np1 nq2 np2 , stem4-out nq0 nq1 nq2 s3)

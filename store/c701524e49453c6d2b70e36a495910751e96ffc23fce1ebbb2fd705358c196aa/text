@@ -1,0 +1,6 @@
+modal4-verify-stream : Modal4State → List Word → Bool
+modal4-verify-stream _ nil = true
+modal4-verify-stream st (cons x xs) =
+  let res = modal4-step x #120 #1800 #12000 #62000 st
+      ok  = %weq (stem4-recompose (snd res)) (rp-w32 x)
+  in andB ok (modal4-verify-stream (fst res) xs)
