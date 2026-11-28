@@ -1,0 +1,9 @@
+-- ---------------------------------------------------------------- ARMv8.1 / ARMv9 LSE & acquire-release atomics
+-- Single-instruction sequential-consistent acquire-release atomics natively supported on Apple M1..M5:
+--   CASAL   Xs, Xt, [Xn] : 0xc8e0fc00 | (Rs << 16) | (Rn << 5) | Rt
+--   LDADDAL Xs, Xt, [Xn] : 0xf8e00000 | (Rs << 16) | (Rn << 5) | Rt
+--   SWPAL   Xs, Xt, [Xn] : 0xf8e08000 | (Rs << 16) | (Rn << 5) | Rt
+--   LDAR    X0, [X0]     : 0xc8dffc00 (#3370122240)
+--   STLR    X1, [X0]     : 0xc89ffc01 (#3365927937)
+a64-casal-w : Word → Word → Word → Word
+a64-casal-w rs rt rn = a64-or #3370187776 (a64-or (a64-shl (a64-and rs #31) #16) (a64-or (a64-shl (a64-and rn #31) #5) (a64-and rt #31)))

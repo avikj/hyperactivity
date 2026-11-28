@@ -1,0 +1,7 @@
+-- ---------------------------------------------------------------- Darwin XNU ARM64 WCmd process & round drivers
+-- Branchless Linux -> Darwin open(2) flag translator (x3 = Linux flags -> x1 = Darwin flags, matching src/drivers.c):
+--   O_ACCMODE(3)->3, O_CREAT(64)->0x200, O_EXCL(128)->0x800, O_TRUNC(512)->0x400, O_APPEND(1024)->8, O_NONBLOCK(2048)->4
+a64-flag-bit : Word → Word → Lst Word
+a64-flag-bit lbit dbit =
+  xcat6 (a64-movz #9 lbit #0) (a64-and-r #9 #3 #9) (a64-cmp #9 #31)
+        (a64-movz #10 dbit #0) (a64-orr-r #11 #1 #10) (a64-csel #1 #11 #1 a64-cc-ne)

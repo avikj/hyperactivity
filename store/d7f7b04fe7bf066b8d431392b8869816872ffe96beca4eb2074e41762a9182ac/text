@@ -1,0 +1,10 @@
+hy-deploy-status : List Word → Proc W Unit
+hy-deploy-status m =
+  bind (h-read "store/ROOT/root") (λ rt →
+  bind (h-read "/tmp/hx_agent_bus/sovereign_mux_state.json") (λ mx →
+  bind (h-capture (cons "/bin/sh" (cons "-c" (cons "uname -sm; if [ -x ./build/hx-mac ]; then ./build/hx-mac; else echo '  [build/hx-mac] run: ./hyperactive deploy mac'; fi" nil)))) (λ hw →
+  h-out (h-concat
+    (cons (h-line (list-append "[hyperactive deploy] store/ROOT = " (h-trim (hy-or "absent" rt))))
+    (cons (snd hw)
+    (cons (if hy-held mx then list-append "  [sovereign] " (hy-or nil mx) else h-line "  [sovereign] run: ./hyperactive deploy mac")
+    (cons (h-line "  actions: ./hyperactive deploy [status | mac | cluster <peer> | ipad | live]") nil))))))))

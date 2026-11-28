@@ -1,0 +1,22 @@
+s-deploy-action : List Word → List Word → Proc W (List Word)
+s-deploy-action m path =
+  let qs   = s-query path
+      act  = ue-qparam "act" qs
+      peer = ue-qparam "peer" qs
+      bin  = s-cub-bin m
+  in if orB (h-null act) (h-eq act "status")
+     then bind (h-capture (cons "/usr/bin/env" (cons "RENDER=1" (cons bin (cons "lib/hyperactive.hypercubical" (cons "deploy" (cons "status" nil))))))) (λ r →
+          ret {lzero} {W} (s-response "text/plain; charset=utf-8" (snd r)))
+     else if orB (h-eq act "mac") (orB (h-eq act "ipad") (h-eq act "live"))
+     then bind (h-capture (cons "/usr/bin/env" (cons "RENDER=1" (cons bin (cons "lib/hyperactive.hypercubical" (cons "deploy" (cons act nil))))))) (λ r →
+          ret {lzero} {W} (if weq (fst r) #0
+            then s-response "text/plain; charset=utf-8" (snd r)
+            else s-respond "500 Internal Server Error" "text/plain; charset=utf-8" (snd r)))
+     else if h-eq act "cluster"
+     then (if hc-safe-host peer
+           then bind (h-capture (cons "/usr/bin/env" (cons "RENDER=1" (cons bin (cons "lib/hyperactive.hypercubical" (cons "deploy" (cons "cluster" (cons peer nil)))))))) (λ r →
+                ret {lzero} {W} (if weq (fst r) #0
+                  then s-response "text/plain; charset=utf-8" (snd r)
+                  else s-respond "500 Internal Server Error" "text/plain; charset=utf-8" (snd r)))
+           else ret {lzero} {W} (s-respond "400 Bad Request" "text/plain; charset=utf-8" "refused unsafe peer hostname"))
+     else ret {lzero} {W} (s-respond "400 Bad Request" "text/plain; charset=utf-8" "unknown deploy action")

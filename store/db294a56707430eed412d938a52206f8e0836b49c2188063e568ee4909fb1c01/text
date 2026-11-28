@@ -1,0 +1,13 @@
+-- ---------------------------------------------------------------- frame, 16B stack, barriers & Darwin syscall
+-- Every constant verified via `llvm-mc --triple=arm64-apple-macos15 -mattr=+v8.2a --show-encoding`:
+--   stp x29, x30, [sp, #-16]! = 0xa9bf7bfd (#2847898621)
+--   ldp x29, x30, [sp], #16   = 0xa8c17bfd (#2831252477)
+--   mov x29, sp               = 0x910003fd (#2432697341)
+--   mov sp, x29               = 0x910003bf (#2432697279)
+--   ret                       = 0xd65f03c0 (#3596551104)
+--   brk #0x100                = 0xd4202000 (#3558875136)
+--   isb                       = 0xd5033fdf (#3573759967)
+--   dmb ish                   = 0xd5033bbf (#3573758911)
+--   svc #0x80                 = 0xd4001001 (#3556773889)
+a64-stp-fp-lr : Lst Word
+a64-stp-fp-lr = a64-insn #2847898621

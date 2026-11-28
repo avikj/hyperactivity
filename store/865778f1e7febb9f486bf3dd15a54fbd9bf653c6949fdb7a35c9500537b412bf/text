@@ -1,0 +1,17 @@
+s-deploy-status : Proc W (List Word)
+s-deploy-status =
+  bind (h-read "store/ROOT/root") (λ rr0 →
+  bind (h-read "root") (λ rr1 →
+  bind (h-read "/tmp/hx_agent_bus/sovereign_mux_state.json") (λ mx →
+  let rt0     = h-trim (h-before (cons #10 nil) (s-or nil rr0))
+      rt1     = h-trim (h-before (cons #10 nil) (s-or nil rr1))
+      rt      = the (List Word) (if h-null rt0 then (if h-null rt1 then "pending" else rt1) else rt0)
+      sov     = h-trim (s-or nil mx)
+      sovJson = the (List Word) (if andB (h-not (h-null sov)) (h-prefix "{" sov) then sov else s-cj-str "idle (run 1 · HYPERCRACK THIS MAC)")
+      js      = h-concat (cons "{" (cons (s-commas (
+                  cons (s-dht-kv "ok" "true") (
+                  cons (s-dht-kv "engines" "46") (
+                  cons (s-dht-kv "root" (s-cj-str rt)) (
+                  cons (s-dht-kv "bootstrap" (s-cj-str "/up")) (
+                  cons (s-dht-kv "sovereign" sovJson) nil)))))) (cons "}" nil)))
+  in ret {lzero} {W} (s-response "application/json" js))))

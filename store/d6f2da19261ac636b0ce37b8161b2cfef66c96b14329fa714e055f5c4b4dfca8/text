@@ -1,0 +1,26 @@
+-- Full curried closure application routine (a64-apply, mirroring i-apply in lib/x86.hypercubical):
+--   Closure cell [code_off][arity][given][arg_0..arg_{given-1}] is at [x29, #32]; new arg is at [x29, #16].
+--   - When given + 1 < arity (partial application): allocates (4 + given)*8 bytes from [x21..x22],
+--     writes [code_off, arity, given+1, arg_0..arg_{given-1}, new_arg], and returns new closure in x0.
+--   - When given + 1 == arity (saturated call): pushes arg_0..arg_{given-1} and new_arg in 16B-aligned
+--     stack slots, calls x23 + code_off via BLR, restores sp := x29, and returns x0.
+a64-apply : Lst Word
+a64-apply =
+  let head   = xcat6 (a64-ldr-idx #9 #29 #4) (a64-ldr-idx #10 #9 #1) (a64-ldr-idx #11 #9 #2)
+                     (a64-movz #12 #1 #0) (a64-add #12 #11 #12) (a64-cmp #12 #10)
+      pstep  = xcat6 (a64-insn #3548246479) (a64-add #1 #9 #15) (a64-ldr-idx #0 #1 #3)
+                     a64-push-x0 (a64-movz #15 #1 #0) (a64-add #14 #14 #15)
+      ploop  = l-app (a64-movz #14 #0 #0) (a64-while-cc (a64-cmp #14 #11) a64-cc-hs pstep)
+      sat    = xcat5 ploop (l-app (a64-ldr-idx #0 #29 #2) a64-push-x0)
+                     (xcat3 (a64-ldr-idx #1 #9 #0) (a64-add #1 #23 #1) (a64-blr #1))
+                     a64-mov-sp-fp (l-app a64-ldp-fp-lr a64-ret)
+      palloc = xcat6 (a64-movz #13 #4 #0) (a64-add #13 #11 #13) (a64-insn #3548246445)
+                     (a64-mov-r #0 #21) (l-app (a64-adds #21 #21 #13) a64-over-if-hs)
+                     (l-app (a64-cmp #21 #22) a64-over-if-hi)
+      phdr   = xcat4 (a64-ldr-idx #14 #9 #0) (a64-str-idx #14 #0 #0) (a64-str-idx #10 #0 #1) (a64-str-idx #12 #0 #2)
+      kstep  = xcat6 (a64-insn #3548246479) (a64-add #1 #9 #15) (a64-ldr-idx #2 #1 #3)
+                     (a64-add #1 #0 #15) (a64-str-idx #2 #1 #3) (l-app (a64-movz #15 #1 #0) (a64-add #14 #14 #15))
+      kloop  = l-app (a64-movz #14 #0 #0) (a64-while-cc (a64-cmp #14 #11) a64-cc-hs kstep)
+      ptail  = xcat4 (a64-ldr-idx #2 #29 #2) (a64-insn #3548246383) (a64-add #1 #0 #15) (a64-str-idx #2 #1 #3)
+      part   = xcat5 palloc phdr kloop ptail (xcat3 a64-mov-sp-fp a64-ldp-fp-lr a64-ret)
+  in xcat4 a64-stp-fp-lr a64-mov-fp-sp a64-stack-check (l-app head (a64-if-cc a64-cc-lo a64-cc-hs part sat))

@@ -5190,16 +5190,19 @@ static char *place_slurp(const char *path, size_t *len) {
 }
 static void place_first(const char *place, const char *root) {
     mkdir("build", 0777); mkdir(".cubical-store", 0777);
+    const char *tok = getenv("HYPERACTIVE_TOKEN");
+    char *auth = NULL;
+    if (tok && *tok) { auth = malloc(strlen(tok) + 32); sprintf(auth, "Authorization: Bearer %s", tok); }
     size_t ul = strlen(place) + 96; char *url = malloc(ul);
     snprintf(url, ul, "%s/roots/%s", place, root);
-    char *a1[] = { "curl", "-fsS", "-o", "build/root-list", url, NULL };
+    char *a1[] = { "curl", "-fsS", auth ? "-H" : "-s", auth ? auth : "-S", "-o", "build/root-list", url, NULL };
     if (place_run(a1) != 0) die("the place holds no list of packs for the root", root);
     char *l = place_slurp("build/root-list", NULL); if (!l) die("cannot read", "build/root-list");
     for (char *p = l; *p; ) {
         char *e = strchr(p, '\n'); if (e) *e = 0;
         if (strlen(p) == 64 && strspn(p, "0123456789abcdef") == 64) {
             snprintf(url, ul, "%s/packs/%s", place, p);
-            char *a2[] = { "curl", "-fsS", "-o", "build/pack.tgz", url, NULL };
+            char *a2[] = { "curl", "-fsS", auth ? "-H" : "-s", auth ? auth : "-S", "-o", "build/pack.tgz", url, NULL };
             size_t n = 0; char *b = place_run(a2) == 0 ? place_slurp("build/pack.tgz", &n) : NULL;
             char h[65]; h[0] = 0; if (b) key_hash(b, n, h);
             if (!b || strcmp(h, p)) die("the place gave no pack of that name, or one that is not what its name says", p);
@@ -5214,7 +5217,7 @@ static void place_first(const char *place, const char *root) {
         }
         if (!e) break; p = e + 1;
     }
-    free(l); free(url);
+    free(auth); free(l); free(url);
 }
 #ifdef CUBICAL_LIB
 int cubical_main(int argc, char **argv)
@@ -5338,20 +5341,6 @@ int main(int argc, char **argv)
                 free(hx.b); free(rel);
             }
             idx_unlock(); fflush(stdout); _Exit(0);
-        }
-        if (!strcmp(argv[i], "--drop-view")) {
-            /* what the removed layer left in the pool and in the labels: the entries, the versions
-             * records, and the index's live, alternatives and conflicts. Run once on a pool that has them */
-            static const char *sd[] = { "entries", "versions", NULL }; static const char *xd[] = { "live", "alternatives", "conflicts", NULL };
-            int n = 0;
-            for (int j = 0; sd[j]; j++) {
-                char *p = path_in(source_dir(), sd[j], ""); DIR *o = opendir(p);
-                if (o) { struct dirent *de; while ((de = readdir(o))) if (de->d_name[0] != '.') { char *f = path_in(p, de->d_name, ""); if (remove(f) == 0) n++; free(f); } closedir(o); }
-                rmdir(p); free(p);
-            }
-            for (int j = 0; xd[j]; j++) { idx_clear_in(idx_dir(), xd[j]); char *p = path_in(idx_dir(), xd[j], ""); rmdir(p); free(p); }
-            idx_remove("meta", "stamp");
-            printf("%d objects of the removed layer dropped\n", n); fflush(stdout); _Exit(0);
         }
         if (!strcmp(argv[i], "--export") && i + 3 < argc) {
             /* `--export HASH KIND FILE`: an object of the pool written to FILE (to be put into another pool) */

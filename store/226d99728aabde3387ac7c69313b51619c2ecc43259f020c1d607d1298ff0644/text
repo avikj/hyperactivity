@@ -1,0 +1,8 @@
+-- Fresh zeroed Bytes cell of length n (8 + ((n + 7) & ~7) bytes from arena, [0] = n, payload zeroed)
+a64-fresh : Enc → XEnv → Word → Code → Lst Word
+a64-fresh ce env d n =
+  let sz-calc = xcat4 (a64-movz #9 #15 #0) (a64-adds #1 #0 #9) a64-over-if-hs (a64-insn #2457727009)
+      alloc   = xcat5 (a64-mov-r #2 #21) (a64-adds #21 #21 #1) a64-over-if-hs (a64-cmp #21 #22) a64-over-if-hi
+      zstep   = xcat4 (a64-add #10 #2 #9) (a64-str-idx #31 #10 #0) (a64-movz #11 #8 #0) (a64-add #9 #9 #11)
+      zloop   = xcat3 (a64-str-idx #0 #2 #0) (a64-movz #9 #8 #0) (a64-while-cc (a64-cmp #9 #1) a64-cc-hs zstep)
+  in xcat5 (ce env d n) sz-calc alloc zloop (a64-mov-r #0 #2)

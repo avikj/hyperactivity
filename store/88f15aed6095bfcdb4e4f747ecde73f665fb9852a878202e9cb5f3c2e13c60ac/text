@@ -1,0 +1,27 @@
+-- lib/macho.hypercubical — Native Apple Silicon ARM64 (AArch64 + ARMv8.1/v9 LSE + IEEE-754 FP)
+-- encoder, full WCmd Darwin XNU process & round-loop drivers, standalone 64-bit Mach-O emitter,
+-- and disjoint GPU workgroup reduction confluence. Loaded after lib/library.hypercubical.
+--
+-- Calling & register convention (Apple Silicon AAPCS64, 16-byte SP invariant on every instruction;
+-- x18 is strictly untouched as reserved by the Darwin ARM64 platform ABI):
+--   Entry signature from src/net.c jit_call:
+--     uint64_t fn(const uint64_t *args, uint64_t n, JitCtx *ctx)
+--   Registers inside compiled blobs:
+--     x0          value of the expression being computed (and return register)
+--     x1, x2, x3  operand / syscall argument scratch
+--     x9..x15     caller-saved address / immediate / loop scratch
+--     x16         Darwin XNU BSD syscall number for `svc #0x80`
+--     x19         entry sp saved by a64-stub (restored on overflow exit)
+--     x20         JitCtx *ctx ([0]=flag, [8]=cur, [16]=end, [24]=stack_lim, [32]=orig_sp, [40]=cmd_eof)
+--     x21         arena next free byte (loaded from [x20,#8], written back on normal exit)
+--     x22         arena end (loaded from [x20,#16])
+--     x23         blob base address (obtained via ADR x23, #-off in a64-stub)
+--     x24         entry args array pointer inside a64-stub
+--     x29, x30    frame pointer (fp) and link register (lr)
+--   Every stack push/pop steps sp by 16 bytes (`str x0, [sp, #-16]!` / `ldr x1, [sp], #16`),
+--   preserving hardware 16-byte SP alignment across every instruction.
+--   Internal calls push arguments left-to-right in 16-byte slots:
+--     argument i of n is at [x29 + 16 + 16*(n - 1 - i)]
+--     local slot s is at    [x29 - 16*(s + 1)]
+import "library.hypercubical"
+

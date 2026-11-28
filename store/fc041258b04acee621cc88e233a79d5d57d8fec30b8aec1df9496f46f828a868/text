@@ -1,0 +1,10 @@
+-- #build and #build-loop plans for Apple Silicon ARM64 standalone Mach-O executables (`src/syntax.c` `#ifdef __aarch64__`)
+macho-build-plan-at : Word → Code → Code → BPlan
+macho-build-plan-at g Tc c =
+  let cs = fst (specialize Tc sched-default lnil c)
+      p = program-of-at unfold g cs #256
+      ok = code-conv-at Tc (cglob g) cs
+      defs = x-erase g (x-forms-all (snd p))
+  in case x-verdict (fst p) defs return (λ _ → BPlan) of
+       not-fo w at → (not-fo w at , (ok , lnil))
+       fo q → (fo cs , (ok , macho-image (l-app a64-start (arm64-encode-proc g defs))))

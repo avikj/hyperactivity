@@ -1,0 +1,31 @@
+hc-up-sh : List Word → List Word
+hc-up-sh defaultPlace =
+  hc-ln "#!/bin/sh" (
+  hc-ln "# Hyperactivity Zero-Git One-Click Bare-Metal Bootstrapper (Mac Studio / Mac mini / Linux)" (
+  hc-ln "# Usage: curl -fsSL https://hyperactivity.ai/up | sh" (
+  hc-ln "set -eu" (
+  hc-ln (hc-tr (list-append "PLACE=`${HYPERACTIVE_PLACE:-" (list-append defaultPlace "}`"))) (
+  hc-ln "DIR=`${HX_DIR:-$HOME/hyperactivity}`" (
+  hc-ln "ROLE=`${ROLE:-auto}`" (
+  hc-ln "OS=`$(uname -s)`" (
+  hc-ln "ARCH=`$(uname -m)`" (
+  hc-ln "echo `[1/6] Hyperactivity One-Click Bootstrap -> $DIR ($OS/$ARCH, place=$PLACE, role=$ROLE)`" (
+  hc-ln "if [ `$OS` = `Darwin` ] && ! xcode-select -p >/dev/null 2>&1; then" (
+  hc-ln "  echo `Installing macOS Command Line Tools (click Install in dialog, then re-run)...`" (
+  hc-ln "  xcode-select --install || true; exit 1" (
+  hc-ln "fi" (
+  hc-ln "mkdir -p `$DIR` && cd `$DIR`" (
+  hc-ln "echo `[2/6] Fetching 95 KB zero-git C kernel bootstrap ($PLACE/bootstrap.tgz)...`" (
+  hc-ln "if [ -n `${HYPERACTIVE_TOKEN:-}` ]; then" (
+  hc-ln "  curl -fsSL -H `Authorization: Bearer $HYPERACTIVE_TOKEN` `$PLACE/bootstrap.tgz` | tar -xz" (
+  hc-ln "else" (
+  hc-ln "  curl -fsSL `$PLACE/bootstrap.tgz` | tar -xz" (
+  hc-ln "fi" (
+  hc-ln "echo `[3/6] Compiling native cubical kernel (-O3 -mcpu=native)...`" (
+  hc-ln "make -s build/cubical" (
+  hc-ln "echo `[4/6] Hydrating content-addressed store/ pool (zero git)...`" (
+  hc-ln "HYPERACTIVE_PLACE=`$PLACE` RENDER=1 ./hyperactive take latest" (
+  hc-ln "echo `[5/6] Materializing 46-engine native hx + Apple Silicon hypercracker...`" (
+  hc-ln "RENDER=1 ./hyperactive deploy mac" (
+  hc-ln "echo `[6/6] Ready -> http://127.0.0.1:8080/deploy`" (
+  hc-ln "if [ `$OS` = `Darwin` ] && [ `${NO_OPEN:-0}` = `0` ]; then open `http://127.0.0.1:8080/deploy` >/dev/null 2>&1 || true; fi" nil))))))))))))))))))))))))))))

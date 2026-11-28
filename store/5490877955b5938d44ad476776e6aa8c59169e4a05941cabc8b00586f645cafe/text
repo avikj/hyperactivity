@@ -1,0 +1,11 @@
+-- Bytes payload loads/stores at [X0, #8] (after the 8-byte length header of a Bytes cell; verified via llvm-mc):
+--   ldrb w0, [x0, #8] = 0x39402000 (#960503808)   strb w2, [x0, #8] = 0x39002002 (#956309506)
+--   ldrh w0, [x0, #8] = 0x79401000 (#2034241536)  strh w2, [x0, #8] = 0x79001002 (#2030047234)
+--   ldr  w0, [x0, #8] = 0xb9400800 (#3107981312)  str  w2, [x0, #8] = 0xb9000802 (#3103787010)
+--   ldr  x0, [x0, #8] = 0xf9400400                str  x2, [x0, #8] = 0xf9000402
+a64-ld-bytes : Word → Lst Word
+a64-ld-bytes w =
+  if %weq w #1 then a64-insn #960503808
+  else if %weq w #2 then a64-insn #2034241536
+  else if %weq w #4 then a64-insn #3107981312
+  else a64-ldr-idx #0 #0 #1

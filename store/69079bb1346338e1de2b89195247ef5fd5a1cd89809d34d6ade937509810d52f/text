@@ -1,0 +1,136 @@
+hc-mac-probe-objc : List Word
+hc-mac-probe-objc =
+  hc-ln "// Generated from lib/ir/hx-mac-hypercrack.hypercubical — Apple Silicon Hardware Hypercracker" (
+  hc-ln "// Build: xcrun clang -O3 -mcpu=native -fobjc-arc hx_mac_hypercrack.m -framework Foundation -framework Metal -framework IOKit -framework CoreGraphics -o build/hx-mac" (
+  hc-ln "#ifdef __APPLE__" (
+  hc-ln "#import <Foundation/Foundation.h>" (
+  hc-ln "#import <Metal/Metal.h>" (
+  hc-ln "#import <CoreGraphics/CoreGraphics.h>" (
+  hc-ln "#import <IOKit/hid/IOHIDManager.h>" (
+  hc-ln "#include <sys/sysctl.h>" (
+  hc-ln "#include <sys/time.h>" (
+  hc-ln "#include <unistd.h>" (
+  hc-ln "#include <stdio.h>" (
+  hc-ln "#include <stdlib.h>" (
+  hc-ln "#include <string.h>" (
+  hc-ln "static uint64_t now_us(void){ struct timeval tv; gettimeofday(&tv,NULL); return (uint64_t)tv.tv_sec*1000000ULL + (uint64_t)tv.tv_usec; }" (
+  hc-ln "static int run_cmd(const char* cmd){ return system(cmd); }" (
+  hc-ln "int main(int argc, char** argv) {" (
+  hc-ln "  @autoreleasepool {" (
+  hc-ln "    int do_json = 0, do_apply = 0;" (
+  hc-ln "    for (int i = 1; i < argc; i++) {" (
+  hc-ln "      if (!strcmp(argv[i], `--json`)) do_json = 1;" (
+  hc-ln "      if (!strcmp(argv[i], `--apply`)) do_apply = 1;" (
+  hc-ln "    }" (
+  hc-ln "    char cpu[128] = `Apple Silicon`; size_t csz = sizeof(cpu);" (
+  hc-ln "    sysctlbyname(`machdep.cpu.brand_string`, cpu, &csz, NULL, 0);" (
+  hc-ln "    uint64_t mem_b = 0; size_t sz8 = sizeof(mem_b);" (
+  hc-ln "    sysctlbyname(`hw.memsize`, &mem_b, &sz8, NULL, 0);" (
+  hc-ln "    int pcores = 0, ecores = 0, wired_mb = 0, sockbuf = 0; size_t sz4 = sizeof(int);" (
+  hc-ln "    sysctlbyname(`hw.perflevel0.physicalcpu`, &pcores, &sz4, NULL, 0);" (
+  hc-ln "    sz4 = sizeof(int); sysctlbyname(`hw.perflevel1.physicalcpu`, &ecores, &sz4, NULL, 0);" (
+  hc-ln "    sz4 = sizeof(int); sysctlbyname(`iogpu.wired_limit_mb`, &wired_mb, &sz4, NULL, 0);" (
+  hc-ln "    sz4 = sizeof(int); sysctlbyname(`kern.ipc.maxsockbuf`, &sockbuf, &sz4, NULL, 0);" (
+  hc-ln "    uint64_t ram_mb = mem_b / (1024ULL * 1024ULL);" (
+  hc-ln "    uint64_t target_vram_mb = (ram_mb * 90ULL) / 100ULL;" (
+  hc-ln "    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();" (
+  hc-ln "    const char* gpu_name = dev ? [[dev name] UTF8String] : `none`;" (
+  hc-ln "    int unified = dev ? ([dev hasUnifiedMemory] ? 1 : 0) : 0;" (
+  hc-ln "    uint64_t rec_vram_mb = dev ? ([dev recommendedMaxWorkingSetSize] / (1024ULL * 1024ULL)) : 0;" (
+  hc-ln "    uint64_t metal_us = 0; int metal_ok = 0;" (
+  hc-ln "    if (dev) {" (
+  hc-ln "      NSError* err = nil;" (
+  hc-ln (list-append "      NSString* msl = @`#include <metal_stdlib>" (list-append hc-bs-n (list-append "using namespace metal;" (list-append hc-bs-n "kernel void hx_ping(device ulong* o [[buffer(0)]], uint tid [[thread_position_in_grid]]) { o[tid] = ((ulong)tid * 0x9E3779B97F4A7C15UL) ^ 0x48584D41434F4B00UL; }`;")))) (
+  hc-ln "      id<MTLLibrary> lib = [dev newLibraryWithSource:msl options:nil error:&err];" (
+  hc-ln "      if (lib) {" (
+  hc-ln "        id<MTLComputePipelineState> pso = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@`hx_ping`] error:&err];" (
+  hc-ln "        id<MTLCommandQueue> q = [dev newCommandQueue];" (
+  hc-ln "        id<MTLBuffer> b = [dev newBufferWithLength:65536*8 options:MTLResourceStorageModeShared];" (
+  hc-ln "        uint64_t t0 = now_us();" (
+  hc-ln "        id<MTLCommandBuffer> cb = [q commandBuffer];" (
+  hc-ln "        id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];" (
+  hc-ln "        [enc setComputePipelineState:pso]; [enc setBuffer:b offset:0 atIndex:0];" (
+  hc-ln "        [enc dispatchThreads:MTLSizeMake(65536,1,1) threadsPerThreadgroup:MTLSizeMake(256,1,1)];" (
+  hc-ln "        [enc endEncoding]; [cb commit]; [cb waitUntilCompleted];" (
+  hc-ln "        metal_us = now_us() - t0;" (
+  hc-ln "        uint64_t* out = (uint64_t*)[b contents];" (
+  hc-ln "        if (out && out[0] == 0x48584D41434F4B00ULL) metal_ok = 1;" (
+  hc-ln "      }" (
+  hc-ln "    }" (
+  hc-ln "    CGDirectDisplayID dlist[8]; uint32_t dcnt = 0;" (
+  hc-ln "    size_t disp_pw = 0, disp_ph = 0, disp_lw = 0, disp_lh = 0; double disp_hz = 0.0;" (
+  hc-ln "    if (CGGetOnlineDisplayList(8, dlist, &dcnt) == kCGErrorSuccess && dcnt > 0) {" (
+  hc-ln "      CGDisplayModeRef dm = CGDisplayCopyDisplayMode(dlist[0]);" (
+  hc-ln "      if (dm) {" (
+  hc-ln "        disp_pw = CGDisplayModeGetPixelWidth(dm); disp_ph = CGDisplayModeGetPixelHeight(dm);" (
+  hc-ln "        disp_lw = CGDisplayModeGetWidth(dm);      disp_lh = CGDisplayModeGetHeight(dm);" (
+  hc-ln "        disp_hz = CGDisplayModeGetRefreshRate(dm); if (disp_hz <= 0.0) disp_hz = 60.0;" (
+  hc-ln "        CGDisplayModeRelease(dm);" (
+  hc-ln "      }" (
+  hc-ln "    }" (
+  hc-ln "    int magic_kb = 0, magic_mouse = 0, hid_total = 0;" (
+  hc-ln "    IOHIDManagerRef mgr = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);" (
+  hc-ln "    if (mgr) {" (
+  hc-ln "      IOHIDManagerSetDeviceMatching(mgr, NULL);" (
+  hc-ln "      IOHIDManagerOpen(mgr, kIOHIDOptionsTypeNone);" (
+  hc-ln "      CFSetRef set = IOHIDManagerCopyDevices(mgr);" (
+  hc-ln "      if (set) {" (
+  hc-ln "        CFIndex n = CFSetGetCount(set);" (
+  hc-ln "        if (n > 0 && n < 256) {" (
+  hc-ln "          const void* devs[256]; CFSetGetValues(set, devs);" (
+  hc-ln "          for (CFIndex i = 0; i < n; i++) {" (
+  hc-ln "            IOHIDDeviceRef d = (IOHIDDeviceRef)devs[i];" (
+  hc-ln "            CFStringRef pr = (CFStringRef)IOHIDDeviceGetProperty(d, CFSTR(kIOHIDProductKey));" (
+  hc-ln "            CFNumberRef upN = (CFNumberRef)IOHIDDeviceGetProperty(d, CFSTR(kIOHIDPrimaryUsagePageKey));" (
+  hc-ln "            CFNumberRef uN  = (CFNumberRef)IOHIDDeviceGetProperty(d, CFSTR(kIOHIDPrimaryUsageKey));" (
+  hc-ln "            int up = 0, u = 0;" (
+  hc-ln "            if (upN) CFNumberGetValue(upN, kCFNumberIntType, &up);" (
+  hc-ln "            if (uN)  CFNumberGetValue(uN,  kCFNumberIntType, &u);" (
+  hc-ln "            char pbuf[128] = ``;" (
+  hc-ln "            if (pr) CFStringGetCString(pr, pbuf, sizeof(pbuf), kCFStringEncodingUTF8);" (
+  hc-ln "            if (up == 1 && u == 6) { hid_total++; if (strstr(pbuf, `Magic`) || strstr(pbuf, `Apple`)) magic_kb = 1; }" (
+  hc-ln "            if (up == 1 && (u == 2 || u == 1)) { hid_total++; if (strstr(pbuf, `Magic`) || strstr(pbuf, `Mouse`)) magic_mouse = 1; }" (
+  hc-ln "          }" (
+  hc-ln "        }" (
+  hc-ln "        CFRelease(set);" (
+  hc-ln "      }" (
+  hc-ln "      IOHIDManagerClose(mgr, kIOHIDOptionsTypeNone); CFRelease(mgr);" (
+  hc-ln "    }" (
+  hc-ln "    if (do_apply) {" (
+  hc-ln "      run_cmd(`defaults write -g KeyRepeat -int 1`);" (
+  hc-ln "      run_cmd(`defaults write -g InitialKeyRepeat -int 10`);" (
+  hc-ln "      run_cmd(`defaults write -g ApplePressAndHoldEnabled -bool false`);" (
+  hc-ln "      run_cmd(`defaults write -g com.apple.mouse.scaling -float -1`);" (
+  hc-ln "      run_cmd(`defaults write -g NSAutomaticWindowAnimationsEnabled -bool false`);" (
+  hc-ln "      run_cmd(`defaults write -g NSAppSleepDisabled -bool YES`);" (
+  hc-ln "      if (geteuid() == 0) {" (
+  hc-ln "        char sc[256];" (
+  hc-ln "        snprintf(sc, sizeof(sc), `sysctl -w iogpu.wired_limit_mb=%llu kern.ipc.maxsockbuf=67108864 net.inet.tcp.sendspace=4194304 net.inet.tcp.recvspace=4194304 >/dev/null 2>&1`, (unsigned long long)target_vram_mb);" (
+  hc-ln "        run_cmd(sc);" (
+  hc-ln "        run_cmd(`grep -q pam_tid.so /etc/pam.d/sudo_local 2>/dev/null || echo 'auth sufficient pam_tid.so' >> /etc/pam.d/sudo_local`);" (
+  hc-ln "      }" (
+  hc-ln "    }" (
+  hc-ln "    if (do_json) {" (
+  hc-ln (list-append "      printf(`{%ccpu%c:%c%s%c,%cram_mb%c:%llu,%ctarget_vram_mb%c:%llu,%crec_vram_mb%c:%llu,%cwired_mb%c:%d,%cpcores%c:%d,%cecores%c:%d,%cgpu%c:%c%s%c,%cunified%c:%d,%cmetal_ok%c:%d,%cmetal_us%c:%llu,%cdisplays%c:%u,%cdisp_px%c:%c%zux%zu%c,%cdisp_pt%c:%c%zux%zu%c,%cdisp_hz%c:%.0f,%cmagic_keyboard%c:%d,%cmagic_mouse%c:%d,%chid_devices%c:%d,%capplied%c:%d}" (list-append hc-bs-n "`, 34,34,34,cpu,34, 34,34,(unsigned long long)ram_mb, 34,34,(unsigned long long)target_vram_mb, 34,34,(unsigned long long)rec_vram_mb, 34,34,wired_mb, 34,34,pcores, 34,34,ecores, 34,34,34,gpu_name,34, 34,34,unified, 34,34,metal_ok, 34,34,(unsigned long long)metal_us, 34,34,dcnt, 34,34,34,disp_pw,disp_ph,34, 34,34,34,disp_lw,disp_lh,34, 34,34,disp_hz, 34,34,magic_kb, 34,34,magic_mouse, 34,34,hid_total, 34,34,do_apply);")) (
+  hc-ln "    } else {" (
+  hc-ln (list-append "      printf(`[HX-MAC HYPERCRACK] %s | %dP+%dE cores | %llu MiB Unified RAM (90%% Metal target=%llu MiB)" (list-append hc-bs-n "`, cpu, pcores, ecores, (unsigned long long)ram_mb, (unsigned long long)target_vram_mb);")) (
+  hc-ln (list-append "      printf(`  [METAL ZERO-COPY] GPU=%s | unified=%d | 65,536-thread ping=%s in %llu us" (list-append hc-bs-n "`, gpu_name, unified, metal_ok ? `EXACT` : `SKIP`, (unsigned long long)metal_us);")) (
+  hc-ln (list-append "      printf(`  [DISPLAY RETINA]  count=%u | native=%zux%zu px (%zux%zu pt @ %.0f Hz)" (list-append hc-bs-n "`, dcnt, disp_pw, disp_ph, disp_lw, disp_lh, disp_hz);")) (
+  hc-ln (list-append "      printf(`  [IOKIT RAW HID]   MagicKeyboard=%d | MagicMouse=%d | HID_endpoints=%d | KeyRepeat=1 | MouseCurve=1:1" (list-append hc-bs-n "`, magic_kb, magic_mouse, hid_total);")) (
+  hc-ln "      if (geteuid() != 0) {" (
+  hc-ln (list-append "        printf(`  [KERNEL UNLOCK]   Run once for 90%% Metal VRAM + 64MB TB5 sockbuf + TouchID sudo: sudo ./build/hx-mac --apply" (list-append hc-bs-n "`);")) (
+  hc-ln "      }" (
+  hc-ln "    }" (
+  hc-ln "  }" (
+  hc-ln "  return 0;" (
+  hc-ln "}" (
+  hc-ln "#else" (
+  hc-ln "#include <stdio.h>" (
+  hc-ln "#include <string.h>" (
+  hc-ln "int main(int argc, char** argv) {" (
+  hc-ln "  int j = (argc > 1 && !strcmp(argv[1], `--json`));" (
+  hc-ln (list-append "  if (j) printf(`{%ccpu%c:%clinux-host%c,%cmetal_ok%c:0,%capplied%c:0}" (list-append hc-bs-n "`, 34,34,34,34,34,34,34,34);")) (
+  hc-ln (list-append "  else printf(`[HX-MAC] Linux host (compile on macOS arm64 for Metal/IOKit/Display hardware hypercrack)" (list-append hc-bs-n "`);")) (
+  hc-ln "  return 0;" (
+  hc-ln "}" (
+  hc-ln "#endif" nil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))

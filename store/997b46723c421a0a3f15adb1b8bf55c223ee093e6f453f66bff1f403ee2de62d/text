@@ -1,0 +1,9 @@
+-- Strict hostname/IP:port validator for zero-injection SSH/Thunderbolt cluster pairing:
+-- Allows ONLY [A-Za-z0-9._:-], non-empty, and NEVER starting with `-` (blocks `-oProxyCommand=...`).
+hc-safe-char : Word → Bool
+hc-safe-char c =
+  let isNum = andB (%wlt #47 c) (%wlt c #58)
+      isUp  = andB (%wlt #64 c) (%wlt c #91)
+      isLo  = andB (%wlt #96 c) (%wlt c #123)
+      isSym = orB (%weq c #45) (orB (%weq c #46) (orB (%weq c #58) (%weq c #95)))
+  in orB isNum (orB isUp (orB isLo isSym))

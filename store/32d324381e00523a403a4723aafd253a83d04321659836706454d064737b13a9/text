@@ -1,0 +1,26 @@
+mac-main : List (List Word) → Step W Word
+mac-main args =
+  let p    = mac-pref args
+      rdir = mac-repo-arg args
+      mf   = list-append p "_hypercrack.m"
+      uf   = list-append p "_up.sh"
+      cf   = list-append p "_cluster_pair.sh"
+      spf  = list-append p "_server.plist"
+      svf  = list-append p "_sovereign.plist"
+      df   = list-append p "_deploy.html"
+  in scmd w-now (λ t0 →
+     scmd (w-file-write-named mf hc-mac-probe-objc) (λ bm →
+     scmd (w-file-write-named uf (hc-up-sh "https://hyperactivity.ai")) (λ bu →
+     scmd (w-file-write-named cf hc-cluster-pair-sh) (λ bc →
+     scmd (w-file-write-named spf (hc-server-plist rdir)) (λ bsp →
+     scmd (w-file-write-named svf (hc-sovereign-plist rdir)) (λ bsv →
+     scmd (w-file-write-named df hc-deploy-html) (λ bd →
+     scmd w-now (λ t1 →
+     cli-say (list-append "HX-MAC (46th Engine — Apple Silicon Hypercrack & One-Click Deploy) | Certs=1 | ObjC="
+       (list-append (ce-dec bm)
+       (list-append "B UpSh=" (list-append (ce-dec bu)
+       (list-append "B PairSh=" (list-append (ce-dec bc)
+       (list-append "B Plists=" (list-append (ce-dec (%wadd bsp bsv))
+       (list-append "B DeployUI=" (list-append (ce-dec bd)
+       (list-append "B (" (list-append (ce-dec (%wdiv (%wsub t1 t0) #1000)) " us)"))))))))))))
+       (sdone #0)))))))))

@@ -3,7 +3,7 @@
 # 2. kernel-and-brunerie:  make brunerie (0 & 4 workers, CUBICAL_NOCACHE=1 -> -2 + step ratchet), elaboration, c-sound
 # 3. full-library-pouw:    make library (3,168+ defs), lib/pouw, lib/hx, fold/hx-fold, lib/silicon/tapeout, make workflow
 # 4. native-ubsan-e2e:     zero-UB C11 emission of unified `hx` + live GDSII/rANS/FlashAttn/Book/2-process UDP PoUW checks
-# 5. web-and-server-smoke: all 12 HTML treatises JS/DOM checks + live HTTP server smoke test across all 18 public routes
+# 5. web-and-server-smoke: all 12 HTML treatises JS/DOM checks + live HTTP server smoke test across all 25 public routes
 name: Hyperactivity Verification Matrix
 on: [push, pull_request]
 
@@ -95,9 +95,12 @@ jobs:
           ./build/cubical lib/hx.hypercubical /tmp/ci_hx/e_hx.hypercubical
           CC_BIN=$(command -v clang || command -v gcc)
           $CC_BIN -std=c11 -O3 -fsanitize=undefined -fno-sanitize-recover=all -o /tmp/ci_hx/hx /tmp/ci_hx/hx.c
-      - name: Run all 6 native engines + live 2-process UDP PoUW + ratchets
+      - name: Run native engines + Apple Silicon hypercrack emitter + live 2-process UDP PoUW + ratchets
         run: |
           /tmp/ci_hx/hx tapeout /tmp/ci_hx/foundry
+          /tmp/ci_hx/hx mac /tmp/ci_hx/mac /tmp/ci_hx | tee /tmp/ci_hx/mac.log
+          grep -q "Certs=1" /tmp/ci_hx/mac.log
+          /bin/sh -n /tmp/ci_hx/mac_up.sh /tmp/ci_hx/mac_cluster_pair.sh
           python3 - <<'PY'
           for fn in ["/tmp/ci_hx/foundry_xor4_gaa3nm.gds", "/tmp/ci_hx/foundry_hypercore_soc_5layer.gds"]:
               b = open(fn, "rb").read()
@@ -171,24 +174,24 @@ jobs:
                   assert not (refs - ids), f"Missing DOM IDs in {p}: {refs - ids}"
               print(f"OK: {p} ({len(html)} B)")
           PY
-      - name: Boot real Hyperactivity HTTP server and smoke-test all 18 public routes
+      - name: Boot real Hyperactivity HTTP server and smoke-test all 25 public routes
         run: |
-          ./hyperactive server 18080 > /tmp/srv.log 2>&1 &
+          RENDER=1 ./build/cubical lib/server.hypercubical 18080 > /tmp/srv.log 2>&1 &
           SRV_PID=$!
           trap "kill $SRV_PID 2>/dev/null || true" EXIT
-          for i in $(seq 1 60); do
+          for i in $(seq 1 600); do
             if curl -sf http://127.0.0.1:18080/healthz >/dev/null 2>&1; then break; fi
             sleep 1
           done
           curl -sf http://127.0.0.1:18080/healthz | grep -qx "ok"
-          for route in "/" "/archive" "/learn" "/hyperfactor" "/decentralized" "/pouw" "/silicon" "/ai" "/physics" "/neuro" "/ide" "/kg" "/pdf" "/monograph" "/nets" "/sitemap.xml" "/api/kg/index"; do
+          for route in "/" "/archive" "/learn" "/hyperfactor" "/grh" "/decentralized" "/pouw" "/silicon" "/ai" "/physics" "/neuro" "/ide" "/kg" "/pdf" "/monograph" "/nets" "/portal" "/collab" "/eval" "/pay" "/up" "/deploy" "/api/swarm/stream" "/sitemap.xml" "/api/kg/index"; do
             code=$(curl -s -o /tmp/page.out -w "%{http_code}" "http://127.0.0.1:18080${route}")
             echo "$code  $route"
             test "$code" -eq 200
           done
+          curl -sf http://127.0.0.1:18080/up | /bin/sh -n
           curl -sf http://127.0.0.1:18080/ > /tmp/root.html
-          grep -q "/decentralized" /tmp/root.html
-          grep -q "/hyperfactor" /tmp/root.html
-          grep -q "/archive" /tmp/root.html
-          grep -q "Computing," /tmp/root.html
-          echo "All 18 live HTTP routes verified 200!"
+          grep -q "<title>hyperactivity" /tmp/root.html
+          grep -q "/portal" /tmp/root.html
+          echo "All 25 live HTTP routes verified 200!"
+

@@ -1,0 +1,7 @@
+s-place-origin : List Word → List Word
+s-place-origin hdr =
+  let host  = h-trim (um-header "host" hdr)
+      proto = sx-lower (h-trim (um-header "x-forwarded-proto" hdr))
+  in if andB (h-not (h-null host)) (hc-safe-host host)
+     then list-append (if orB (h-eq proto "https") (h-infix "hyperactivity.ai" (sx-lower host)) then "https://" else "http://") host
+     else "https://hyperactivity.ai"

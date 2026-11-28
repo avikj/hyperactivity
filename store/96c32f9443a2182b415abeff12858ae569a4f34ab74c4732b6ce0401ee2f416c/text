@@ -1,0 +1,6 @@
+hy-resolve-latest : Sum Unit (List Word) → Proc W (List Word)
+hy-resolve-latest (inl u) = ret nil
+hy-resolve-latest (inr place) =
+  bind (h-env "HYPERACTIVE_TOKEN") (λ tok →
+  bind (h-capture (cons "/usr/bin/env" (cons "curl" (cons "-fsS" (hy-tok-args tok (cons (list-append place "/root") nil)))))) (λ r →
+  if weq (fst r) #0 then ret {lzero} {W} (hy-head (h-nonempty (h-lines (snd r)))) else ret {lzero} {W} nil))
