@@ -1,0 +1,14 @@
+-- Exact complex norm identity on the Hopf limit cycle (a = 0):
+--   |(1 + i*b)*(q + i*p)|^2 == (1 + b^2)*(q^2 + p^2) identically over Q!
+-- Variables (0..2): b, qv, pv.
+hopf-cayley-unitary-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+hopf-cayley-unitary-poly A ad mu q vs =
+  (λ g sub sq →
+    let b = g 0; qv = g 1; pv = g 2
+        one = q (fn-q 1 1)
+        re  = sub qv (mu b pv)
+        im  = ad pv (mu b qv)
+        lhs = ad (sq re) (sq im)
+        rhs = mu (ad one (sq b)) (ad (sq qv) (sq pv))
+    in (lhs , rhs))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)

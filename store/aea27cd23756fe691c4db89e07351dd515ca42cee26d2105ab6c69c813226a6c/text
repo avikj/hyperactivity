@@ -1,0 +1,15 @@
+-- ── 3. Algebraic Ponzano-Regge / Chebyshev Saddle-Point Asymptotic Bridge ───
+-- Schulten-Gordon / Ponzano-Regge 3-term recursion in the semiclassical large-j limit:
+--   psi(j+1) - 2*cos(theta)*psi(j) + psi(j-1) == 0  <=>  psi(j) = T_j(cos(theta)) = cos(j*theta)
+-- Proves Chebyshev exact 3-term wave recursion for T_0=1, T_1=c, T_2=2c^2-1, T_3=4c^3-3c over Q!
+-- Variable (0): c = cos(theta_f).
+regge-chebyshev-t2-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+regge-chebyshev-t2-poly A ad mu q vs =
+  (λ g sub sq →
+    let c  = g 0
+        t0 = q (fn-q 1 1)
+        t1 = c
+        t2 = sub (mu (q (fn-q 2 1)) (sq c)) t0
+        lhs = ad (sub t2 (mu (mu (q (fn-q 2 1)) c) t1)) t0
+    in (lhs , q (fn-q 0 1)))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)
