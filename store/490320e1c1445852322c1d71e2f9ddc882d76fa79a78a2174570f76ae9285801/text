@@ -1,0 +1,6 @@
+anc-secpath-run : Word → AncSecState → List Word → Bool
+anc-secpath-run _ _ nil = true
+anc-secpath-run s1 st (cons x xs) =
+  let st2 = anc-secpath-step x s1 st
+      ok  = case st2 of anc-sec-st _ _ r → %weq r #0
+  in andB ok (anc-secpath-run s1 st2 xs)

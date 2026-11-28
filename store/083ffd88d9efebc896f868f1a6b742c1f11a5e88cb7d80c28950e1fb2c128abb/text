@@ -1,0 +1,23 @@
+anc-stem-isr-c : List Word
+anc-stem-isr-c = rp-join (
+  cons "/* Generated from sound/realtime-physics.hypercubical — Zero-Block S(z) ANC + 4-Stem ISR */" (
+  cons "#include <stdint.h>" (
+  cons "typedef struct { int32_t d1, u_prev, q, p, bL, bM, bH; } HxHearableState;" (
+  cons "typedef struct { int32_t resid, bass, vocal, perc, air; } HxHearableFrame;" (
+  cons "static inline int32_t hx_q16(int32_t a, int32_t b) { return (int32_t)(((int64_t)a * (int64_t)b) >> 16); }" (
+  cons "static inline void hx_hearable_step(HxHearableState *st, int32_t p_ext, int32_t s1, int32_t k, int32_t damp, int32_t gB, int32_t gM, int32_t gH, HxHearableFrame *out) {" (
+  cons "  int32_t s_term = hx_q16(s1, st->u_prev);" (
+  cons "  int32_t u_now  = -st->d1 - s_term;" (
+  cons "  int32_t resid  = st->d1 + u_now + s_term;" (
+  cons "  int32_t f_tot  = hx_q16(k, st->q) + resid;" (
+  cons "  st->d1 = p_ext; st->u_prev = u_now;" (
+  cons "  st->p = hx_q16(damp, st->p - f_tot); st->q += st->p;" (
+  cons "  int32_t nL = st->bL + hx_q16(gB, p_ext - st->bL);" (
+  cons "  int32_t r1 = p_ext - nL;" (
+  cons "  int32_t nM = st->bM + hx_q16(gM, r1 - st->bM);" (
+  cons "  int32_t r2 = r1 - nM;" (
+  cons "  int32_t nH = st->bH + hx_q16(gH, r2 - st->bH);" (
+  cons "  st->bL = nL; st->bM = nM; st->bH = nH;" (
+  cons "  out->resid = resid; out->bass = nL; out->vocal = nM; out->perc = nH;" (
+  cons "  out->air = p_ext - nL - nM - nH;" (
+  cons "}" nil)))))))))))))))))))))

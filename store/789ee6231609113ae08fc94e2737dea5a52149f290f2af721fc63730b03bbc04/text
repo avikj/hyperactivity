@@ -1,0 +1,19 @@
+-- ── 1. Unconditional Implicit-Midpoint Thiele-Small Passivity (ALL dt > 0) ───
+-- Let s_i = i0 + i1, s_v = v0 + v1, d_i = i1 - i0, d_v = v1 - v0.
+-- Implicit midpoint update:
+--   2*d_i = dt * (-Re*s_i - Bl*s_v),   2*d_v = dt * (Bl*s_i - Rm*s_v)
+-- Exact discrete energy change 2 * ((i1^2 - i0^2) + (v1^2 - v0^2)) = s_i*(2*d_i) + s_v*(2*d_v):
+--   s_i * dt * (-Re*s_i - Bl*s_v) + s_v * dt * (Bl*s_i - Rm*s_v) == -dt * (Re*s_i^2 + Rm*s_v^2) <= 0!
+-- Proves ZERO step-size instability for EVERY dt > 0, Re >= 0, Rm >= 0, Bl!
+-- Variables (0..5): dt, Re, Rm, Bl, si, sv.
+uf-midpoint-ts-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+uf-midpoint-ts-poly A ad mu q vs =
+  (λ g sub sq →
+    let dt = g 0; re = g 1; rm = g 2; bl = g 3; si = g 4; sv = g 5
+        z  = q (fn-q 0 1)
+        di = mu dt (sub (sub z (mu re si)) (mu bl sv))
+        dv = mu dt (sub (mu bl si) (mu rm sv))
+        lhs = ad (mu si di) (mu sv dv)
+        rhs = sub z (mu dt (ad (mu re (sq si)) (mu rm (sq sv))))
+    in (lhs , rhs))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)

@@ -1,0 +1,13 @@
+hopf-cayley-apply : Word → Word → HopfState → HopfState
+hopf-cayley-apply a b (hopf-st q p) =
+  let one = #65536
+      -- Multiply z0 by (1 - a + i*b) -> (rq, rp)
+      om  = uf-sub one a
+      rq  = uf-sub (uf-mul16 om q) (uf-mul16 b p)
+      rp  = uf-add (uf-mul16 om p) (uf-mul16 b q)
+      -- Divide by (1 + a - i*b) = multiply by (1 + a + i*b) / ((1+a)^2 + b^2)
+      op  = uf-add one a
+      den = uf-add (uf-mul16 op op) (uf-mul16 b b)
+      nq  = uf-div16 (uf-sub (uf-mul16 op rq) (uf-mul16 b rp)) den
+      np  = uf-div16 (uf-add (uf-mul16 op rp) (uf-mul16 b rq)) den
+  in hopf-st nq np

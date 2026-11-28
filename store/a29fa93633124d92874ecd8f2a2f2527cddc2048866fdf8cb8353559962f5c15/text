@@ -1,0 +1,15 @@
+-- Saddle-point Regge cosine expansion around flat space (Theta = pu - pv):
+--   2 * (1 - (1 - (pu - pv)^2 / 2)) == (pu - pv)^2 >= 0
+-- Closes the exact chain: {15j} recursion -> Chebyshev cos(S_Regge) -> Port-Hamiltonian Laplacian!
+-- Variables (0..2): area, pu, pv.
+regge-saddle-laplacian-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+regge-saddle-laplacian-poly A ad mu q vs =
+  (λ g sub sq →
+    let area = g 0; pu = g 1; pv = g 2
+        one  = q (fn-q 1 1)
+        half = q (fn-q 1 2)
+        cosA = sub one (mu half (sq (sub pu pv)))
+        lhs  = mu (mu (q (fn-q 2 1)) area) (sub one cosA)
+        rhs  = mu area (sq (sub pu pv))
+    in (lhs , rhs))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)

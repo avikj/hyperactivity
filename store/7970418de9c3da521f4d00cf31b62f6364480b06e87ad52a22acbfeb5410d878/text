@@ -1,0 +1,13 @@
+-- ── 2. Direct LQG -> Port-Hamiltonian Bridge (Symmetric K = [H_E, V] is Skew)
+-- From lqg/hamiltonian-vertex.hypercubical: K = [[0, b(v2-v1)], [b(v1-v2), 0]].
+-- Proves x^T K x == 0 identically for EVERY volume spectrum (v1, v2) and coupling b!
+-- Variables (0..4): b, v1, v2, x1, x2.
+one-field-lqg-K-skew-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+one-field-lqg-K-skew-poly A ad mu q vs =
+  (λ g sub _ →
+    let b = g 0; v1 = g 1; v2 = g 2; x1 = g 3; x2 = g 4
+        k12 = mu b (sub v2 v1)
+        k21 = mu b (sub v1 v2)
+        lhs = ad (mu x1 (mu k12 x2)) (mu x2 (mu k21 x1))
+    in (lhs , q (fn-q 0 1)))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)

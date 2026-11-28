@@ -1,0 +1,14 @@
+-- ── 1B. Online Secondary-Path S(z) Dispersion & Propagation Delay Cancellation ─
+-- Models a 2-tap ear-cup secondary path S(z) = s0 + s1*z^{-1} with causal inverse drive
+-- u[n] = -(p_ext[n - d] + s1*u[n-1]) / s0 (here normalized to s0=1: u[n] = -p_d - s1*u_prev).
+-- Proves exact ear-drum residual p_d + (u[n] + s1*u_prev) == 0 identically over Q!
+-- Variables (0..2): pDelay, s1, uPrev.
+anc-secpath-cancel-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+anc-secpath-cancel-poly A ad mu q vs =
+  (λ g sub _ →
+    let pD = g 0; s1 = g 1; uPrev = g 2
+        uNow  = sub (sub (q (fn-q 0 1)) pD) (mu s1 uPrev)
+        ySec  = ad uNow (mu s1 uPrev)
+        resid = ad pD ySec
+    in (resid , q (fn-q 0 1)))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)

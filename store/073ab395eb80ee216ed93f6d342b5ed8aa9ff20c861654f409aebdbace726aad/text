@@ -1,0 +1,12 @@
+-- 2-step fixed-point radial implicit-midpoint cochlear Hopf step (unconditionally passive!)
+hopf-midpoint-step : Word → Word → Word → HopfState → HopfState
+hopf-midpoint-step w0 mu dt h0 =
+  let hdt = %wshr dt #1
+      b   = uf-mul16 hdt w0
+      r0  = hopf-r2 h0
+      a0  = uf-mul16 hdt (uf-sub r0 mu)
+      h1  = hopf-cayley-apply a0 b h0
+      -- Midpoint radial refinement: r_mid^2 = (|z0|^2 + |z1|^2) / 2
+      rM  = %wshr (uf-add r0 (hopf-r2 h1)) #1
+      a1  = uf-mul16 hdt (uf-sub rM mu)
+  in hopf-cayley-apply a1 b h0

@@ -1,0 +1,17 @@
+ts-midpoint-step : Word → Word → Word → Word → TsState → TsState
+ts-midpoint-step re rm bl dt (ts-st ic vel) =
+  let hdt = %wshr dt #1
+      ae  = uf-mul16 hdt re
+      am  = uf-mul16 hdt rm
+      b   = uf-mul16 hdt bl
+      one = #65536
+      -- RHS = (I + (dt/2)(J - R)) * (ic, vel)
+      rhsI = uf-sub (uf-mul16 (uf-sub one ae) ic) (uf-mul16 b vel)
+      rhsV = uf-add (uf-mul16 b ic) (uf-mul16 (uf-sub one am) vel)
+      -- Matrix M = [[1+ae, b], [-b, 1+am]], det = (1+ae)(1+am) + b^2 > 0
+      pE   = uf-add one ae
+      pM   = uf-add one am
+      det  = uf-add (uf-mul16 pE pM) (uf-mul16 b b)
+      iNew = uf-div16 (uf-sub (uf-mul16 pM rhsI) (uf-mul16 b rhsV)) det
+      vNew = uf-div16 (uf-add (uf-mul16 b rhsI) (uf-mul16 pE rhsV)) det
+  in ts-st iNew vNew

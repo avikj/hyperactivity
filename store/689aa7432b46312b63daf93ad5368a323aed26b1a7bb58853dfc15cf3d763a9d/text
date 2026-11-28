@@ -1,0 +1,20 @@
+-- ── 1. Exact Cayley-Pade Implicit-Midpoint Cochlear Hopf Algebra (over Q) ───
+-- For (1 + a - i*b) z1 = (1 - a + i*b) z0 where a = (dt/2)(|z_bar|^2 - mu), b = (dt/2)*w0:
+--   |z1|^2 / |z0|^2 = ((1 - a)^2 + b^2) / ((1 + a)^2 + b^2)
+-- Exact contraction identity over Q:
+--   ((1 + a)^2 + b^2) - ((1 - a)^2 + b^2) == 4 * a
+-- Proves:
+--   • Strictly contractive (|z1|^2 < |z0|^2) for ALL a > 0, ALL b, ALL dt > 0!
+--   • Exact unitary limit-cycle preservation (|z1|^2 == |z0|^2) at a == 0!
+-- Variables (0..1): a, b.
+hopf-cayley-contraction-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+hopf-cayley-contraction-poly A ad mu q vs =
+  (λ g sub sq →
+    let a = g 0; b = g 1
+        one = q (fn-q 1 1)
+        den = ad (sq (ad one a)) (sq b)
+        num = ad (sq (sub one a)) (sq b)
+        lhs = sub den num
+        rhs = mu (q (fn-q 4 1)) a
+    in (lhs , rhs))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)

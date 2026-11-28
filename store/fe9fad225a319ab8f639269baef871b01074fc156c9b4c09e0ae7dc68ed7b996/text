@@ -1,0 +1,11 @@
+regge-chebyshev-t3-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+regge-chebyshev-t3-poly A ad mu q vs =
+  (λ g sub sq →
+    let c  = g 0
+        t0 = q (fn-q 1 1)
+        t1 = c
+        t2 = sub (mu (q (fn-q 2 1)) (sq c)) t0
+        t3 = sub (mu (q (fn-q 4 1)) (mu (sq c) c)) (mu (q (fn-q 3 1)) c)
+        lhs = ad (sub t3 (mu (mu (q (fn-q 2 1)) c) t2)) t1
+    in (lhs , q (fn-q 0 1)))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)
