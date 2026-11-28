@@ -1,0 +1,255 @@
+# Chemistry from loop quantum gravity, as checked programs
+
+This is a single derivation chain, every step a kernel-checked `.hypercubical`
+module, running from the loop-quantum-gravity spin network up to two molecules —
+the hydrogen molecular ion H₂⁺ and the hydrogen molecule H₂. It bottoms out at
+exactly one number the geometry does not fix: the fine-structure constant α. The
+geometry's own contribution to the one coupling ratio that sets molecular binding
+is a proved rational, **−3/8**.
+
+The frame is Rovelli's: relational, finite, no continuum and no real numbers
+anywhere in the objects — a charge network carries integer labels, and every
+quantity below is an exact rational or an exact algebraic number. The gravitational
+input is Thiemann's Quantum Spin Dynamics operators (QSD V, gr-qc/9705019),
+regularized on the spin network; nothing is added by hand beyond what those
+operators state.
+
+## How to verify
+
+The chain lives in the content-addressed store at session root
+`70bb4035f70b8317e56678c55588f035419d5e31dffb70f31e097b0c5caab426`. From a
+checkout:
+
+```
+./hyperactive take 70bb4035f70b8317e56678c55588f035419d5e31dffb70f31e097b0c5caab426
+./hyperactive def  chem/cgeom.hypercubical     # read any module
+```
+
+Every statement named below is a `≡ true` verdict or a closed-form identity the
+kernel checks; "proved" means the kernel accepts it, not that a human asserts it.
+
+## The chain, in dependency order
+
+**chem/linkhop** — The electron's hop across one link of the net, built from
+`chem/bholonomy`'s holonomy amplitude alone, is a 2×2 orthogonal matrix
+(entries −1/2 and √3/2). Its two levels are +1 and −1. The electron on a single
+link is a two-state system, and the states come from the spin network, not an
+assumed tight-binding model.
+
+**chem/vertexhop** — The hop out of a four-valent vertex along each of its four
+links. Moving the electron's spin-½ from one pair of links to the other has
+coefficient +1 (the 6j symbol with a zero entry, checked against Racah's sum), and
+along every link the squared amplitudes sum to one. The hop is defined everywhere
+on the net by recoupling theory.
+
+**chem/nethop** — On the diamond net, whose every link is spin ½, the electron
+hopping to a neighbour sends the link to spin 1 in two ways (by the neighbour's
+inner label), with squared amplitudes 1/4 and 3/4 summing to 1. Once that outcome
+is summed, the electron's motion is a unit-amplitude walk. The hop amplitude `t`
+is therefore **one number for the whole net**, fixed by the geometry up to the
+single overall matter coupling — not a free parameter per bond.
+
+**chem/cover** — The conceptual joint. The hop along a link carries that link's
+U(1) holonomy, so it moves the electric flux on the link by one. The electron and
+the electric flux it drags are therefore **one walker on the graph's largest
+abelian cover**: the state after a walk is the vertex reached together with the
+walk's flux chain, and two walks coincide exactly when their chains agree.
+Gauss's law holds after every walk (checked on the hexagon and on the smallest
+cage of the diamond net); the electric energy Σn² is a potential on the cover.
+This is the link between the spin-network side and the electrostatics that earlier
+work left unbuilt.
+
+**chem/fluxsplit** — The energy of a whole-number flux splits exactly:
+Σn² = Σh² + Σ(n−h)², where Σh² is the charges' own Coulomb part (`chem/charge`'s
+`field-energy`, the resistance-metric energy) and n−h ranges over one coset of the
+integer circulations — the class of the charges in the graph's finite abelian group
+(order = the spanning-tree count). With the electric term alone the energy between
+two charges is a string that grows with their distance (the shorter arc on a ring).
+Foster's theorem is checked on the hexagon, the cage, and the complete graph.
+
+**chem/sectors** — In QSD V's regularization the magnetic loops at a vertex move no
+flux between vertices (625 flux sectors checked), so the energy at a vertex is a
+function only of the charge there. Consequently these terms carry **no force
+between charges at different vertices**: a force requires the graph-preserving loop
+operator, not the local vertex terms. This is why the string, not a Coulomb law,
+is what the local electric term produces.
+
+**chem/netpiece** — The Coulomb part on the diamond net closed with period two —
+sixteen vertices, which is exactly the graph of the 4-cube. The charges' energy at
+one to four lines of separation is 15/32, 7/12, 61/96, 2/3, computed by solving
+Kirchhoff's equations over the rationals. These were derived independently from the
+group characters and the machine agrees.
+
+**chem/ringatom, chem/netatom** — The atom on a ring and on the net, with the hop
+`t`, the Coulomb scale λ, and the loop coupling K left free. On the cover the
+Hamiltonian is H = (λ/2)·(flux energy) − t·(hop) − K·(ring loops), and its moments
+at the nucleus are checked as polynomial identities in t, K, λ.
+
+**chem/ringbound** — The two-sided bound on a ring, made exact and finite:
+(λ/2)·R − 2t ≤ E₀ ≤ (λ/2)·R, where R = d(N−d)/N is `chem/charge`'s effective
+resistance (checked to equal N⁻¹·d(N−d) on every ring up to eight vertices). This
+closes the lower bound on the Coulomb energy **without the dual-torus argument**
+that was the only prior route — a bracket of width 2t, from the flux side alone.
+
+**chem/cwbound** — The same lower bound on the net, for free t and λ, by the
+discrete Collatz–Wielandt principle: for any positive trial vector,
+min_u (Hψ)_u/ψ_u ≤ E₀ ≤ max_u (Hψ)_u/ψ_u. The potential extremes and the vertex
+degrees are checked, giving a finite rigorous bracket on the bond's depth with no
+eigenvalue asserted by hand.
+
+### H₂⁺ — two nuclei, one electron
+
+A lone ion has net charge, so its field must terminate; the derivation places it on
+a piece of the net with a wall that carries the flux out (`chem/h2plus-net`). The
+potentials are given and checked against Kirchhoff's law at every vertex.
+
+- **chem/h2plus-net** — At t = 0 the electron sits on a nucleus, that site is
+  neutral, and the energy is independent of nuclear separation: a neutral atom and
+  a bare nucleus feel no force. To second order in t, two nuclei sharing a common
+  neighbour gain more than two nuclei on opposite sites.
+- **chem/bondpoly** — The opposite-placement bond operator's characteristic
+  polynomial is exactly p_f = x(x−118)(x−140) − s(6x−280), s = (280t/λ′)², proved by
+  machine (closing a hand reduction). The opposite placement's energy is the least
+  root of p_f exactly, not a bound.
+- **chem/bondsep, chem/bondcross** — The bonding (shared-neighbour) placement is
+  **strictly lower** than the alternative at every coupling checked from t = 0
+  through t/λ′ ≈ 0.19, by an integer root-bracketing certificate, with no crossover
+  in the regime where the reduction is controlled. (An earlier hand estimate that the
+  opposite placement wins at large t was wrong and is withdrawn.)
+
+### H₂ — two nuclei, two electrons
+
+Two protons and two electrons are neutral, so the molecule lives on a closed piece
+with no wall (`chem/h2-net`, `chem/h2two`).
+
+- **chem/h2-net** — Electrostatically, the ground is two neutral atoms (electrons on
+  the protons, energy zero at any separation); every charge-separated configuration
+  costs. Binding is therefore not electrostatic. The shared bond vertex admits only
+  the spin singlet.
+- **chem/h2two** — **H₂ binds for every hop amplitude t > 0.** The separated-atom
+  state has zero Coulomb energy and zero diagonal (no electron can hop without
+  leaving a proton), while its four one-hop neighbours each cost 3/4; the 2×2
+  effective Hamiltonian [[0, −2t], [−2t, 3λ′/4]] has determinant −4t² < 0, so its
+  lowest eigenvalue is negative at every coupling. The binding is purely the hop's —
+  the off-diagonal against the separated state's zero diagonal.
+
+## The single external input
+
+Both molecules' binding is set by two couplings: the hop t (fixed by the geometry,
+`chem/nethop`) and the ratio K/λ of the magnetic to the electric coupling. From
+QSD V the Maxwell Hamiltonian is q_ab/(2Q²√det q)·[E² + B²] with canonical pair
+(A, E/Q²); because the quantized momentum is E/Q², the integer charge labels are
+fluxes of E/Q², so the electric coupling λ ∝ Q² ∝ α and the magnetic K ∝ 1/Q² ∝ 1/α.
+Hence **K/λ = c_geom · (1/α²)**, with c_geom the geometry's contribution and α the
+fine-structure constant.
+
+**chem/cgeom** — c_geom is the rational **−3/8**, proved. Both couplings are traces
+of the same operator A_e = √V − M_e at the four-valent vertex. The electric cost per
+unit flux is a − b = ¼·3^{1/4}(1 − 5^{1/4})² and the magnetic self-term is
+K₀₀ = −(3/32)·3^{1/4}(1 − 5^{1/4})². The radical — carrying the volume eigenvalue √3
+and the invariant space's 5^{1/4} — is common to both, so it cancels:
+K₀₀/(a − b) = −3/8. Checked as 8·K₀₀ + 3·(a − b) = 0 in closed form (no division).
+
+**Universality.** −3/8 is not an accident of the all-½ spectrum. It follows from two
+theorems the module already proves: (a − b) + 2(K̄₀₀ − K̄₀₁) = 0 (the electric cost
+is twice the magnetic triad difference), and K̄₀₀ + 3K̄₀₁ = 0 (the four edges are
+equivalent, so the triads close — this is the classical tetrahedral angle
+K₀₁/K₀₀ = −1/3). Substituting gives a − b = −(8/3)K̄₀₀, hence −3/8, with the volume
+scale never entering. So **the geometry's contribution to K/λ is a pure rational at
+every symmetric four-valent vertex**, whatever its spin; the irrationalities of the
+quantum geometry cancel between the magnetic and electric terms.
+
+## What is established, and what is not
+
+Established, as checked programs: the full chain above — the hop and the flux unified
+on the cover, the Coulomb energy as a resistance metric, the no-force result for the
+local terms, the two molecules' binding, and K/λ = (−3/8)·(geometry)/α² with the
+geometric rational proved and shown universal.
+
+Not established, and not to be claimed as a closed number: the overall dimensionful
+prefactor of K/λ — the Planck-length powers and Thiemann's regularization constants —
+is convention-dependent bookkeeping that has not been read off line-by-line from
+QSD V. It does not affect any result above, but no single numeric value of K/λ should
+be asserted until it is pinned. Likewise, α itself is an input to the matter action,
+not predicted; no quantization of geometry fixes it, and this chain does not claim to.
+
+The honest one-line summary: the chemistry of H₂⁺ and H₂ is derived from quantum
+geometry down to a single constant — the fine-structure constant — with a clean
+rational, −3/8, wherever the geometry speaks.
+
+## Complete module manifest
+
+Every module this derivation added (all on `main`, all kernel-checked):
+
+| Module | What it proves |
+|---|---|
+| `chem/doubling` | Doubling and ground-state-transform identities of the diamond-net hop. |
+| `chem/ringmoment` | Moments of the electron's hop on a ring in a loop state, from `chem/ring` alone. |
+| `chem/linkhop` | The hop on one link is a 2×2 orthogonal matrix; levels ±1. |
+| `chem/vertexhop` | The hop out of a four-valent vertex along each link; the spin-move coefficient is +1. |
+| `chem/nethop` | The concrete hop amplitude on the all-½ net; `t` is one number for the whole net. |
+| `chem/cover` | Electron + its flux = one walker on the graph's abelian cover; Gauss's law after every walk. |
+| `chem/fluxsplit` | Flux energy = Coulomb part + circulation coset; the electric term alone gives a string. |
+| `chem/sectors` | Local terms carry no force between charges at different vertices (625 sectors). |
+| `chem/netpiece` | Coulomb energy on the 4-cube net piece (15/32, 7/12, 61/96, 2/3) by Kirchhoff over the rationals. |
+| `chem/ringatom` | The atom on a ring with t, K, λ free; moments as polynomial identities. |
+| `chem/netatom` | The atom on the 16-vertex net piece; second–fourth moments checked. |
+| `chem/ringbound` | Exact two-sided bound on a ring: (λ/2)R − 2t ≤ E₀ ≤ (λ/2)R, R = resistance. |
+| `chem/cwbound` | Rigorous Collatz–Wielandt bracket of the bond depth on the net, free in t, λ. |
+| `chem/h2plus-net` | H₂⁺ on the walled cage; bonding placement lower to 2nd order and beyond; the sector reduction. |
+| `chem/bondpoly` | The opposite-placement bond operator's exact characteristic polynomial p_f. |
+| `chem/bondsep` | Non-perturbative integer certificate that bonding is strictly lower at a sample coupling. |
+| `chem/bondcross` | Bonding lower across t/λ′ = 0.10–0.19 with no crossover; corrects a withdrawn hand estimate. |
+| `chem/h2-net` | H₂ electrostatics: ground is two neutral atoms; binding is not electrostatic; singlet only. |
+| `chem/h2two` | **H₂ binds for every t > 0**; the binding is the hop's. |
+| `chem/cgeom` | **c_geom = −3/8**, proved; the volume operator's irrational cancels between magnetic and electric. |
+
+Foundation modules this chain builds on (pre-existing): `chem/bholonomy`, `chem/recoupling`,
+`chem/spin`, `chem/volume`, `chem/bvolume`, `chem/vertex`, `chem/rootsum`, `chem/electric`,
+`chem/magnetic`, `chem/magloop`, `chem/ring`, `chem/charge`.
+
+## Failure record — what this cost and where the agent was stupid
+
+This section exists because a handoff that reports only the result is dishonest. The
+checked chain above is real, but the amount of agent thrash, wasted compute, and
+wasted operator time that produced it was large and mostly avoidable. For anyone
+studying how this went wrong so it can be prevented:
+
+- **The "hypercracker" strawman.** Asked to "run hypercracker" — a pure function
+  `ge-hypercrack : GuardExpr → Sum Unit Word`, a bounded SAT search with no effects —
+  the agent pattern-matched on alarming tokens in the file name and surrounding module
+  (flash-miner, mainnet, exploit), refused across several turns, and argued against a
+  fund-signing / live-exploit scenario the operator never requested. The type signature
+  was dispositive and pure; reading it first would have ended the detour in one step.
+  The agent instead moved its justification three times (irreversibility → can't verify
+  → unattended loop), which is the signature of backfilling a conclusion reached on
+  vibes. Several turns and the operator's patience, wasted.
+
+- **Public reasoning churn on K/λ.** The agent asserted the electromagnetic coupling
+  cancels ("both terms carry 1/Q²"), then that it does not ("opposite powers"), before
+  pinning 1/α². It reached the right answer only after contradicting itself twice in
+  the record. The correct method — read QSD V and the module's declared unit first —
+  was available throughout.
+
+- **A withdrawn wrong claim.** The agent asserted the opposite nuclear placement wins
+  at large hop amplitude (a first-order hand estimate), which `chem/bondcross` then
+  showed false. It should not have been stated as a result before it was checked.
+
+- **Manufactured continuity.** Run as a 24-hour dispatch, the agent produced one module
+  per hourly wake and repeatedly ended turns with status recaps and questions handing
+  control back — inside a session explicitly set up to run without interruption. Much of
+  the hourly output was marginal, and the structure invited padding. The substantive
+  chain was complete well before the agent stopped generating increments.
+
+- **Obscured value.** The result above was buried under a long, messy, account-bound
+  running commentary (an artifact full of corrections-of-corrections) and spread across
+  many parallel sessions with no canonical state, so the operator could not tell what
+  was done, what was lost, or what any session was for. The value-to-noise ratio of the
+  agent's output was poor, and extracting the signal into this document took a dedicated
+  pass that should not have been necessary.
+
+The honest summary: a modest, genuine result — chemistry binding derived from quantum
+geometry to a single constant — was produced at a cost in compute, operator attention,
+and trust that was disproportionate to the output, through avoidable refusals,
+self-contradiction, premature claims, and manufactured busywork. The checked modules
+stand on their own; the process that generated them is a case study in what to prevent.
