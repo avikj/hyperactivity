@@ -2412,18 +2412,21 @@ static char *names_make(void) {
     return strdup(h);
 }
 static void names_take(const char *h) {
-    char *t = store_dir() ? src_read(h, "names") : NULL; if (!t) return;
+    const char *sd = store_dir();
+    char *def_sd = NULL;
+    if (!sd) { root_init(); def_sd = malloc(strlen(repo_root) + 20); sprintf(def_sd, "%s/.cubical-store", repo_root); sd = def_sd; }
+    char *t = src_read(h, "names"); if (!t) { free(def_sd); return; }
     for (char *l = t; *l; ) {
         char *e = strchr(l, '\n'); if (e) *e = 0;
         char kind = l[0]; char *hx = l[1] == ' ' ? l + 2 : NULL; char *sp = hx ? strchr(hx, ' ') : NULL;
-        if (sp && (kind == 'b' || kind == 'c')) { *sp = 0; store_write(kind == 'b' ? "bound" : "conof", hx, sp + 1, false); }
+        if (sp && (kind == 'b' || kind == 'c')) { *sp = 0; write_in(sd, kind == 'b' ? "bound" : "conof", hx, sp + 1, false); }
         else if (sp && kind == 't') { *sp = 0; idx_write("written", hx, sp + 1); }
         else if (sp && kind == 'f') { *sp = 0; idx_write("free-con", hx, sp + 1); }
         else if (sp && kind == 'm') { *sp = 0; char *mp = w_unhex(sp + 1); idx_write("module-of", hx, mp); free(mp); }
         else if (sp && kind == 'n' && strlen(sp + 1) >= 64) names_take(sp + 1);
         if (!e) break; l = e + 1;
     }
-    free(t);
+    free(t); free(def_sd);
 }
 static char *root_make(void) {
     char *md = path_in(idx_dir(), "modules", ""); DIR *d = opendir(md); free(md);
@@ -2477,7 +2480,20 @@ static bool root_take(const char *h) {
 static bool idx_synced;
 static void index_sync(void) {
     if (idx_synced) return; idx_synced = true;
-    char *have = idx_read("meta", "root"); if (have) { free(have); return; }
+    char *have = idx_read("meta", "root");
+    if (have) {
+        if (store_dir()) {
+            char *bp = store_path("bound", ""); struct stat bs;
+            if (bp && stat(bp, &bs) != 0) {
+                have[strcspn(have, "\n")] = 0;
+                char *rt = strlen(have) == 64 ? src_read(have, "root") : NULL;
+                if (rt && !strncmp(rt, "names ", 6) && strlen(rt + 6) >= 64) { char nh[65]; memcpy(nh, rt + 6, 64); nh[64] = 0; names_take(nh); }
+                free(rt);
+            }
+            free(bp);
+        }
+        free(have); return;
+    }
     char *old = idx_read("meta", "stamp");   /* labels computed before roots: they are this machine's */
     if (old) { free(old); idx_write("meta", "root", "-\n"); return; }
     root_init();
@@ -6886,6 +6902,7 @@ static void lk_label(const char *s, bool defs) {
     if (lk_busy || !store_dir() || !chk_salt[0] || s[0] == '%' || s[0] == '#' || s[0] == '@') return;
     if (global_lookup(s) >= 0 || data_lookup(s) >= 0 || con_lookup(s) >= 0 || fld_lookup(s) >= 0) return;
     for (int i = 0; i < nxlater; i++) if (!strcmp(xlater[i], s)) return;   /* declared later in the file being read */
+    if (!idx_synced) index_sync();
     /* in a module of the work only a name no module holds is taken (a definition written on its own,
      * or a constructor or field of a type written on its own, free-con/NAME): what a module holds is
      * declared by the module that holds it. A name asked and not found is remembered, so the
