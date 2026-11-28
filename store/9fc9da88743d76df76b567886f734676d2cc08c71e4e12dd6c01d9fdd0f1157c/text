@@ -1,0 +1,18 @@
+-- Exact 5-Tetrahedron / 10-Triangle (K_5) 4-Simplex Boundary Flux Conservation:
+-- Sum of net fluxes over all 5 boundary tetrahedra of a 4-simplex vanishes identically
+-- for ANY 10 face fluxes f01..f34! Gluing N 4-simplices cancels all internal faces pairwise!
+-- Variables (0..9): f01, f02, f03, f04, f12, f13, f14, f23, f24, f34.
+uf-simplex-k5-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+uf-simplex-k5-poly A ad mu q vs =
+  (λ g sub _ →
+    let f01 = g 0; f02 = g 1; f03 = g 2; f04 = g 3; f12 = g 4
+        f13 = g 5; f14 = g 6; f23 = g 7; f24 = g 8; f34 = g 9
+        z   = q (fn-q 0 1)
+        t0  = ad (ad f01 f02) (ad f03 f04)
+        t1  = ad (sub f12 f01) (ad f13 f14)
+        t2  = ad (sub (sub f23 f02) f12) f24
+        t3  = sub (sub (sub f34 f03) f13) f23
+        t4  = sub (sub (sub (sub z f04) f14) f24) f34
+        tot = ad (ad (ad t0 t1) (ad t2 t3)) t4
+    in (tot , z))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)
