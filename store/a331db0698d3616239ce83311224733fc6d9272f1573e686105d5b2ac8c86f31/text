@@ -1,0 +1,9 @@
+-- |x| = k·π/2 + r: (k mod 4, r signed, scaled by 2^P)
+ief-reduce : Word → Word × (Word × List Word)
+ief-reduce x =
+  let xw = bg-shl (bg-of (ief-m x)) (%wsub (%wadd (ief-e x) ief-W) #4096)
+      hw = bg-shr ief-pi-W #1
+      q = fst (bg-divmod (bg-add (bg-shl1 xw) hw) (bg-shl1 hw))
+      t = bg-mul q hw
+      r = the (Word × List Word) (if bg-ge xw t then (#0 , bg-sub xw t) else (#1 , bg-sub t xw))
+  in (%wand (bg-lo q) #3 , (fst r , bg-shr (snd r) (%wsub ief-W ief-P)))

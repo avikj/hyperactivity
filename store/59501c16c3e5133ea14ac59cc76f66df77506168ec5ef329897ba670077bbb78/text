@@ -1,0 +1,11 @@
+-- the file's bytes written back to its path (when written since)
+hio-sync : Word → (Word → Step W Word) → Step W Word
+hio-sync r k =
+  scmd (w-load (%wadd r #40)) (λ dirty →
+  if %weq dirty #0 then k #0
+  else scmd (w-load r) (λ buf → scmd (w-load (%wadd r #16)) (λ len →
+       scmd (w-load (%wadd r #48)) (λ pa → scmd (w-load (%wadd r #56)) (λ pl →
+       hio-peek (toNat pl) pa nil (λ path → hio-peek (toNat len) buf nil (λ bs →
+       scmd (w-file-write-named path bs) (λ w →
+       if hio-neg w then k (hio-errno w)
+       else scmd (w-store (%wadd r #40) #0) (λ u → k (hv2-u #0 u))))))))))

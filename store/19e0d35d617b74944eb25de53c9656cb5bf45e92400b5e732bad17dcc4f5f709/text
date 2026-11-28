@@ -1,0 +1,18 @@
+-- a call (src/hvm.c interact_call): the definition's nodes and variables placed (the top of each
+-- free stack if it holds enough, else fresh), its nodes written, its redexes and root linked
+hr-call-def : Hv2Def → Word → Word → (Word → Step W Word) → Step W Word
+hr-call-def (hv2def s root ns rb nv nn) m b k =
+  scmd (w-load (%wadd m #32)) (λ cn →
+  scmd (w-load m) (λ xn →
+  scmd (w-load (%wadd m #40)) (λ cv →
+  scmd (w-load (%wadd m #8)) (λ xv →
+  let fn = not (%wlt cn nn)
+      fv = not (%wlt cv nv)
+      nb = if fn then %wsub cn nn else cn
+      vb = if fv then %wsub cv nv else cv
+  in scmd (w-store (%wadd m #32) nb) (λ u1 →
+     scmd (w-store (hv2-u m u1) (if fn then xn else %wadd xn nn)) (λ u2 →
+     scmd (w-store (%wadd (hv2-u m u2) #40) vb) (λ u3 →
+     scmd (w-store (%wadd (hv2-u m u3) #8) (if fv then xv else %wadd xv nv)) (λ u4 →
+     hr-cd-nfill (if fn then zero else toNat nn) (hv2-u m u4) (hr-fna m nb) xn
+                 (if fv then zero else toNat nv) (hr-fva m vb) xv ns nb vb rb root b k))))))))

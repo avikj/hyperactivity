@@ -1,0 +1,9 @@
+h4-look-go : Word → Word → Word → List H4B → Word × H4B
+h4-look-go name side sk nil = (%wadd #2 sk , h4-none-b)
+h4-look-go name side sk (cons b r) =
+  if not (%weq (h4b-nm b) name) then h4-look-go name side sk r
+  else if %wlt (h4b-sd b) #2
+  then (if not (%weq side #2) then h4-look-go name side #1 r else (#0 , b))
+  else if andB (%weq side #2) (andB (not (%weq (h4b-lab b) #0)) (%weq (h4b-fk b) #0)) then h4-look-go name side #1 r
+  else if andB (not (%weq side #2)) (%weq (h4b-lab b) #0) then h4-look-go name side #1 r
+  else (#0 , b)

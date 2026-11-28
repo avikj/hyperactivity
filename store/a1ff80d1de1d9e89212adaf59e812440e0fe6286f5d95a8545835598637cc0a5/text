@@ -1,0 +1,18 @@
+-- src/run.c do_run_io
+hio-loop : Nat → HioE → Word → (Word → Step W Word) → Step W Word
+hio-loop zero e m k = k m
+hio-loop (suc f) e m k =
+  hio-run e m (λ m1 →
+  hr-peek m1 hv2-root (λ p →
+  hio-ctr e m1 p (λ m2 tag args →
+  if not (andB (%wlt #0 (cli-len args)) (hio-iscon (hio-at #0 args))) then k m2
+  else scmd (w-load (hr-na m2 (hv2-val (hio-at #0 args)))) (λ mw →
+       if not (hio-magic mw) then k m2
+       else if %weq tag #1
+       then (if not (%weq (cli-len args) #4)
+             then scmd (w-fd-write #2 (list-append "invalid IO_CALL: args_len = " (list-append (ce-dec (cli-len args)) "\n"))) (λ r → k (hv2-kp m2 r))
+             else hio-bytes (hio-nb e) e m2 (hio-at #1 args) nil (λ m3 fname →
+                  hio-ffn e m3 fname (hio-at #2 args) (λ ret →
+                  hio-node (hv2-kp m3 ret) ret hv2-root (λ loc →
+                  hio-boot (hv2-kp m3 loc) (hio-con loc) (hio-at #3 args) (λ m6 → hio-loop f e m6 k)))))
+       else k m2))))

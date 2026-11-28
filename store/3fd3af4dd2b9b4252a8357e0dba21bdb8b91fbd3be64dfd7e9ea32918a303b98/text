@@ -1,0 +1,18 @@
+#!/bin/bash
+# ports/build.sh bend|hvm4|hvm2 [OUT]: the native binary of lib/bend, lib/hvm4 or lib/hvm2, from the store.
+# Bend's C is made in pieces, one view each (lib/emit-slices), so no view holds the whole emission.
+set -e
+cd "$(dirname "$0")/.."
+what=$1; out=${2:-$what}; tmp=$(mktemp -d)
+v() { HYPERACTIVE_COLD=1 ./hyperactive view in "lib/$what.hypercubical" "$1" 2>/dev/null | grep -v "^FAIL: checks\|^   reason: \|^   in: "; }
+if [ "$what" = hvm4 ]; then
+  v h4-c > "$tmp/out.c"
+elif [ "$what" = hvm2 ]; then
+  v hv2-c > "$tmp/out.c"
+else
+  n=$(v b2-c-count | grep -o "#[0-9]*" | head -1 | tr -d '#'); np=$(( (n + 999) / 1000 ))
+  v b2-c-head > "$tmp/head.c"; v b2-c-protos > "$tmp/protos.c"; v b2-c-main > "$tmp/main.c"
+  for ((k=0; k<np; k++)); do v "b2-c-part #$k" > "$tmp/part-$k.c"; done
+  cat "$tmp/head.c" "$tmp/protos.c" $(for ((k=0; k<np; k++)); do echo "$tmp/part-$k.c"; done) "$tmp/main.c" > "$tmp/out.c"
+fi
+cc -O2 -w -o "$out" "$tmp/out.c"; rm -rf "$tmp"; echo "built $out"

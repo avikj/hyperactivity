@@ -1,0 +1,12 @@
+-- an import line read: 0 no match, 1 a path alone, 2 a path and an alias
+b2-impkind : List Word → Word
+b2-impkind line =
+  let r0 = hv2-dropn6 line in
+  if not (andB (cli-eq (b2-ltake #6 line) "import") (b2-isspc (hv2-nth #0 r0))) then #0 else
+  let t = b2-dropsp r0 in
+  let rest = b2-dropnws t in
+  if b2-tailok rest then #1 else
+  let r1 = b2-dropsp rest in
+  if not (andB (cli-eq (b2-ltake #2 r1) "as") (b2-isspc (hv2-nth #2 r1))) then #0 else
+  let r2 = b2-dropsp (hv2-drop1 (hv2-drop1 r1)) in
+  if andB (b2-isidhead (hv2-nth #0 r2)) (b2-tailok (b2-dropid r2)) then #2 else #0

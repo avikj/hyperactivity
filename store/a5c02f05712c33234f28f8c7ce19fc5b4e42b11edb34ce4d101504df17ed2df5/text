@@ -1,0 +1,2207 @@
+
+-- ===========================================================================================
+-- Term nodes. Var [k, i, v, c]  Ref [k, b]  Sub [i, v, f]  Let [k, i, q, v, f]  Typ [g]  Qnt []
+-- Qua [q]  Min [a, b]  All [q, k, i, A, B]  Lam [k, i, f, q]  App [f, x]  ADT [k, x, r]  Ctr [k, x]
+-- Lit [k, v]  Mat [k, h, m]  Efq []  Eql [a, b, T]  Rfl []  Rwt [e, p, f]  Hol [k]  Ann [x, T];
+-- arrays where TypeScript has them. A closure is [CLO, 0, kind, a, b, c, d].
+-- ===========================================================================================
+
+macro b2m-Var (k : Word) (i : Word) (s : Word) (v : Word) : Word
+  t <- b2m-n4 b2-VAR s k i v #0
+  ret t
+
+macro b2m-clo (kd : Word) (a : Word) (b : Word) (c : Word) (d : Word) : Word
+  t <- b2m-n5 b2-CLO #0 kd a b c d
+  ret t
+
+fn b2-Var (k : Word) (i : Word) (s : Word) (v : Word) : Word
+  t <- b2m-n4 b2-VAR s k i v #0
+  ret t
+
+fn b2-Ref (k : Word) (s : Word) (b : Word) : Word
+  t <- b2m-n2 b2-REF s k b
+  ret t
+
+fn b2-App (g : Word) (x : Word) (s : Word) : Word
+  t <- b2m-n2 b2-APP s g x
+  ret t
+
+fn b2-Ctr (k : Word) (xs : Word) (s : Word) : Word
+  t <- b2m-n2 b2-CTR s k xs
+  ret t
+
+fn b2-Adt (k : Word) (xs : Word) (s : Word) (r : Word) : Word
+  t <- b2m-n3 b2-ADT s k xs r
+  ret t
+
+fn b2-Ann (x : Word) (vT : Word) (s : Word) : Word
+  t <- b2m-n2 b2-ANN s x vT
+  ret t
+
+fn b2-All (q : Word) (k : Word) (i : Word) (vA : Word) (vB : Word) (s : Word) : Word
+  t <- b2m-n5 b2-ALL s q k i vA vB
+  ret t
+
+fn b2-Lam (k : Word) (i : Word) (g : Word) (s : Word) (q : Word) : Word
+  t <- b2m-n4 b2-LAM s k i g q
+  ret t
+
+fn b2-TypQ (q : Word) (s : Word) : Word
+  g <- b2m-n1 b2-QUA s q
+  t <- b2m-n1 b2-TYP s g
+  ret t
+
+-- term_cell(t, k): a share cell over t (a cell already is one)
+fn b2-cell (t : Word) (k : Word) : Word
+  tg <- b2m-tag t
+  i <- b2m-f t #1
+  if andB (%weq tg b2-VAR) (b2-neg i)
+    ret t
+  s <- b2m-span t
+  c <- b2-Var k b2-M1 s t
+  ret c
+
+-- the class of a share cell (cell_class), its c links halved on the way
+fnrec b2-classg (f : Nat) (t : Word) : Word
+  zero: ret t
+  c <- b2m-f t #3
+  if %weq c #0
+    ret t
+  cc <- b2m-f c #3
+  let c2 = the Word (if %weq cc #0 then c else cc)
+  do b2m-setf t #3 c2
+  jump b2-classg f c2
+
+fn b2-class (t : Word) : Word
+  r <- b2-classg (toNat #4294967295) t
+  ret r
+
+-- the book: [BOOK, 0, tlds (a map), ctrs (a map), order (a vector), hols, tmps (a map)]
+fn b2-booknil : Word
+  a <- b2-map #0
+  b <- b2-map #0
+  o <- b2-vec
+  c <- b2-map #0
+  t <- b2m-n5 b2-BOOK #0 a b o #0 c
+  ret t
+
+fn b2-tld (bk : Word) (k : Word) : Word
+  tl <- b2m-f bk #0
+  r <- b2-mget tl k
+  ret (the Word (if %weq r hv2-none then #0 else r))
+
+-- a TLD: ADT [TADT, 0, n, g, T, c (array of ctrs), b]; Def [TDEF, 0, n, x, T, v, e, b, u, i, m,
+-- l] (b u l are 0/1, i 0 or an array of paths, v 0 when bodiless); Ctr [TCTR, 0, k, n, T, f]
+fn b2-mkdef (n : Word) (x : Word) (vT : Word) (v : Word) : Word
+  at <- b2m-alloc #12
+  do b2m-wr at (%wor b2-TDEF #2560)
+  do b2m-wr (%wadd at #1) #0
+  do b2m-wr (%wadd at #2) n
+  do b2m-wr (%wadd at #3) x
+  do b2m-wr (%wadd at #4) vT
+  do b2m-wr (%wadd at #5) v
+  do b2m-wr (%wadd at #6) #0
+  do b2m-wr (%wadd at #7) #0
+  do b2m-wr (%wadd at #8) #0
+  do b2m-wr (%wadd at #9) #0
+  do b2m-wr (%wadd at #10) #0
+  do b2m-wr (%wadd at #11) #0
+  ret at
+
+-- the machine's frames: [kind, a, b, c, d]: 1 APP{x, s} 2 MAT{t, e, lhs, s} 3 VAR{l, a}
+-- 4 MNA{b, s} 5 MNB{a, s}; an lhs is [thunk, n]; a thunk is [1 t] [2 prev x s] [3 prev k n]
+macro b2m-rec4 (a : Word) (b : Word) (c : Word) (d : Word) (e : Word) : Word
+  at <- b2m-alloc #5
+  do b2m-wr at a
+  do b2m-wr (%wadd at #1) b
+  do b2m-wr (%wadd at #2) c
+  do b2m-wr (%wadd at #3) d
+  do b2m-wr (%wadd at #4) e
+  ret at
+
+macro b2m-push (r : Word) : Word
+  sp <- rd (b2-HSP M)
+  wr (b2-sa M sp) r
+  wr (b2-HSP M) (%wsucc sp)
+  ret r
+
+-- a Ref's def is an operator (a name ".x" with no other dot)
+b2-isop : List Word → Bool
+b2-isop s = andB (%weq (hv2-nth #0 s) #46) (not (b2-has #46 (hv2-drop1 s)))
+
+-- patt_term(q, s): a pattern as a term, its span s when given (md 1: the fields xs into ob
+-- from j)
+fnrec b2-ptermg (f : Nat) (md : Word) (q : Word) (s : Word) (ob : Word) (j : Word) : Word
+  zero: ret #0
+  if %weq md #1
+    n <- b2m-len q
+    if %weq j n
+      ret ob
+    x <- b2m-at q j
+    y <- b2-ptermg f #0 x s #0 #0
+    do b2m-put ob j y
+    jump b2-ptermg f #1 q s ob (%wsucc j)
+  tg <- b2m-tag q
+  qs <- b2m-span q
+  let sp = the Word (if %weq s #0 then qs else s)
+  k <- b2m-f q #0
+  if %weq tg b2-PVAR
+    i <- b2m-f q #1
+    r <- b2-Var k i sp #0
+    ret r
+  xs <- b2m-f q #1
+  n <- b2m-len xs
+  o <- b2-arr n
+  do b2-ptermg f #1 xs s o #0
+  r <- b2-Ctr k o sp
+  ret r
+
+fn b2-pterm (q : Word) (s : Word) : Word
+  r <- b2-ptermg (toNat #4294967295) #0 q s #0 #0
+  ret r
+
+-- a list's values oldest first (list_to_array(xs).reverse())
+fn b2-ltoarrrev (l : Word) : Word
+  xs <-[b2-dpl] b2-lvals (toNat #4294967295) l nil
+  a <- b2-arrl xs
+  ret a
+
+-- a Let closure's environment: env with i[j] = xs[j]
+fnrec b2-letenv (f : Nat) (is : Word) (xs : Word) (j : Word) (n : Word) (env : Word) : Word
+  zero: ret env
+  if %weq j n
+    ret env
+  i <- b2m-at is j
+  x <- b2m-at xs j
+  e2 <- b2-lset env i x
+  jump b2-letenv f is xs (%wsucc j) n e2
+
+-- the cells of an array of terms (term_cell each, named _)
+fnrec b2-cellsg (f : Nat) (xs : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  x <- b2m-at xs j
+  c <- b2-cell x b2-N_
+  do b2m-put ob j c
+  jump b2-cellsg f xs ob (%wsucc j) n
+
+fn b2-cells (xs : Word) : Word
+  n <- b2m-len xs
+  ob <- b2-arr n
+  r <- b2-cellsg (toNat #4294967295) xs ob #0 n
+  ret r
+
+-- a term a VAR frame fills: its children as cells (term_wnf's back VAR case)
+fn b2-recell (t : Word) : Word
+  tg <- b2m-tag t
+  s <- b2m-span t
+  if %weq tg b2-CTR
+    k <- b2m-f t #0
+    xs <- b2m-f t #1
+    cs <- b2-cells xs
+    r <- b2-Ctr k cs s
+    ret r
+  if %weq tg b2-ADT
+    k <- b2m-f t #0
+    xs <- b2m-f t #1
+    rs <- b2m-f t #2
+    cs <- b2-cells xs
+    r <- b2-Adt k cs s rs
+    ret r
+  if %weq tg b2-ALL
+    q <- b2m-f t #0
+    k <- b2m-f t #1
+    i <- b2m-f t #2
+    vA <- b2m-f t #3
+    vB <- b2m-f t #4
+    c <- b2-cell vA b2-N_
+    r <- b2-All q k i c vB s
+    ret r
+  if %weq tg b2-MAT
+    k <- b2m-f t #0
+    h <- b2m-f t #1
+    m <- b2m-f t #2
+    ch <- b2-cell h b2-N_
+    cm <- b2-cell m b2-N_
+    r <- b2m-n3 b2-MAT s k ch cm
+    ret r
+  if %weq tg b2-EQL
+    a <- b2m-f t #0
+    b <- b2m-f t #1
+    vT <- b2m-f t #2
+    ca <- b2-cell a b2-N_
+    cb <- b2-cell b b2-N_
+    cT <- b2-cell vT b2-N_
+    r <- b2m-n3 b2-EQL s ca cb cT
+    ret r
+  if %weq tg b2-MIN
+    a <- b2m-f t #0
+    b <- b2m-f t #1
+    ca <- b2-cell a b2-N_
+    cb <- b2-cell b b2-N_
+    r <- b2m-n2 b2-MIN s ca cb
+    ret r
+  if %weq tg b2-TYP
+    g <- b2m-f t #0
+    cg <- b2-cell g b2-N_
+    r <- b2m-n1 b2-TYP s cg
+    ret r
+  ret t
+
+-- the APP frames on top of the stack, down to base, counted up to n
+fnrec b2-runapp (f : Nat) (sp : Word) (base : Word) (n : Word) (run : Word) : Word
+  zero: ret run
+  if orB (not (%wlt run n)) (not (%wlt (%wadd base run) sp))
+    ret run
+  fr <- rd (b2-sa M (%wsub (%wsub sp #1) run))
+  kd <- b2m-rd fr
+  if not (%weq kd #1)
+    ret run
+  jump b2-runapp f sp base n (%wsucc run)
+
+fn b2-qua (t : Word) (q : Word) : Bool
+  tg <- b2m-tag t
+  if not (%weq tg b2-QUA)
+    ret false
+  x <- b2m-f t #0
+  ret (%weq x q)
+
+fn b2-opfail (t : Word) (s : Word) (kb : List Word) : Word
+  bk <- b2-booknil
+  op <-[b2-dpl] b2-spantext s kb
+  r <- b2-failn bk #0 (list-append "a type for this operator (write (a " (list-append op " b : Nat))")) #0 s #0 (list-append "Note: we broke this after launch, sorry. Until 2.0.16 a bare operator meant Nat." (cons #10 "That was a bug: operators demand annotation. Wrap the expression and it'll work again."))
+  ret r
+
+-- the text of a span (or the fallback when there is none)
+fn b2-spantext (s : Word) (dflt : List Word) : List Word
+  if %weq s #0
+    ret dflt
+  file <- b2m-f s #0
+  beg <- b2m-f s #1
+  end <- b2m-f s #2
+  str <- b2m-f file #0
+  us <-[b2-dpl] b2-slice str beg end
+  ret (b2-utf8 us)
+
+fn b2-fuelout : Word
+  halt (cli-say "Error: the machine ran out of steps" (sdone #1))
+
+-- lit_step when t is a literal
+fn b2-litq (t : Word) : Word
+  tg <- b2m-tag t
+  if %weq tg b2-LIT
+    r <- b2-litstep t
+    ret r
+  ret t
+
+-- a literal stepped when the other side is a constructor
+fn b2-litifctr (t : Word) (ot : Word) : Word
+  tg <- b2m-tag t
+  if andB (%weq tg b2-LIT) (%weq ot b2-CTR)
+    r <- b2-litstep t
+    ret r
+  ret t
+
+fn b2-tldn (tld : Word) : Word
+  if %weq tld #0
+    ret #0
+  n <- b2m-f tld #0
+  ret n
+
+-- t applied to n fresh variables _ at d, d+1, ..
+fnrec b2-appvarsg (f : Nat) (t : Word) (d : Word) (j : Word) (n : Word) : Word
+  zero: ret t
+  if %weq j n
+    ret t
+  x <- b2-Var b2-N_ (%wadd d j) #0 #0
+  g <- b2-App t x #0
+  jump b2-appvarsg f g d (%wsucc j) n
+
+fn b2-appvars (t : Word) (d : Word) (n : Word) : Word
+  r <- b2-appvarsg (toNat #4294967295) t d #0 n
+  ret r
+
+-- every name of array a is in array b
+fnrec b2-inarr (f : Nat) (b : Word) (x : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  y <- b2m-at b j
+  if %weq x y
+    ret #1
+  jump b2-inarr f b x (%wsucc j) n
+
+fnrec b2-subsetg (f : Nat) (a : Word) (b : Word) (j : Word) (n : Word) : Word
+  zero: ret #1
+  if %weq j n
+    ret #1
+  x <- b2m-at a j
+  bn <- b2m-len b
+  ok <- b2-inarr (toNat #4294967295) b x #0 bn
+  if %weq ok #0
+    ret #0
+  jump b2-subsetg f a b (%wsucc j) n
+
+fn b2-subset (a : Word) (b : Word) : Word
+  n <- b2m-len a
+  r <- b2-subsetg (toNat #4294967295) a b #0 n
+  ret r
+
+-- Var(k[j], d + j) for each name, and [d, d+1, ..]
+fnrec b2-lowvarsg (f : Nat) (ks : Word) (d : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  k <- b2m-at ks j
+  x <- b2-Var k (%wadd d j) #0 #0
+  do b2m-put ob j x
+  jump b2-lowvarsg f ks d ob (%wsucc j) n
+
+fn b2-lowvars (ks : Word) (d : Word) : Word
+  n <- b2m-len ks
+  ob <- b2-arr n
+  r <- b2-lowvarsg (toNat #4294967295) ks d ob #0 n
+  ret r
+
+fnrec b2-iotag (f : Nat) (d : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  do b2m-put ob j (%wadd d j)
+  jump b2-iotag f d ob (%wsucc j) n
+
+fn b2-iota (d : Word) (n : Word) : Word
+  ob <- b2-arr n
+  r <- b2-iotag (toNat #4294967295) d ob #0 n
+  ret r
+
+-- ===========================================================================================
+-- The machine (bend.ts term_higher, term_apply, the closures, lhs_ext, term_wnf, term_snf,
+-- term_compare, term_lower), one function; md:
+--   0 higher(a, env b)          1 apply(a, b, span c)       2 a closure a at b
+--   3 wnf(bk, a)                4 snf(bk, a)                 5 compare(bk, a, b, mode c (0 EQ
+--   1 LE), dep d) as 1/0        6 lower(a, dep b)            7 lhs_ext(lhs a, k b, n c, xs d)
+--   8 a thunk forced            9 the match goal (cur a, n b, xs c, info d)
+--   10 map over the array a (op d >> 32: 0 higher at b, 1 snf, 2 lower at b, 3 cells named b[j]),
+--      ob c, from d & 2^32-1
+--   20 wnf's main (tm a, lhs b, base c)   21 wnf's back (tm a, base c)   22 a match's walk
+--   (arm a, frame b, base c, ctr d)   23 a match's fields pushed (ctr a, lhs b, base c, j d)
+--   50 compare_go (bk, a, b, mode c, dep d)   51 two arrays compared EQ from c (dep d)
+-- ===========================================================================================
+
+-- the intrinsics (comp.ts OPERATIONS): U32 and Nat operations on literals answered at once, as the
+-- compiled runtimes do (the result is the one Base's definition computes). A name's code is in
+-- the map at HR 21: 1..16 U32 binary, 20..25 U32 unary, 26 U32.from_nat, 30..35 Nat binary
+b2-intrnames : List (List Word)
+b2-intrnames = cons "U32.add" (cons "U32.sub" (cons "U32.and" (cons "U32.or" (cons "U32.xor" (cons "U32.mul" (cons "U32.div" (cons "U32.mod" (cons "U32.shln" (cons "U32.shrn" (cons "U32.is_eq" (cons "U32.is_ne" (cons "U32.is_lt" (cons "U32.is_le" (cons "U32.is_gt" (cons "U32.is_ge" (cons "U32.cmp" (cons "U32.inc" (cons "U32.shl" (cons "U32.shr" (cons "U32.not" (cons "U32.is_zero" (cons "U32.to_nat" (cons "U32.from_nat" (cons "Nat.double" (cons "Nat.add" (cons "Nat.mul" (cons "Nat.sub" (cons "Nat.is_lt" (cons "Nat.min" (cons "Nat.max" (cons "Nat.divmod" (cons "Nat.cmp" (cons "F32.add" (cons "F32.sub" (cons "F32.mul" (cons "F32.div" (cons "F32.is_eq" (cons "F32.is_ne" (cons "F32.is_lt" (cons "F32.is_le" (cons "F32.is_gt" (cons "F32.is_ge" (cons "F32.pow" (cons "F32.mod" (cons "F32.atan2" (cons "F32.neg" (cons "F32.abs" (cons "F32.show" (cons "F32.to_u32" (cons "F32.bits" (cons "F32.trunc" (cons "F32.floor" (cons "F32.ceil" (cons "F32.sin" (cons "F32.tan" (cons "U32.to_f32" (cons "F32.from_nat" (cons "F32.read" (cons "F32.cos" (cons "F32.log" (cons "F32.sqrt" (cons "F32.exp" (cons "F32.log2" (cons "F32.log10" (cons "F32.asin" (cons "F32.acos" (cons "F32.atan" (cons "F32.sinh" (cons "F32.cosh" (cons "F32.tanh" (cons "String.append" (cons "String.contains" (cons "String.eq" (cons "String.length" (cons "Array.new" (cons "Array.get" (cons "Array.get_unchecked" (cons "Array.set" (cons "Array.swap" (cons "Array.size" (cons "Array.clone" (cons "Array.atomic.add" (cons "Array.atomic.min" (cons "Array.atomic.max" (cons "Array.atomic.and" (cons "Array.atomic.or" (cons "Array.atomic.xor" (cons "Array.atomic.exch" (cons "Array.atomic.cas" (cons "Array.atomic.fadd" (nil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+b2-intrcodes : List Word
+b2-intrcodes = cons #1 (cons #2 (cons #3 (cons #4 (cons #5 (cons #6 (cons #7 (cons #8 (cons #9 (cons #10 (cons #11 (cons #12 (cons #13 (cons #14 (cons #15 (cons #16 (cons #17 (cons #20 (cons #21 (cons #22 (cons #23 (cons #24 (cons #25 (cons #26 (cons #27 (cons #30 (cons #31 (cons #32 (cons #33 (cons #34 (cons #35 (cons #36 (cons #37 (cons #40 (cons #41 (cons #42 (cons #43 (cons #44 (cons #45 (cons #46 (cons #47 (cons #48 (cons #49 (cons #50 (cons #51 (cons #52 (cons #60 (cons #61 (cons #62 (cons #63 (cons #64 (cons #65 (cons #66 (cons #67 (cons #68 (cons #69 (cons #70 (cons #71 (cons #72 (cons #73 (cons #74 (cons #75 (cons #76 (cons #77 (cons #78 (cons #79 (cons #80 (cons #81 (cons #82 (cons #83 (cons #84 (cons #90 (cons #91 (cons #92 (cons #93 (cons #100 (cons #101 (cons #102 (cons #103 (cons #104 (cons #105 (cons #106 (cons #110 (cons #111 (cons #112 (cons #113 (cons #114 (cons #115 (cons #116 (cons #117 (cons #118 (nil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+fnrec b2-intrinit (f : Nat) (mp : Word) (ns : List (List Word)) (cs : List Word) : Word
+  zero: ret #0
+  if h4-stknil0 ns
+    ret #0
+  k <- b2-nm (h4-tget-go #0 ns)
+  do b2-mset mp k (hv2-nth #0 cs)
+  jump b2-intrinit f mp (h4-tl0 ns) (hv2-drop1 cs)
+
+fn b2-intrcode (k : Word) : Word
+  mp <- rd (b2-HR M #21)
+  if %weq mp #0
+    ret #0
+  c <- b2-mget mp k
+  run <- rd (b2-HR M #20)
+  if andB (%wlt #39 c) (not (%weq c hv2-none))
+    ret (the Word (if %weq run #1 then c else #0))
+  ret (the Word (if %weq c hv2-none then #0 else c))
+
+-- a literal's number: U32 (k 0), Nat (k 1) or F32 bits (k 2), b2-NNONE when the term is not one
+fn b2-numof (t : Word) (k : Word) : Word
+  if %weq k #0
+    r <- b2-u32ft t b2-NU32
+    ret (the Word (if %weq r hv2-none then b2-NNONE else r))
+  if %weq k #2
+    r <- b2-u32ft t b2-NF32
+    ret (the Word (if %weq r hv2-none then b2-NNONE else r))
+  r <- b2-natnum (toNat #64) t #0
+  ret r
+
+-- no number (a Nat reaches 2^48, past hv2-none's 2^32, so numbers answer this instead)
+b2-NNONE : Word
+b2-NNONE = #18446744073709551614
+
+-- a Nat term's number through up to 64 Succ: a literal or Zero at the end, its cells followed
+fnrec b2-natnum (f : Nat) (t : Word) (acc : Word) : Word
+  zero: ret b2-NNONE
+  w <- b2-strip t
+  tg <- b2m-tag w
+  lk <- b2m-f w #0
+  v <- b2m-f w #1
+  if andB (%weq tg b2-LIT) (%weq lk b2-LNAT)
+    ret (%wadd acc v)
+  if andB (%weq tg b2-CTR) (%weq lk b2-NZero)
+    ret acc
+  if andB (%weq tg b2-CTR) (%weq lk b2-NSucc)
+    x <- b2m-at v #0
+    jump b2-natnum f x (%wsucc acc)
+  ret b2-NNONE
+
+fn b2-cmpv (a : Word) (b : Word) : Word
+  k <- b2-nm (the (List Word) (if %wlt a b then "LT" else if %weq a b then "EQ" else "GT"))
+  e <- b2-arr #0
+  r <- b2-Ctr k e #0
+  ret r
+
+fn b2-boolv (b : Bool) : Word
+  e <- b2-arr #0
+  r <- b2-Ctr (the Word (if b then b2-NTrue else b2-NFalse)) e #0
+  ret r
+
+b2-m32 : Word → Word
+b2-m32 x = %wand x #4294967295
+
+-- F32 by its bits (the runtimes' F32 operations: comp.ts OPERATIONS, run on IO only)
+b2-fnan : Word → Bool
+b2-fnan x = ief-isnan x
+
+-- an integer below 2^53 to the nearest F32 (Math.fround)
+b2-u2f : Word → Word
+b2-u2f n = if %weq n #0 then #0 else b2-u2fk n (b2-blen n #0)
+
+b2-blen : Word → Word → Word
+b2-blen n k = b2-blenn (toNat #64) n k
+
+b2-blenn : Nat → Word → Word → Word
+b2-blenn zero n k = k
+b2-blenn (suc f) n k = if %weq n #0 then k else b2-blenn f (%wshr n #1) (%wsucc k)
+
+b2-u2fk : Word → Word → Word
+b2-u2fk n k =
+  if not (%wlt #24 k) then %wor (%wshl (%wadd k #126) #23) (%wsub (%wshl n (%wsub #24 k)) #8388608)
+  else (let sh = %wsub k #24
+            m = %wshr n sh
+            r = %wand n (%wsub (%wshl #1 sh) #1)
+            h = %wshl #1 (%wsub sh #1)
+            m2 = the Word (if orB (%wlt h r) (andB (%weq r h) (%weq (%wand m #1) #1)) then %wsucc m else m)
+        in if %weq m2 #16777216 then %wor (%wshl (%wadd k #127) #23) #0 else %wor (%wshl (%wadd k #126) #23) (%wsub m2 #8388608))
+
+b2-ftrunc : Word → Word
+b2-ftrunc x =
+  let e = %wand (%wshr x #23) #255 in
+  if orB (b2-fnan x) (not (%wlt e #150)) then x
+  else if %wlt e #127 then %wand x #2147483648
+  else %wand x (%wxor (%wsub (%wshl #1 (%wsub #150 e)) #1) #4294967295)
+
+b2-ffloor : Word → Word
+b2-ffloor x = let t = b2-ftrunc x in if andB (%weq (ief-sgn x) #1) (not (%weq t x)) then ief-sub t #1065353216 else t
+
+b2-fceil : Word → Word
+b2-fceil x = let t = b2-ftrunc x in if andB (%weq (ief-sgn x) #0) (not (%weq t x)) then ief-add t #1065353216 else (if andB (%weq (ief-sgn x) #1) (ief-iszero t) then #2147483648 else t)
+
+b2-ftou32 : Word → Word
+b2-ftou32 x =
+  if orB (%wlt x #1065353216) (not (%wlt x #1333788672)) then #0
+  else (let e = %wand (%wshr x #23) #255
+            m = %wor (%wand x #8388607) #8388608
+        in if %wlt e #150 then %wshr m (%wsub #150 e) else %wshl m (%wsub e #150))
+
+-- the runtime's f32_show (no point added)
+b2-f32raw : Word → List Word
+b2-f32raw x =
+  let sg = the (List Word) (if %weq (ief-sgn x) #1 then "-" else nil)
+  in if ief-isnan x then "nan"
+     else if ief-isinf x then list-append sg "inf"
+     else if ief-iszero x then list-append sg "0"
+     else (let ct = ief-shortest x in list-append sg (b2-jsnum (ce-dec (fst ct)) (snd ct)))
+
+b2-fpow : Word → Word → Word
+b2-fpow a b = if orB (%weq a #1065353216) (andB (%weq a #3212836864) (ief-isinf b)) then #1065353216 else ief-pow a b
+
+fn b2-f32intr (ic : Word) (a : Word) (b : Word) : Word
+  if andB (%wlt #43 ic) (%wlt ic #50)
+    let lt = ief-lt a b
+    let gt = ief-lt b a
+    let eq = ief-eq a b
+    bb <- b2-boolv (the Bool (if %weq ic #44 then eq else if %weq ic #45 then not eq else if %weq ic #46 then lt else if %weq ic #47 then orB lt eq else if %weq ic #48 then gt else orB gt eq))
+    ret bb
+  if %weq ic #62
+    s <- b2-arrl (b2-f32raw a)
+    r <- b2m-n2 b2-LIT #0 b2-LSTR s
+    ret r
+  if orB (%weq ic #63) (%weq ic #64)
+    r <- b2m-n2 b2-LIT #0 b2-LU32 (the Word (if %weq ic #63 then b2-ftou32 a else a))
+    ret r
+  let v = the Word (if %weq ic #40 then ief-add a b else if %weq ic #41 then ief-sub a b else if %weq ic #42 then ief-mul a b else if %weq ic #43 then ief-div a b else if %weq ic #50 then b2-fpow a b else if %weq ic #51 then ief-rem a b else if %weq ic #52 then ief-atan2 a b else if %weq ic #60 then %wxor a #2147483648 else if %weq ic #61 then %wand a #2147483647 else if %weq ic #65 then b2-ftrunc a else if %weq ic #66 then b2-ffloor a else if %weq ic #67 then b2-fceil a else if %weq ic #68 then ief-sin a else if %weq ic #69 then ief-tan a else if %weq ic #73 then b2-fcos a else if %weq ic #74 then ief-lnv a else if %weq ic #75 then b2-fsqrt a else if %weq ic #76 then b2-fexpv a else if %weq ic #77 then b2-flogb a ief-ln2-P else if %weq ic #78 then b2-flogb a b2-ln10-P else if %weq ic #79 then b2-fasin a else if %weq ic #80 then b2-facos a else if %weq ic #81 then ief-atan2 a #1065353216 else if %weq ic #82 then b2-fhyp #0 a else if %weq ic #83 then b2-fhyp #1 a else if %weq ic #84 then b2-fhyp #2 a else b2-u2f a)
+  r <- b2m-n2 b2-LIT #0 b2-LF32 v
+  ret r
+
+b2-fcos : Word → Word
+b2-fcos x =
+  if orB (ief-isnan x) (ief-isinf x) then ief-NAN
+  else if ief-iszero x then #1065353216
+  else (let rd = ief-reduce x
+            q = fst rd
+            sc = ief-sc (snd rd)
+            v = the (Word × List Word) (if %weq q #0 then snd sc else if %weq q #1 then sx-neg (fst sc)
+                else if %weq q #2 then sx-neg (snd sc) else fst sc)
+        in ief-fix (fst v) (snd v))
+
+b2-isdg : Word → Bool
+b2-isdg c = andB (%wlt #47 c) (%wlt c #58)
+
+b2-fdigs : List Word → List Word
+b2-fdigs nil = nil
+b2-fdigs (cons c r) = if b2-isdg c then b2-fdigs r else cons c r
+
+b2-fndigs : List Word → Word
+b2-fndigs nil = #0
+b2-fndigs (cons c r) = if b2-isdg c then %wsucc (b2-fndigs r) else #0
+
+-- [+-]? ((d+ (. d*)? | . d+) (e [+-]? d+)? | inf | infinity | nan), lower case
+b2-unsign : List Word → List Word
+b2-unsign nil = nil
+b2-unsign (cons c r) = if orB (%weq c #43) (%weq c #45) then r else cons c r
+
+b2-fexp : List Word → Bool
+b2-fexp nil = true
+b2-fexp (cons c r) = andB (%weq c #101) (andB (%wlt #0 (b2-fndigs (b2-unsign r))) (h4-isnil (b2-fdigs (b2-unsign r))))
+
+b2-ffrac : Word → List Word → Bool
+b2-ffrac n1 nil = %wlt #0 n1
+b2-ffrac n1 (cons c r) = if %weq c #46 then andB (orB (%wlt #0 n1) (%wlt #0 (b2-fndigs r))) (b2-fexp (b2-fdigs r)) else andB (%wlt #0 n1) (b2-fexp (cons c r))
+
+b2-fvalid : List Word → Bool
+b2-fvalid s = b2-fvalid2 (b2-unsign s)
+
+b2-fvalid2 : List Word → Bool
+b2-fvalid2 t = orB (cli-eq t "inf") (orB (cli-eq t "infinity") (orB (cli-eq t "nan") (b2-ffrac (b2-fndigs t) (b2-fdigs t))))
+
+b2-lws : List Word → List Word
+b2-lws nil = nil
+b2-lws (cons c r) = if orB (%weq c #32) (andB (%wlt #8 c) (%wlt c #14)) then b2-lws r else cons c r
+
+-- F32.read on a literal text: Some(the nearest F32) or None
+fn b2-fread32 (w0 : Word) : Word
+  w <- b2-strip w0
+  tg <- b2m-tag w
+  lk <- b2m-f w #0
+  if not (andB (%weq tg b2-LIT) (%weq lk b2-LSTR))
+    ret hv2-none
+  v <- b2m-f w #1
+  us <-[b2-dpl] b2-units v
+  let t = ief-low (b2-lws us)
+  if b2-fvalid t
+    x <- b2m-n2 b2-LIT #0 b2-LF32 (ief-parse t)
+    sm <- b2-nm "Some"
+    xs <- b2-arr1 x
+    r <- b2-Ctr sm xs #0
+    ret r
+  nn <- b2-nm "None"
+  e <- b2-arr #0
+  r <- b2-Ctr nn e #0
+  ret r
+
+-- sqrt, correctly rounded: x = M·2^E (E even), q = isqrt(M·2^38), rounded to 24 bits with the
+-- remainder as the sticky bit
+b2-isqrtg : Nat → Word → Word → Word → Word
+b2-isqrtg zero n q b = q
+b2-isqrtg (suc k) n q b = let t = %wor q b in b2-isqrtg k n (the Word (if not (%wlt n (%wmul t t)) then t else q)) (%wshr b #1)
+
+b2-isqrt : Word → Word
+b2-isqrt n = b2-isqrtg (toNat #32) n #0 #2147483648
+
+b2-fnorm : Nat → Word → Word → Word × Word
+b2-fnorm zero m e = (m , e)
+b2-fnorm (suc k) m e = if %wlt m #8388608 then b2-fnorm k (%wshl m #1) (%wsub e #1) else (m , e)
+
+-- F32 exp, log2, log10, asin, acos and sinh, cosh, tanh, each Math.fround of the exact value
+-- (the library's fixed point: (sign, magnitude) at 2^P, rounded once to the nearest F32)
+
+-- |x| at 2^P (x = m * 2^(e - 4096))
+b2-fxfix : Word → List Word
+b2-fxfix x =
+  let t = bg-shl (bg-of (ief-m x)) ief-P
+      e = ief-e x
+  in if %wlt e #4096 then bg-shr t (%wsub #4096 e) else bg-shl t (%wsub e #4096)
+
+b2-fexpv : Word → Word
+b2-fexpv x =
+  if ief-isnan x then x
+  else if ief-isinf x then (if %weq (ief-sgn x) #0 then x else #0)
+  else if ief-iszero x then #1065353216
+  else (let zs = b2-fxfix x
+        in if bg-ge zs (bg-shl (bg-of #110) ief-P) then (if %weq (ief-sgn x) #0 then ief-INF else #0)
+           else ief-expfix (if bg-is0 zs then #0 else ief-sgn x , zs))
+
+b2-ln10-P : List Word
+b2-ln10-P = snd (ief-lnfix #1092616192)
+
+-- ln x over a constant's log (ln 2, ln 10)
+b2-flogb : Word → List Word → Word
+b2-flogb x c =
+  if ief-isnan x then x
+  else if ief-iszero x then ief-inf #1
+  else if %weq (ief-sgn x) #1 then ief-NAN
+  else if ief-isinf x then x
+  else (let l = ief-lnfix x
+        in if bg-is0 (snd l) then #0 else ief-ratio (fst l) (snd l) c #4096 #1)
+
+-- e^z and e^-z for z >= 0 at 2^P: (n, (a, b)) with e^z = a 2^n, e^-z = b 2^-n
+b2-fexps : List Word → Word × (List Word × List Word)
+b2-fexps z =
+  let l2 = ief-ln2-P
+      nq = fst (bg-divmod (bg-add (bg-shl1 z) l2) (bg-shl1 l2))
+      r = sx-add (#0 , z) (sx-neg (#0 , bg-mul nq l2))
+      ep = ief-ex-ser ief-fuel #1 (snd r) (snd r) (fst r) (#0 , nil)
+      em = ief-ex-ser ief-fuel #1 (snd r) (snd r) (%wxor (fst r) #1) (#0 , nil)
+      one = the (Word × List Word) (#0 , bg-pow2 ief-P)
+  in (bg-lo nq , (snd (sx-add ep one) , snd (sx-add em one)))
+
+-- k 0 sinh, 1 cosh, 2 tanh
+b2-fhyp : Word → Word → Word
+b2-fhyp k x =
+  let sg = ief-sgn x
+  in if ief-isnan x then x
+     else if ief-isinf x then (if %weq k #1 then ief-INF else if %weq k #0 then x else %wor (%wshl sg #31) #1065353216)
+     else if ief-iszero x then (if %weq k #1 then #1065353216 else x)
+     else (let z = b2-fxfix x
+           in if bg-ge z (bg-shl (bg-of #100) ief-P)
+              then (if %weq k #1 then ief-INF else if %weq k #0 then ief-inf sg else %wor (%wshl sg #31) #1065353216)
+              else if andB (not (%weq k #1)) (%wlt (bg-bitlen z) (%wsub ief-P #12))
+              then x
+              else (let es = b2-fexps z
+                        nw = fst es
+                        a = bg-shl (fst (snd es)) (%wshl nw #1)
+                        b = snd (snd es)
+                        n = bg-sub a b
+                        d = bg-add a b
+                        ex = %wsub (%wsub #4096 nw) (%wadd #1 ief-P)
+                    in if %weq k #0 then ief-round-bg sg n ex #1
+                       else if %weq k #1 then ief-round-bg #0 d ex #1
+                       else ief-ratio sg n d #4096 #1))
+
+-- floor sqrt by Newton from above
+b2-bgisq : Nat → List Word → List Word → List Word
+b2-bgisq zero n y = y
+b2-bgisq (suc f) n y =
+  let y2 = bg-shr (bg-add y (fst (bg-divmod n y))) #1
+  in if bg-ge y2 y then y else b2-bgisq f n y2
+
+-- sqrt(1 - x^2) at 2^P for |x| = X / 2^P <= 1
+b2-fcomp : List Word → List Word
+b2-fcomp xx =
+  let w = bg-sub (bg-pow2 (%wshl ief-P #1)) (bg-mul xx xx)
+  in if bg-is0 w then w else b2-bgisq (toNat #600) w (bg-pow2 (%wadd ief-P #1))
+
+b2-fasin : Word → Word
+b2-fasin x =
+  let sg = ief-sgn x
+  in if ief-isnan x then x
+     else if ief-iszero x then x
+     else if ief-isinf x then ief-NAN
+     else (let xx = b2-fxfix x
+               one = bg-pow2 ief-P
+               hpi = bg-shr ief-pi-P #1
+           in if bg-ge xx (bg-add one bg-one) then ief-NAN
+              else if %wlt (bg-bitlen xx) (%wsub ief-P #12) then x
+              else (let d = b2-fcomp xx
+                        at = the (List Word) (if bg-ge d xx then ief-atan01 xx d else bg-sub hpi (ief-atan01 d xx))
+                    in ief-round-bg sg at (%wsub #4096 ief-P) #1))
+
+b2-facos : Word → Word
+b2-facos x =
+  if ief-isnan x then x
+  else if ief-isinf x then ief-NAN
+  else (let xx = b2-fxfix x
+            one = bg-pow2 ief-P
+            pi = ief-pi-P
+            hpi = bg-shr pi #1
+        in if bg-ge xx (bg-add one bg-one) then ief-NAN
+           else (let d = b2-fcomp xx
+                     base = the (List Word) (if bg-is0 xx then hpi else if bg-ge xx d then ief-atan01 d xx else bg-sub hpi (ief-atan01 xx d))
+                     v = the (List Word) (if %weq (ief-sgn x) #1 then bg-sub pi base else base)
+                 in if bg-is0 v then #0 else ief-round-bg #0 v (%wsub #4096 ief-P) #1))
+
+b2-fsqrt : Word → Word
+b2-fsqrt x =
+  if orB (ief-isnan x) (ief-iszero x) then x
+  else if %weq (ief-sgn x) #1 then ief-NAN
+  else if ief-isinf x then x
+  else (let be = %wand (%wshr x #23) #255
+            fr = %wand x #8388607
+            me = the (Word × Word) (if %weq be #0 then b2-fnorm (toNat #24) fr #1001 else (%wor fr #8388608 , %wadd be #1000))
+            odd = %weq (%wand (snd me) #1) #1
+            m2 = the Word (if odd then %wshl (fst me) #1 else fst me)
+            e2 = the Word (if odd then %wsub (snd me) #1 else snd me)
+            n = %wshl m2 #38
+            q = b2-isqrt n
+            r = %wsub n (%wmul q q)
+            l = b2-blen q #0
+            sh = %wsub l #24
+            qm = %wshr q sh
+            rest = %wand q (%wsub (%wshl #1 sh) #1)
+            half = %wshl #1 (%wsub sh #1)
+            up = orB (%wlt half rest) (andB (%weq rest half) (orB (not (%weq r #0)) (%weq (%wand qm #1) #1)))
+            qr = the Word (if up then %wsucc qm else qm)
+            p0 = %wsub (%wadd sh (%wshr e2 #1)) #444
+            q2 = the Word (if %weq qr #16777216 then #8388608 else qr)
+            p1 = the Word (if %weq qr #16777216 then %wsucc p0 else p0)
+        in %wor (%wshl p1 #23) (%wsub q2 #8388608))
+
+-- an argument an intrinsic may read: a literal or a constructor (anything else is stuck, and
+-- the definition's own match decides, as it would without the intrinsic)
+-- an intrinsic's argument as it stands: a computed cell's value, 0 for a cell not yet
+-- evaluated, anything else itself
+fn b2-ipeek (x : Word) : Word
+  tg <- b2m-tag x
+  i <- b2m-f x #1
+  if andB (%weq tg b2-VAR) (%weq i b2-M1)
+    ret #0
+  r <- b2-strip x
+  ret r
+
+-- a Nat argument as a literal through its Succ chain (64 at most): 1 with the literal in
+-- register 33, 2 with a cell still to evaluate there, 0 when it is no Nat (or t is 0)
+fnrec b2-inat (f : Nat) (t : Word) (acc : Word) : Word
+  zero: ret #0
+  if %weq t #0
+    ret #0
+  tg0 <- b2m-tag t
+  ix0 <- b2m-f t #1
+  if andB (%weq tg0 b2-VAR) (%weq ix0 b2-M1)
+    wr (b2-HR M #33) t
+    ret #2
+  w <- b2-strip t
+  tg <- b2m-tag w
+  lk <- b2m-f w #0
+  v <- b2m-f w #1
+  if andB (%weq tg b2-LIT) (%weq lk b2-LNAT)
+    r <- b2m-n2 b2-LIT #0 b2-LNAT (%wadd acc v)
+    wr (b2-HR M #33) r
+    ret #1
+  if andB (%weq tg b2-CTR) (%weq lk b2-NZero)
+    r <- b2m-n2 b2-LIT #0 b2-LNAT acc
+    wr (b2-HR M #33) r
+    ret #1
+  if andB (%weq tg b2-CTR) (%weq lk b2-NSucc)
+    x <- b2m-at v #0
+    jump b2-inat f x (%wsucc acc)
+  ret #0
+
+-- ===========================================================================================
+-- Arrays on the IO lane: the JS lane's arrays (a literal of kind 4 over a RAM array of cells).
+-- Array.set and the swaps write in place, as JS's do; a match sees ALeaf{x} for one cell and
+-- ANode{left half, right half} (copies, as slice makes) otherwise.
+-- ===========================================================================================
+
+b2-LARR : Word
+b2-LARR = #4
+
+-- the arity of an array native
+b2-arrar : Word → Word
+b2-arrar ic = if orB (%weq ic #105) (%weq ic #106) then #2 else if orB (%weq ic #100) (orB (%weq ic #101) (%weq ic #102)) then #3 else if %weq ic #117 then #5 else #4
+
+-- the argument cells an array native evaluates first, by index (JS is strict: a stored value
+-- is computed when it is stored, not when it is read, after later writes): the type, depth
+-- and value of a new array; otherwise the array, its index, a stored value, an atomic's operands
+b2-arrneed : Word → Word → Bool
+b2-arrneed ic j = if %weq ic #100 then %wlt j #3 else if orB (%weq ic #105) (%weq ic #106) then %weq j #1 else if orB (%weq ic #103) (%weq ic #104) then %wlt #0 j else if orB (%weq ic #101) (%weq ic #102) then orB (%weq j #1) (%weq j #2) else %wlt #0 j
+
+-- the argument cell j of a call whose frames end at sp
+fn b2-argat (sp : Word) (j : Word) : Word
+  fr <- rd (b2-sa M (%wsub sp (%wsucc j)))
+  x <- b2m-rd (%wadd fr #1)
+  ret x
+
+-- the first argument it reads that is a cell not yet evaluated, or 0
+fnrec b2-arrwant (f : Nat) (ic : Word) (sp : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  x <- b2-argat sp j
+  q <- b2-ipeek x
+  if andB (b2-arrneed ic j) (%weq q #0)
+    ret x
+  jump b2-arrwant f ic sp (%wsucc j) n
+
+-- a new array's cells, each v
+fnrec b2-afill (f : Nat) (a : Word) (j : Word) (n : Word) (v : Word) : Word
+  zero: ret a
+  if %weq j n
+    ret a
+  do b2m-put a j v
+  jump b2-afill f a (%wsucc j) n v
+
+-- log2 of a cell's 32-bit words (lay_el, for the scalars: U32 and F32 one word, Nat two)
+fn b2-arrlgs (t : Word) : Word
+  w <- b2-strip t
+  tg <- b2m-tag w
+  k <- b2m-f w #0
+  if andB (orB (%weq tg b2-ADT) (%weq tg b2-REF)) (%weq k b2-NNat)
+    ret #1
+  -- another datatype: its fields in more than one word (a record of two words, Pt{U32, U32})
+  if andB (%weq tg b2-ADT) (not (orB (%weq k b2-NU32) (%weq k b2-NF32)))
+    ret #1
+  ret #0
+
+-- an array native: its answer; hv2-none2 with register 35 the array argument when that is an
+-- ALeaf/ANode tree (made a literal first); hv2-none2 with register 36 an element to evaluate;
+-- hv2-none when it does not apply
+fn b2-arrop (ic : Word) (sp : Word) : Word
+  x0 <- b2-argat sp #0
+  x1 <- b2-argat sp #1
+  q0 <- b2-ipeek x0
+  q1 <- b2-ipeek x1
+  if %weq ic #100
+    kd <- b2-inat (toNat #64) q1 #0
+    if not (%weq kd #1)
+      ret hv2-none
+    dl <- rd (b2-HR M #33)
+    d <- b2m-f dl #1
+    lg <- b2-arrlgs q0
+    if %wlt (%wsub #31 lg) d
+      halt (scmd (w-fd-write #2 (list-append "bend: an array past the deepest block class 31 (depth + log2 words per cell)" (cons #10 nil))) (λ x → sdone #1))
+    x2 <- b2-argat sp #2
+    let n = %wshl #1 d
+    a <- b2-arr n
+    do b2-afill (toNat #4294967295) a #0 n x2
+    r <- b2m-n2 b2-LIT #0 b2-LARR a
+    ret r
+  tg <- b2m-tag q1
+  lk <- b2m-f q1 #0
+  if andB (%weq tg b2-CTR) (orB (%weq lk b2-NALeaf) (%weq lk b2-NANode))
+    wr (b2-HR M #35) x1
+    ret hv2-none2
+  if not (andB (%weq tg b2-LIT) (%weq lk b2-LARR))
+    ret hv2-none
+  a <- b2m-f q1 #1
+  n <- b2m-len a
+  if %weq ic #105
+    nl <- b2m-n2 b2-LIT #0 b2-LU32 n
+    r <- b2-ctr2 b2-NTuple q1 nl
+    ret r
+  if %weq ic #106
+    o <- b2-arr n
+    do b2-acopy (toNat #4294967295) a o #0 #0 n
+    cl <- b2m-n2 b2-LIT #0 b2-LARR o
+    r <- b2-ctr2 b2-NTuple q1 cl
+    ret r
+  x2 <- b2-argat sp #2
+  q2 <- b2-ipeek x2
+  iv <- b2-numof q2 #0
+  if %weq iv b2-NNONE
+    ret hv2-none
+  let at = %wand iv (%wsub n #1)
+  old <- b2m-at a at
+  if orB (%weq ic #101) (%weq ic #102)
+    r <- b2-ctr2 b2-NTuple q1 old
+    ret r
+  x3 <- b2-argat sp #3
+  if %weq ic #103
+    do b2m-put a at x3
+    ret q1
+  if %weq ic #104
+    do b2m-put a at x3
+    r <- b2-ctr2 b2-NTuple q1 old
+    ret r
+  -- the atomics: the old element and the operands as numbers
+  qo <- b2-ipeek old
+  if %weq qo #0
+    wr (b2-HR M #36) old
+    ret hv2-none2
+  q3 <- b2-ipeek x3
+  x4 <- b2-argat sp (the Word (if %weq ic #117 then #4 else #3))
+  q4 <- b2-ipeek x4
+  let fl = %weq ic #118
+  ov <- b2-numof qo (the Word (if fl then #2 else #0))
+  v3 <- b2-numof q3 (the Word (if fl then #2 else #0))
+  v4 <- b2-numof q4 #0
+  if orB (%weq ov b2-NNONE) (orB (%weq v3 b2-NNONE) (andB (%weq ic #117) (%weq v4 b2-NNONE)))
+    ret hv2-none
+  let nv = the Word (if %weq ic #110 then b2-m32 (%wadd ov v3) else if %weq ic #111 then (if %wlt v3 ov then v3 else ov) else if %weq ic #112 then (if %wlt ov v3 then v3 else ov) else if %weq ic #113 then %wand ov v3 else if %weq ic #114 then %wor ov v3 else if %weq ic #115 then %wxor ov v3 else if %weq ic #116 then v3 else if %weq ic #117 then (if %weq ov v3 then v4 else ov) else ief-add ov v3)
+  nt <- b2m-n2 b2-LIT #0 (the Word (if fl then b2-LF32 else b2-LU32)) nv
+  do b2m-put a at nt
+  r <- b2-ctr2 b2-NTuple q1 old
+  ret r
+
+fn b2-nop0 : Word
+  ret #0
+
+fn b2-intrlit (w : Word) : Word
+  tg <- b2m-tag w
+  ret (hv2-b (orB (%weq tg b2-LIT) (%weq tg b2-CTR)))
+
+-- the String natives (JS strings: append, contains, eq, length) on literals' text units
+fn b2-sunits (w0 : Word) : Word
+  w <- b2-strip w0
+  tg <- b2m-tag w
+  lk <- b2m-f w #0
+  if andB (%weq tg b2-LIT) (%weq lk b2-LSTR)
+    v <- b2m-f w #1
+    ret v
+  ret #0
+
+fn b2-sunitsa (w0 : Word) : Word
+  v <- b2-sunits w0
+  if %weq v #0
+    ret #0
+  a <- b2-sarr v
+  ret a
+
+fnrec b2-acopy (f : Nat) (src : Word) (dst : Word) (j : Word) (off : Word) (n : Word) : Word
+  zero: ret dst
+  if %weq j n
+    ret dst
+  x <- b2m-at src j
+  do b2m-put dst (%wadd off j) x
+  jump b2-acopy f src dst (%wsucc j) off n
+
+-- the units of a char starting at j: a surrogate pair 2, a packed code (U+DC00 and three) 4
+fn b2-clen (a : Word) (j : Word) (n : Word) : Word
+  u <- b2m-at a j
+  if andB (%weq u #56320) (%wlt (%wadd j #3) n)
+    ret #4
+  if andB (andB (%wlt #55295 u) (%wlt u #56320)) (%wlt (%wsucc j) n)
+    u2 <- b2m-at a (%wsucc j)
+    ret (the Word (if andB (%wlt #56319 u2) (%wlt u2 #57344) then #2 else #1))
+  ret #1
+
+-- p's units at a's offset at
+fnrec b2-sat (f : Nat) (a : Word) (p : Word) (at : Word) (j : Word) (m : Word) : Word
+  zero: ret #0
+  if %weq j m
+    ret #1
+  x <- b2m-at a (%wadd at j)
+  y <- b2m-at p j
+  if not (%weq x y)
+    ret #0
+  jump b2-sat f a p at (%wsucc j) m
+
+-- a match of p starting at a char of a (as string_contains)
+fnrec b2-scont (f : Nat) (a : Word) (n : Word) (p : Word) (m : Word) (at : Word) : Word
+  zero: ret #0
+  if %wlt n (%wadd at m)
+    ret #0
+  ok <- b2-sat (toNat #4294967295) a p at #0 m
+  if %weq ok #1
+    ret #1
+  if %weq at n
+    ret #0
+  l <- b2-clen a at n
+  jump b2-scont f a n p m (%wadd at l)
+
+fnrec b2-scount (f : Nat) (a : Word) (n : Word) (j : Word) (acc : Word) : Word
+  zero: ret acc
+  if %weq j n
+    ret acc
+  l <- b2-clen a j n
+  jump b2-scount f a n (%wadd j l) (%wsucc acc)
+
+fn b2-sintr (ic : Word) (w0 : Word) (w1 : Word) : Word
+  if %weq ic #90
+    va <- b2-sunits w0
+    vb <- b2-sunits w1
+    if orB (%weq va #0) (%weq vb #0)
+      ret hv2-none
+    n <- b2-slen va
+    m <- b2-slen vb
+    if %wlt #32 (%wadd n m)
+      rp <- b2m-alloc #4
+      do b2m-wr rp b2-ROPE
+      do b2m-wr (%wadd rp #1) va
+      do b2m-wr (%wadd rp #2) vb
+      do b2m-wr (%wadd rp #3) (%wadd n m)
+      r <- b2m-n2 b2-LIT #0 b2-LSTR rp
+      ret r
+    a <- b2-sarr va
+    p <- b2-sarr vb
+    o <- b2-arr (%wadd n m)
+    do b2-acopy (toNat #4294967295) a o #0 #0 n
+    do b2-acopy (toNat #4294967295) p o #0 n m
+    r <- b2m-n2 b2-LIT #0 b2-LSTR o
+    ret r
+  a <- b2-sunitsa w0
+  if %weq a #0
+    ret hv2-none
+  n <- b2m-len a
+  if %weq ic #93
+    c <- b2-scount (toNat #4294967295) a n #0 #0
+    r <- b2m-n2 b2-LIT #0 b2-LNAT c
+    ret r
+  p <- b2-sunitsa w1
+  if %weq p #0
+    ret hv2-none
+  m <- b2m-len p
+  if %weq ic #92
+    if %weq n m
+      ok <- b2-sat (toNat #4294967295) a p #0 #0 m
+      bb <- b2-boolv (%weq ok #1)
+      ret bb
+    bb <- b2-boolv false
+    ret bb
+  ok <- b2-scont (toNat #4294967295) a n p m #0
+  bb <- b2-boolv (%weq ok #1)
+  ret bb
+
+fn b2-intr (ic : Word) (w0 : Word) (w1 : Word) : Word
+  if %wlt #89 ic
+    r <- b2-sintr ic w0 w1
+    ret r
+  if %weq ic #72
+    r <- b2-fread32 w0
+    ret r
+  if %wlt #39 ic
+    let un = %wlt #59 ic
+    k0 <- b2-numof (the Word (if %weq ic #71 then w0 else w0)) (the Word (if %weq ic #70 then #0 else if %weq ic #71 then #1 else #2))
+    k1 <- b2-numof w1 #2
+    if orB (%weq k0 b2-NNONE) (andB (not un) (%weq k1 b2-NNONE))
+      ret hv2-none
+    r <- b2-f32intr ic k0 k1
+    ret r
+  let nat = andB (%wlt #29 ic) (%wlt ic #40)
+  let nat0 = orB nat (orB (%weq ic #26) (%weq ic #27))
+  a <- b2-numof w0 (the Word (if nat0 then #1 else #0))
+  b <- b2-numof w1 (the Word (if nat then #1 else #0))
+  let un = andB (%wlt #19 ic) (%wlt ic #30)
+  if orB (%weq a b2-NNONE) (andB (not un) (%weq b b2-NNONE))
+    ret hv2-none
+  if %wlt #10 ic
+    if %wlt ic #17
+      bb <- b2-boolv (the Bool (if %weq ic #11 then %weq a b else if %weq ic #12 then not (%weq a b) else if %weq ic #13 then %wlt a b else if %weq ic #14 then not (%wlt b a) else if %weq ic #15 then %wlt b a else not (%wlt a b)))
+      ret bb
+  if %weq ic #24
+    bb <- b2-boolv (%weq a #0)
+    ret bb
+  if %weq ic #33
+    bb <- b2-boolv (%wlt a b)
+    ret bb
+  if orB (%weq ic #17) (%weq ic #37)
+    r <- b2-cmpv a b
+    ret r
+  if %weq ic #36
+    qq <- b2m-n2 b2-LIT #0 b2-LNAT (the Word (if %weq b #0 then #0 else %wdiv a b))
+    rr <- b2m-n2 b2-LIT #0 b2-LNAT (the Word (if %weq b #0 then a else %wmod a b))
+    xs <- b2-arr #2
+    do b2m-put xs #0 qq
+    do b2m-put xs #1 rr
+    r <- b2-Ctr b2-NTuple xs #0
+    ret r
+  if %weq ic #25
+    r <- b2m-n2 b2-LIT #0 b2-LNAT a
+    ret r
+  if orB nat (%weq ic #27)
+    -- a product past 2^48-1 (tested by division, before the multiply can wrap)
+    if andB (%weq ic #31) (%wlt #0 a)
+      if %wlt (%wdiv #281474976710655 a) b
+        run0 <- rd (b2-HR M #20)
+        if %weq run0 #0
+          ret hv2-none
+        halt (scmd (w-fd-write #2 (list-append "bend: a Nat past the largest immediate 2^48-1" (cons #10 nil))) (λ x → sdone #1))
+    let v = the Word (if %weq ic #27 then %wadd a a else if %weq ic #30 then %wadd a b else if %weq ic #31 then %wmul a b else if %weq ic #32 then %wsub a b else if %weq ic #34 then (if %wlt a b then a else b) else (if %wlt b a then a else b))
+    run <- rd (b2-HR M #20)
+    if andB (%weq run #0) (%wlt #4294967295 v)
+      ret hv2-none
+    if %wlt #281474976710655 v
+      halt (scmd (w-fd-write #2 (list-append "bend: a Nat past the largest immediate 2^48-1" (cons #10 nil))) (λ x → sdone #1))
+    r <- b2m-n2 b2-LIT #0 b2-LNAT v
+    ret r
+  let v = the Word (if %weq ic #1 then b2-m32 (%wadd a b) else if %weq ic #2 then b2-m32 (%wsub (%wadd a #4294967296) b) else if %weq ic #3 then %wand a b else if %weq ic #4 then %wor a b else if %weq ic #5 then %wxor a b else if %weq ic #6 then b2-m32 (%wmul a b) else if %weq ic #7 then (if %weq b #0 then #0 else %wdiv a b) else if %weq ic #8 then (if %weq b #0 then a else %wmod a b) else if %weq ic #9 then (if %wlt #31 b then #0 else b2-m32 (%wshl (%wand a (%wsub (%wshl #1 (%wsub #32 b)) #1)) b)) else if %weq ic #10 then (if %wlt #31 b then #0 else %wshr a b) else if %weq ic #20 then b2-m32 (%wadd a #1) else if %weq ic #21 then b2-m32 (%wshl (%wand a #2147483647) #1) else if %weq ic #22 then %wshr a #1 else if %weq ic #23 then %wxor a #4294967295 else b2-m32 a)
+  r <- b2m-n2 b2-LIT #0 b2-LU32 v
+  ret r
+
+-- weak normal forms in batches: each batch marks the closure heap, runs the machine's wnf loop
+-- for up to 4096 steps (its state in the registers HR 11..14 when it stops short) and rewinds
+-- with its caller's continuation, so the closures a batch made are reclaimed
+B2X : Type
+B2X = Word → Word → Word → Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+
+b2-SUSP : Word
+b2-SUSP = #18446744073709551614
+
+-- an inner region (a batch, a scan) marks only past the first 4096 in its outer region (a book
+-- item, a definition's check, an IO step): the closure mark is one slot, and an inner mark
+-- moves the outer region's rewind past what it made before (an IO step of a few batches then
+-- kept them all)
+fn b2-inner : Word
+  n <- rd (b2-HR M #31)
+  if %wlt n #4096
+    wr (b2-HR M #31) (%wsucc n)
+    ret #0
+  ret #1
+
+fn b2-wnfbatch (rx : B2X) (bk : Word) (md : Word) (a : Word) (b : Word) (c : Word) : Word
+  -- a run's first 8 batches never mark: most runs end within them (a long run reclaims)
+  im <- rd (b2-HR M #34)
+  wr (b2-HR M #34) (%wsucc im)
+  if %wlt im #8
+    wr (b2-HR M #10) #0
+    r0 <- rx md bk a b c #0
+    wr (b2-HR M #7) (the Word (if %weq r0 b2-SUSP then #1 else #0))
+    wr (b2-HR M #8) r0
+    ret #0
+  mk <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  wr (b2-HR M #10) #0
+  r <- rx md bk a b c #0
+  wr (b2-HR M #7) (the Word (if %weq r b2-SUSP then #1 else #0))
+  wr (b2-HR M #8) r
+  halt (scmd (w-sys #901 #0 #0 #0 #0 #0 #0) kq_)
+
+fnrec b2-wnfrun (f : Nat) (rx : B2X) (bk : Word) (md : Word) (a : Word) (b : Word) (c : Word) : Word
+  zero: ret a
+  x <- b2-wnfbatch rx bk md a b c
+  kd <- rd (b2-HR M #7)
+  v <- rd (b2-HR M #8)
+  if %weq kd #0
+    ret v
+  md2 <- rd (b2-HR M #11)
+  a2 <- rd (b2-HR M #12)
+  b2 <- rd (b2-HR M #13)
+  c2 <- rd (b2-HR M #14)
+  jump b2-wnfrun f rx bk md2 a2 b2 c2
+
+@split b2x 1 4 5 7 20 21 50 52
+fnrec b2x (f : Nat) (md : Word) (bk : Word) (a : Word) (b : Word) (c : Word) (d : Word) : Word
+  zero: jump b2-fuelout
+  -- ------------------------------------------------------------------------ higher
+  if %weq md #0
+    -- every 256th step a command, back to the trampoline (term_higher of a large term runs
+    -- its steps as nested calls otherwise, its C stack as deep as the term is large)
+    tz <- rd (b2-HR M #30)
+    wr (b2-HR M #30) (%wsucc tz)
+    if %weq (%wand tz #255) #0
+      tw <- cmd w-now
+      do b2-nop0
+    tg <- b2m-tag a
+    s <- b2m-span a
+    if %weq tg b2-VAR
+      i <- b2m-f a #1
+      if b2-neg i
+        ret a
+      v <- b2m-f a #2
+      if not (%weq v #0)
+        ret v
+      e <- b2-lget (toNat #4294967295) b i
+      if %weq e hv2-none
+        k <- b2m-f a #0
+        r <- b2-Ref k s #0
+        ret r
+      etg <- b2m-tag e
+      if %weq etg b2-CLO
+        p <- b2m-f e #1
+        env2 <- b2m-f e #2
+        pt <- b2-pterm p s
+        jump b2x f #0 bk pt env2 #0 #0
+      es <- b2m-span e
+      ei <- b2m-f e #1
+      if orB (not (%weq es #0)) (orB (%weq s #0) (andB (%weq etg b2-VAR) (b2-neg ei)))
+        ret e
+      cp <- b2-copy e
+      do b2m-wr (%wadd cp #1) s
+      ret cp
+    if %weq tg b2-REF
+      k <- b2m-f a #0
+      kb <-[b2-dpl] b2-nbytes k
+      if b2-isop kb
+        r <- b2-opfail a s kb
+        ret r
+      bb <- b2m-f a #1
+      r <- b2-Ref k s bb
+      ret r
+    if %weq tg b2-SUB
+      i <- b2m-f a #0
+      v <- b2m-f a #1
+      g <- b2m-f a #2
+      sv <- b2m-clo #3 v b #0 #0
+      e2 <- b2-lset b i sv
+      jump b2x f #0 bk g e2 #0 #0
+    if %weq tg b2-LET
+      ks <- b2m-f a #0
+      is <- b2m-f a #1
+      qs <- b2m-f a #2
+      vs <- b2m-f a #3
+      v2 <-! b2x f #10 bk vs b #0 #0
+      cl <- b2m-clo #2 a b #0 #0
+      r <- b2m-n5 b2-LET s ks is qs v2 cl
+      ret r
+    if %weq tg b2-ALL
+      q <- b2m-f a #0
+      k <- b2m-f a #1
+      i <- b2m-f a #2
+      vA <- b2m-f a #3
+      vB <- b2m-f a #4
+      vA2 <-! b2x f #0 bk vA b #0 #0
+      cl <- b2m-clo #1 vB b i #0
+      r <- b2-All q k i vA2 cl s
+      ret r
+    if %weq tg b2-LAM
+      k <- b2m-f a #0
+      i <- b2m-f a #1
+      g <- b2m-f a #2
+      q <- b2m-f a #3
+      cl <- b2m-clo #1 g b i #0
+      r <- b2-Lam k i cl s q
+      ret r
+    if %weq tg b2-TYP
+      g <- b2m-f a #0
+      g2 <-! b2x f #0 bk g b #0 #0
+      r <- b2m-n1 b2-TYP s g2
+      ret r
+    if %weq tg b2-MIN
+      x <- b2m-f a #0
+      y <- b2m-f a #1
+      x2 <-! b2x f #0 bk x b #0 #0
+      y2 <-! b2x f #0 bk y b #0 #0
+      r <- b2m-n2 b2-MIN s x2 y2
+      ret r
+    if %weq tg b2-APP
+      g <- b2m-f a #0
+      x <- b2m-f a #1
+      g2 <-! b2x f #0 bk g b #0 #0
+      x2 <-! b2x f #0 bk x b #0 #0
+      gt <- b2m-tag g2
+      if %weq gt b2-LAM
+        body <- b2m-f g2 #2
+        jump b2x f #2 bk body x2 #0 #0
+      r <- b2-App g2 x2 s
+      ret r
+    if %weq tg b2-ADT
+      k <- b2m-f a #0
+      xs <- b2m-f a #1
+      rs <- b2m-f a #2
+      x2 <-! b2x f #10 bk xs b #0 #0
+      r <- b2-Adt k x2 s rs
+      ret r
+    if %weq tg b2-CTR
+      k <- b2m-f a #0
+      xs <- b2m-f a #1
+      x2 <-! b2x f #10 bk xs b #0 #0
+      r <- b2-Ctr k x2 s
+      ret r
+    if %weq tg b2-MAT
+      k <- b2m-f a #0
+      h <- b2m-f a #1
+      m <- b2m-f a #2
+      h2 <-! b2x f #0 bk h b #0 #0
+      m2 <-! b2x f #0 bk m b #0 #0
+      r <- b2m-n3 b2-MAT s k h2 m2
+      ret r
+    if orB (%weq tg b2-EQL) (%weq tg b2-RWT)
+      x <- b2m-f a #0
+      y <- b2m-f a #1
+      z <- b2m-f a #2
+      x2 <-! b2x f #0 bk x b #0 #0
+      y2 <-! b2x f #0 bk y b #0 #0
+      z2 <-! b2x f #0 bk z b #0 #0
+      r <- b2m-n3 tg s x2 y2 z2
+      ret r
+    if %weq tg b2-ANN
+      x <- b2m-f a #0
+      vT <- b2m-f a #1
+      x2 <-! b2x f #0 bk x b #0 #0
+      vT2 <-! b2x f #0 bk vT b #0 #0
+      r <- b2-Ann x2 vT2 s
+      ret r
+    ret a
+  -- ------------------------------------------------------------------------ apply
+  if %weq md #1
+    g <- b2-strip a
+    gt <- b2m-tag g
+    if %weq gt b2-LAM
+      body <- b2m-f g #2
+      jump b2x f #2 bk body b #0 #0
+    r <- b2-App g b c
+    ret r
+  -- ------------------------------------------------------------------------ closures
+  if %weq md #2
+    atg <- b2m-tag a
+    if not (%weq atg b2-CLO)
+      ret a
+    kd <- b2m-f a #0
+    p1 <- b2m-f a #1
+    p2 <- b2m-f a #2
+    p3 <- b2m-f a #3
+    p4 <- b2m-f a #4
+    if %weq kd #1
+      e2 <- b2-lset p2 p3 b
+      jump b2x f #0 bk p1 e2 #0 #0
+    if %weq kd #2
+      is <- b2m-f p1 #1
+      n <- b2m-len is
+      e2 <- b2-letenv (toNat #4294967295) is b #0 n p2
+      g <- b2m-f p1 #4
+      jump b2x f #0 bk g e2 #0 #0
+    if %weq kd #4
+      y <-! b2x f #2 bk p1 b #0 #0
+      jump b2x f #4 p2 y #0 #0 #0
+    if %weq kd #5
+      xs2 <- b2-lset p4 #0 b
+      jump b2x f #7 bk p1 p2 p3 xs2
+    if %weq kd #6
+      cur <-! b2x f #2 bk p1 b #0 #0
+      xs2 <- b2-lset p3 #0 b
+      jump b2x f #9 bk cur p2 xs2 p4
+    if %weq kd #7
+      ea <- b2m-f p1 #0
+      eT <- b2m-f p1 #2
+      eq <- b2m-n3 b2-EQL #0 ea b eT
+      k8 <- b2m-clo #8 #0 #0 #0 #0
+      r <- b2-All b2-LONE b2-Ne #0 eq k8 p2
+      ret r
+    if %weq kd #8
+      r <- b2-TypQ b2-LONE #0
+      ret r
+    if %weq kd #9
+      xs <- b2-arr1 b
+      r <- b2-Ctr p1 xs #0
+      ret r
+    ret a
+  -- ------------------------------------------------------------------------ lhs_ext
+  if %weq md #7
+    if %weq c #0
+      xs <- b2-ltoarrrev d
+      ctr <- b2-Ctr b xs #0
+      jump b2x f #1 bk a ctr #0 #0
+    cl <- b2m-clo #5 a b (%wsub c #1) d
+    r <- b2-Lam b2-N_ #0 cl #0 b2-NOQ
+    ret r
+  -- ------------------------------------------------------------------------ thunks
+  if %weq md #8
+    kd <- b2m-rd a
+    p1 <- b2m-rd (%wadd a #1)
+    p2 <- b2m-rd (%wadd a #2)
+    p3 <- b2m-rd (%wadd a #3)
+    if %weq kd #1
+      ret p1
+    pv <-! b2x f #8 bk p1 #0 #0 #0
+    if %weq kd #2
+      jump b2x f #1 bk pv p2 p3 #0
+    jump b2x f #7 bk pv p2 p3 #0
+  -- ------------------------------------------------------------------------ match goal
+  if %weq md #9
+    tall <- b2m-rd d
+    bmat <- b2m-rd (%wadd d #1)
+    ctx <- b2m-rd (%wadd d #2)
+    def <- b2m-rd (%wadd d #3)
+    book <- b2m-rd (%wadd d #4)
+    bs <- b2m-span bmat
+    if %weq b #0
+      vB <- b2m-f tall #4
+      bkk <- b2m-f bmat #0
+      xs <- b2-ltoarrrev c
+      ctr <- b2-Ctr bkk xs bs
+      jump b2x f #2 bk vB ctr #0 #0
+    w <-! b2x f #3 book a #0 #0 #0
+    wt <- b2m-tag w
+    if not (%weq wt b2-ALL)
+      r <- b2-fail book ctx "unreachable (a telescope binds its parameters and fields)" #0 bs def
+      ret r
+    cq <- b2m-f w #0
+    ck <- b2m-f w #1
+    ci <- b2m-f w #2
+    cA <- b2m-f w #3
+    cB <- b2m-f w #4
+    tq <- b2m-f tall #0
+    let cdem = the Word (if %weq cq b2-NONE then b2-NONE else if %weq cq b2-LONE then tq else b2-qadd tq tq)
+    cl <- b2m-clo #6 cB (%wsub b #1) c d
+    r <- b2-All cdem ck ci cA cl bs
+    ret r
+  -- ------------------------------------------------------------------------ map
+  if %weq md #10
+    let op = %wshr d #32
+    let j = %wand d #4294967295
+    n <- b2m-len a
+    if %weq c #0
+      o <- b2-arr n
+      jump b2x f #10 bk a b o d
+    if %weq j n
+      ret c
+    x <- b2m-at a j
+    if %weq op #3
+      k <- b2m-at b j
+      y <- b2-cell x k
+      do b2m-put c j y
+      jump b2x f #10 bk a b c (%wsucc d)
+    y <-! b2x f (the Word (if %weq op #0 then #0 else if %weq op #1 then #4 else #6)) bk x b #0 #0
+    do b2m-put c j y
+    jump b2x f #10 bk a b c (%wsucc d)
+  -- ------------------------------------------------------------------------ wnf
+  if %weq md #3
+    sp <- rd (b2-HSP M)
+    wr (b2-HR M #34) #0
+    jump b2-wnfrun (toNat #4294967295) rec__ bk #20 a #0 sp
+  if %weq md #20
+    cnt <- rd (b2-HR M #10)
+    if %wlt #512 cnt
+      wr (b2-HR M #11) #20
+      wr (b2-HR M #12) a
+      wr (b2-HR M #13) b
+      wr (b2-HR M #14) c
+      ret b2-SUSP
+    wr (b2-HR M #10) (%wsucc cnt)
+    tg <- b2m-tag a
+    if %weq tg b2-VAR
+      v <- b2m-f a #2
+      if %weq v #0
+        jump b2x f #21 bk a #0 c #0
+      i <- b2m-f a #1
+      if %weq i b2-M1
+        vt <- b2m-tag v
+        fr <- b2m-rec4 #3 a (the Word (if %weq vt b2-ANN then v else #0)) #0 #0
+        do b2m-push fr
+      jump b2x f #20 bk v #0 c #0
+    if %weq tg b2-ANN
+      x <- b2m-f a #0
+      jump b2x f #20 bk x b c #0
+    if %weq tg b2-MIN
+      x <- b2m-f a #0
+      y <- b2m-f a #1
+      s <- b2m-span a
+      fr <- b2m-rec4 #4 y s #0 #0
+      do b2m-push fr
+      jump b2x f #20 bk x b c #0
+    if %weq tg b2-LET
+      ks <- b2m-f a #0
+      vs <- b2m-f a #3
+      g <- b2m-f a #4
+      cs <-! b2x f #10 bk vs ks #0 #12884901888
+      r <-! b2x f #2 bk g cs #0 #0
+      jump b2x f #20 bk r b c #0
+    if %weq tg b2-APP
+      x <- b2m-f a #1
+      g <- b2m-f a #0
+      s <- b2m-span a
+      xc <- b2-cell x b2-N_
+      fr <- b2m-rec4 #1 xc s #0 #0
+      do b2m-push fr
+      jump b2x f #20 bk g #0 c #0
+    sp <- rd (b2-HSP M)
+    top <- rd (b2-sa M (%wsub sp #1))
+    tk <- b2m-rd top
+    let isapp = andB (%wlt c sp) (%weq tk #1)
+    if %weq tg b2-LAM
+      if not isapp
+        jump b2x f #21 bk a #0 c #0
+      -- the IO lane calls by value, as JS does (an erased binder aside): the argument first,
+      -- under a frame (kind 7) that comes back to this lambda and its lhs
+      xs0 <- b2m-rd (%wadd top #1)
+      runl <- rd (b2-HR M #20)
+      lq <- b2m-f a #3
+      qx <- b2-ipeek xs0
+      if andB (%weq runl #1) (andB (not (%weq lq b2-NONE)) (%weq qx #0))
+        sfr <- b2m-rec4 #7 a b #0 #0
+        do b2m-push sfr
+        jump b2x f #20 bk xs0 #0 c #0
+      wr (b2-HSP M) (%wsub sp #1)
+      x <- b2m-rd (%wadd top #1)
+      s <- b2m-rd (%wadd top #2)
+      ln <- b2m-rd (%wadd b #1)
+      lt <- b2m-rd b
+      th <- b2m-rec4 #2 lt x s #0
+      l2 <- b2m-rec4 th (%wsub ln #1) #0 #0 #0
+      body <- b2m-f a #2
+      r <-! b2x f #2 bk body x #0 #0
+      jump b2x f #20 bk r (the Word (if orB (%weq b #0) (%weq ln #0) then #0 else l2)) c #0
+    if %weq tg b2-MAT
+      if not isapp
+        jump b2x f #21 bk a #0 c #0
+      wr (b2-HSP M) (%wsub sp #1)
+      x <- b2m-rd (%wadd top #1)
+      s <- b2m-rd (%wadd top #2)
+      fr <- b2m-rec4 #2 a x b s
+      do b2m-push fr
+      jump b2x f #20 bk x #0 c #0
+    if %weq tg b2-EFQ
+      ln <- b2m-rd (%wadd b #1)
+      if andB (not (%weq b #0)) (andB (%wlt #0 ln) isapp)
+        th <- b2m-rd b
+        t2 <-! b2x f #8 bk th #0 #0 #0
+        jump b2x f #21 bk t2 #0 c #0
+      jump b2x f #21 bk a #0 c #0
+    if %weq tg b2-RWT
+      e <- b2m-f a #0
+      ew <-! b2x f #3 bk e #0 #0 #0
+      et <- b2m-tag ew
+      if %weq et b2-RFL
+        g <- b2m-f a #2
+        jump b2x f #20 bk g b c #0
+      jump b2x f #21 bk a #0 c #0
+    if %weq tg b2-REF
+      k <- b2m-f a #0
+      tld <- b2-tld bk k
+      if %weq tld #0
+        jump b2x f #21 bk a #0 c #0
+      tdt <- b2m-tag tld
+      n <- b2m-f tld #0
+      if %weq tdt b2-TADT
+        if %weq n #0
+          s <- b2m-span a
+          e0 <- b2-arr #0
+          e1 <- b2-arr #0
+          t2 <- b2-Adt k e0 s e1
+          jump b2x f #21 bk t2 #0 c #0
+        jump b2x f #21 bk a #0 c #0
+      ic <- b2-intrcode k
+      if %wlt #99 ic
+        let ara = b2-arrar ic
+        runa <- b2-runapp (toNat #4294967295) sp c ara #0
+        if %weq runa ara
+          wc <- b2-arrwant (toNat #8) ic sp #0 ara
+          if not (%weq wc #0)
+            ifr <- b2m-rec4 #6 a #0 #0 #0
+            do b2m-push ifr
+            jump b2x f #20 bk wc #0 c #0
+          wr (b2-HR M #35) #0
+          wr (b2-HR M #36) #0
+          ra <- b2-arrop ic sp
+          if %weq ra hv2-none2
+            t35 <- rd (b2-HR M #35)
+            if not (%weq t35 #0)
+              tv <- b2-ipeek t35
+              cv <-! b2x f #28 bk tv #0 #0 #0
+              do b2m-setf t35 #2 cv
+              jump b2x f #20 bk a #0 c #0
+            e36 <- rd (b2-HR M #36)
+            ifr <- b2m-rec4 #6 a #0 #0 #0
+            do b2m-push ifr
+            jump b2x f #20 bk e36 #0 c #0
+          if not (%weq ra hv2-none)
+            wr (b2-HSP M) (%wsub sp ara)
+            jump b2x f #21 bk ra #0 c #0
+      if andB (not (%weq ic #0)) (%wlt ic #100)
+        let ar = the Word (if orB (andB (%wlt #19 ic) (%wlt ic #30)) (orB (andB (%wlt #59 ic) (%wlt ic #90)) (%weq ic #93)) then #1 else #2)
+        run0 <- b2-runapp (toNat #4294967295) sp c ar #0
+        if %weq run0 ar
+          -- each argument a computed cell's value, or the machine evaluates it here (a retry
+          -- frame above the argument frames, kind 6) and comes back: no nested run, so a batch's
+          -- closures are its own
+          fr0 <- rd (b2-sa M (%wsub sp #1))
+          x0 <- b2m-rd (%wadd fr0 #1)
+          q0 <- b2-ipeek x0
+          if %weq q0 #0
+            ifr <- b2m-rec4 #6 a #0 #0 #0
+            do b2m-push ifr
+            jump b2x f #20 bk x0 #0 c #0
+          il <- b2-intrlit q0
+          if %weq il #1
+            fr1 <- rd (b2-sa M (%wsub sp (the Word (if %weq ar #2 then #2 else #1))))
+            x1 <- b2m-rd (%wadd fr1 #1)
+            q1 <- b2-ipeek x1
+            if %weq q1 #0
+              ifr <- b2m-rec4 #6 a #0 #0 #0
+              do b2m-push ifr
+              jump b2x f #20 bk x1 #0 c #0
+            let nat = andB (%wlt #29 ic) (%wlt ic #40)
+            let nat0 = orB nat (orB (%weq ic #26) (orB (%weq ic #27) (%weq ic #71)))
+            k0 <- b2-inat (toNat #64) (the Word (if nat0 then q0 else #0)) #0
+            n0 <- rd (b2-HR M #33)
+            if %weq k0 #2
+              ifr <- b2m-rec4 #6 a #0 #0 #0
+              do b2m-push ifr
+              jump b2x f #20 bk n0 #0 c #0
+            k1 <- b2-inat (toNat #64) (the Word (if nat then q1 else #0)) #0
+            n1 <- rd (b2-HR M #33)
+            if %weq k1 #2
+              ifr <- b2m-rec4 #6 a #0 #0 #0
+              do b2m-push ifr
+              jump b2x f #20 bk n1 #0 c #0
+            let str0 = orB (%weq ic #72) (%wlt #89 ic)
+            let str1 = andB (%wlt #89 ic) (%wlt ic #93)
+            sv <-! b2x f #27 bk (the Word (if str0 then q0 else #0)) #0 #0 #0
+            sv1 <-! b2x f #27 bk (the Word (if str1 then q1 else #0)) #0 #0 #0
+            r <- b2-intr ic (the Word (if %weq k0 #1 then n0 else (if %weq sv #0 then q0 else sv))) (the Word (if %weq k1 #1 then n1 else (if %weq sv1 #0 then q1 else sv1)))
+            if not (%weq r hv2-none)
+              wr (b2-HSP M) (%wsub sp ar)
+              jump b2x f #21 bk r #0 c #0
+      v <- b2m-f tld #3
+      run <- b2-runapp (toNat #4294967295) sp c n #0
+      if orB (%wlt run n) (%weq v #0)
+        jump b2x f #21 bk a #0 c #0
+      th <- b2m-rec4 #1 a #0 #0 #0
+      l2 <- b2m-rec4 th n #0 #0 #0
+      jump b2x f #20 bk v l2 c #0
+    jump b2x f #21 bk a #0 c #0
+  if %weq md #21
+    cnt <- rd (b2-HR M #10)
+    if %wlt #512 cnt
+      wr (b2-HR M #11) #21
+      wr (b2-HR M #12) a
+      wr (b2-HR M #13) b
+      wr (b2-HR M #14) c
+      ret b2-SUSP
+    wr (b2-HR M #10) (%wsucc cnt)
+    sp <- rd (b2-HSP M)
+    if %weq sp c
+      ret a
+    wr (b2-HSP M) (%wsub sp #1)
+    fr <- rd (b2-sa M (%wsub sp #1))
+    kd <- b2m-rd fr
+    p1 <- b2m-rd (%wadd fr #1)
+    p2 <- b2m-rd (%wadd fr #2)
+    p3 <- b2m-rd (%wadd fr #3)
+    p4 <- b2m-rd (%wadd fr #4)
+    if %weq kd #1
+      r <-! b2x f #1 bk a p1 p2 #0
+      jump b2x f #21 bk r #0 c #0
+    -- an intrinsic's argument is evaluated (its cell now holds it): the call again
+    if %weq kd #6
+      jump b2x f #20 bk p1 #0 c #0
+    if %weq kd #7
+      jump b2x f #20 bk p1 p2 c #0
+    if %weq kd #3
+      t2 <- b2-recell a
+      if %weq p2 #0
+        do b2m-setf p1 #2 t2
+      else
+        aT <- b2m-f p2 #1
+        as <- b2m-span p2
+        cT <- b2-cell aT b2-N_
+        an <- b2-Ann t2 cT as
+        do b2m-setf p1 #2 an
+      do b2m-setf p1 #1 b2-M2
+      jump b2x f #20 bk t2 #0 c #0
+    atg <- b2m-tag a
+    aq <- b2m-f a #0
+    if %weq kd #4
+      if andB (%weq atg b2-QUA) (%weq aq b2-MANY)
+        jump b2x f #20 bk p1 #0 c #0
+      if andB (%weq atg b2-QUA) (%weq aq b2-NONE)
+        jump b2x f #21 bk a #0 c #0
+      nf <- b2m-rec4 #5 a p2 #0 #0
+      do b2m-push nf
+      jump b2x f #20 bk p1 #0 c #0
+    if %weq kd #5
+      if andB (%weq atg b2-QUA) (%weq aq b2-MANY)
+        jump b2x f #21 bk p1 #0 c #0
+      p1t <- b2m-tag p1
+      if orB (not (%weq atg b2-QUA)) (andB (%weq aq b2-LONE) (not (%weq p1t b2-QUA)))
+        mn <- b2m-n2 b2-MIN p2 p1 a
+        jump b2x f #21 bk mn #0 c #0
+      jump b2x f #21 bk a #0 c #0
+    -- MAT
+    t2 <- b2-litq a
+    t2t <- b2m-tag t2
+    if %weq t2t b2-CTR
+      jump b2x f #22 bk p1 fr c t2
+    jump b2x f #24 bk #0 fr c #0
+  -- a String argument as a literal: its full normal form read out (0 when it is one already,
+  -- or a is 0)
+  if %weq md #27
+    if %weq a #0
+      ret #0
+    w <- b2-strip a
+    tg <- b2m-tag w
+    if not (%weq tg b2-CTR)
+      ret #0
+    y <-! b2x f #4 bk w #0 #0 #0
+    us <-[b2-dpl] b2-strof (toNat #4294967295) #1 y nil
+    r <- b2-strlit us
+    ret r
+  -- an ALeaf/ANode tree (in whnf) as an array literal (array_node: halves of one length)
+  if %weq md #28
+    t <- b2-strip a
+    tg <- b2m-tag t
+    k <- b2m-f t #0
+    if not (%weq tg b2-CTR)
+      ret t
+    xs <- b2m-f t #1
+    if %weq k b2-NALeaf
+      x <- b2m-at xs #0
+      o <- b2-arr #1
+      do b2m-put o #0 x
+      r <- b2m-n2 b2-LIT #0 b2-LARR o
+      ret r
+    if not (%weq k b2-NANode)
+      ret t
+    l <- b2m-at xs #0
+    rr <- b2m-at xs #1
+    lw <-! b2x f #3 bk l #0 #0 #0
+    lv <-! b2x f #28 bk lw #0 #0 #0
+    rw <-! b2x f #3 bk rr #0 #0 #0
+    rv <-! b2x f #28 bk rw #0 #0 #0
+    lt <- b2m-tag lv
+    rt <- b2m-tag rv
+    if not (andB (%weq lt b2-LIT) (%weq rt b2-LIT))
+      ret t
+    la <- b2m-f lv #1
+    ra <- b2m-f rv #1
+    ln <- b2m-len la
+    rn <- b2m-len ra
+    if not (%weq ln rn)
+      halt (scmd (w-fd-write #2 (list-append "bend: runtime fail-stop" (cons #10 nil))) (λ x → sdone #1))
+    o <- b2-arr (%wadd ln rn)
+    do b2-acopy (toNat #4294967295) la o #0 #0 ln
+    do b2-acopy (toNat #4294967295) ra o #0 ln rn
+    r <- b2m-n2 b2-LIT #0 b2-LARR o
+    ret r
+  if %weq md #22
+    tg <- b2m-tag a
+    if %weq tg b2-ANN
+      x <- b2m-f a #0
+      jump b2x f #22 bk x b c d
+    if %weq tg b2-MAT
+      k <- b2m-f a #0
+      dk <- b2m-f d #0
+      if %weq k dk
+        dxs <- b2m-f d #1
+        n <- b2m-len dxs
+        fl <- b2m-rd (%wadd b #3)
+        h <- b2m-f a #1
+        wr (b2-HR M #1) h
+        if %weq fl #0
+          jump b2x f #23 bk d #0 c n
+        fth <- b2m-rd fl
+        fn0 <- b2m-rd (%wadd fl #1)
+        th <- b2m-rec4 #3 fth dk n #0
+        l2 <- b2m-rec4 th (%wadd (%wsub fn0 #1) n) #0 #0 #0
+        jump b2x f #23 bk d l2 c n
+      m <- b2m-f a #2
+      jump b2x f #22 bk m b c d
+    if %weq tg b2-EFQ
+      jump b2x f #24 bk #0 b c #0
+    fl <- b2m-rd (%wadd b #3)
+    fr <- b2m-rec4 #1 d #0 #0 #0
+    do b2m-push fr
+    jump b2x f #20 bk a fl c #0
+  if %weq md #23
+    if %weq d #0
+      h <- rd (b2-HR M #1)
+      jump b2x f #20 bk h b c #0
+    xs <- b2m-f a #1
+    x <- b2m-at xs (%wsub d #1)
+    xc <- b2-cell x b2-N_
+    fr <- b2m-rec4 #1 xc #0 #0 #0
+    do b2m-push fr
+    jump b2x f #23 bk a b c (%wsub d #1)
+  if %weq md #24
+    ft <- b2m-rd (%wadd b #1)
+    fe <- b2m-rd (%wadd b #2)
+    fl <- b2m-rd (%wadd b #3)
+    fs <- b2m-rd (%wadd b #4)
+    if %weq fl #0
+      r <-! b2x f #1 bk ft fe fs #0
+      jump b2x f #21 bk r #0 c #0
+    th <- b2m-rd fl
+    g <-! b2x f #8 bk th #0 #0 #0
+    r <-! b2x f #1 bk g fe fs #0
+    jump b2x f #21 bk r #0 c #0
+  -- ------------------------------------------------------------------------ snf
+  if %weq md #4
+    t <-! b2x f #3 bk a #0 #0 #0
+    tg <- b2m-tag t
+    s <- b2m-span t
+    if %weq tg b2-TYP
+      g <- b2m-f t #0
+      g2 <-! b2x f #4 bk g #0 #0 #0
+      r <- b2m-n1 b2-TYP s g2
+      ret r
+    if %weq tg b2-MIN
+      x <- b2m-f t #0
+      y <- b2m-f t #1
+      x2 <-! b2x f #4 bk x #0 #0 #0
+      y2 <-! b2x f #4 bk y #0 #0 #0
+      r <- b2m-n2 b2-MIN s x2 y2
+      ret r
+    if %weq tg b2-ALL
+      q <- b2m-f t #0
+      k <- b2m-f t #1
+      i <- b2m-f t #2
+      vA <- b2m-f t #3
+      vB <- b2m-f t #4
+      vA2 <-! b2x f #4 bk vA #0 #0 #0
+      cl <- b2m-clo #4 vB bk #0 #0
+      r <- b2-All q k i vA2 cl s
+      ret r
+    if %weq tg b2-LAM
+      k <- b2m-f t #0
+      i <- b2m-f t #1
+      g <- b2m-f t #2
+      cl <- b2m-clo #4 g bk #0 #0
+      r <- b2-Lam k i cl s b2-NOQ
+      ret r
+    if %weq tg b2-APP
+      g <- b2m-f t #0
+      x <- b2m-f t #1
+      gt <- b2m-tag g
+      if %weq gt b2-REF
+        x2 <-! b2x f #4 bk x #0 #0 #0
+        r <- b2-App g x2 s
+        ret r
+      g2 <-! b2x f #4 bk g #0 #0 #0
+      x2 <-! b2x f #4 bk x #0 #0 #0
+      r <- b2-App g2 x2 s
+      ret r
+    if %weq tg b2-ADT
+      k <- b2m-f t #0
+      xs <- b2m-f t #1
+      rs <- b2m-f t #2
+      x2 <-! b2x f #10 bk xs #0 #0 #4294967296
+      r <- b2-Adt k x2 s rs
+      ret r
+    if %weq tg b2-CTR
+      k <- b2m-f t #0
+      xs <- b2m-f t #1
+      x2 <-! b2x f #10 bk xs #0 #0 #4294967296
+      r <- b2-Ctr k x2 s
+      ret r
+    if %weq tg b2-MAT
+      k <- b2m-f t #0
+      h <- b2m-f t #1
+      m <- b2m-f t #2
+      h2 <-! b2x f #4 bk h #0 #0 #0
+      m2 <-! b2x f #4 bk m #0 #0 #0
+      r <- b2m-n3 b2-MAT s k h2 m2
+      ret r
+    if orB (%weq tg b2-EQL) (%weq tg b2-RWT)
+      x <- b2m-f t #0
+      y <- b2m-f t #1
+      z <- b2m-f t #2
+      x2 <-! b2x f #4 bk x #0 #0 #0
+      y2 <-! b2x f #4 bk y #0 #0 #0
+      z2 <-! b2x f #4 bk z #0 #0 #0
+      r <- b2m-n3 tg s x2 y2 z2
+      ret r
+    ret t
+  -- ------------------------------------------------------------------------ lower
+  if %weq md #6
+    t <- b2-force a
+    tg <- b2m-tag t
+    s <- b2m-span t
+    if %weq tg b2-LET
+      ks <- b2m-f t #0
+      qs <- b2m-f t #2
+      vs <- b2m-f t #3
+      g <- b2m-f t #4
+      n <- b2m-len ks
+      xs <- b2-lowvars ks b
+      is <- b2-iota b n
+      v2 <-! b2x f #10 bk vs b #0 #8589934592
+      body <-! b2x f #2 bk g xs #0 #0
+      g2 <-! b2x f #6 bk body (%wadd b n) #0 #0
+      r <- b2m-n5 b2-LET s ks is qs v2 g2
+      ret r
+    if %weq tg b2-TYP
+      g <- b2m-f t #0
+      g2 <-! b2x f #6 bk g b #0 #0
+      r <- b2m-n1 b2-TYP s g2
+      ret r
+    if %weq tg b2-MIN
+      x <- b2m-f t #0
+      y <- b2m-f t #1
+      x2 <-! b2x f #6 bk x b #0 #0
+      y2 <-! b2x f #6 bk y b #0 #0
+      r <- b2m-n2 b2-MIN s x2 y2
+      ret r
+    if %weq tg b2-ALL
+      q <- b2m-f t #0
+      k <- b2m-f t #1
+      vA <- b2m-f t #3
+      vB <- b2m-f t #4
+      x <- b2-Var k b #0 #0
+      vA2 <-! b2x f #6 bk vA b #0 #0
+      vBx <-! b2x f #2 bk vB x #0 #0
+      vB2 <-! b2x f #6 bk vBx (%wsucc b) #0 #0
+      r <- b2-All q k b vA2 vB2 s
+      ret r
+    if %weq tg b2-LAM
+      k <- b2m-f t #0
+      g <- b2m-f t #2
+      q <- b2m-f t #3
+      x <- b2-Var k b #0 #0
+      gx <-! b2x f #2 bk g x #0 #0
+      g2 <-! b2x f #6 bk gx (%wsucc b) #0 #0
+      r <- b2-Lam k b g2 s q
+      ret r
+    if %weq tg b2-APP
+      g <- b2m-f t #0
+      x <- b2m-f t #1
+      g2 <-! b2x f #6 bk g b #0 #0
+      x2 <-! b2x f #6 bk x b #0 #0
+      r <- b2-App g2 x2 s
+      ret r
+    if %weq tg b2-ADT
+      k <- b2m-f t #0
+      xs <- b2m-f t #1
+      rs <- b2m-f t #2
+      x2 <-! b2x f #10 bk xs b #0 #8589934592
+      r <- b2-Adt k x2 s rs
+      ret r
+    if %weq tg b2-CTR
+      k <- b2m-f t #0
+      xs <- b2m-f t #1
+      x2 <-! b2x f #10 bk xs b #0 #8589934592
+      r <- b2-Ctr k x2 s
+      ret r
+    if %weq tg b2-MAT
+      k <- b2m-f t #0
+      h <- b2m-f t #1
+      m <- b2m-f t #2
+      h2 <-! b2x f #6 bk h b #0 #0
+      m2 <-! b2x f #6 bk m b #0 #0
+      r <- b2m-n3 b2-MAT s k h2 m2
+      ret r
+    if orB (%weq tg b2-EQL) (%weq tg b2-RWT)
+      x <- b2m-f t #0
+      y <- b2m-f t #1
+      z <- b2m-f t #2
+      x2 <-! b2x f #6 bk x b #0 #0
+      y2 <-! b2x f #6 bk y b #0 #0
+      z2 <-! b2x f #6 bk z b #0 #0
+      r <- b2m-n3 tg s x2 y2 z2
+      ret r
+    if %weq tg b2-ANN
+      x <- b2m-f t #0
+      vT <- b2m-f t #1
+      x2 <-! b2x f #6 bk x b #0 #0
+      vT2 <-! b2x f #6 bk vT b #0 #0
+      r <- b2-Ann x2 vT2 s
+      ret r
+    ret t
+  -- ------------------------------------------------------------------------ compare
+  if %weq md #5
+    rigid <- rd (b2-HRIGID M)
+    r1 <-! b2x f #50 rigid a b c d
+    if %weq r1 #1
+      ret #1
+    jump b2x f #50 bk a b c d
+  if %weq md #50
+    if %weq a b
+      ret #1
+    ta <- b2m-tag a
+    tb <- b2m-tag b
+    if andB (%weq ta b2-VAR) (%weq tb b2-VAR)
+      ca <- b2-class a
+      cb <- b2-class b
+      if %weq ca cb
+        ret #1
+    vA <-! b2x f #3 bk a #0 #0 #0
+    vB <-! b2x f #3 bk b #0 #0 #0
+    if %weq vA vB
+      ret #1
+    ia <- b2m-f a #1
+    ib <- b2m-f b #1
+    if andB (%weq c #0) (andB (andB (%weq ta b2-VAR) (%weq ia b2-M2)) (andB (%weq tb b2-VAR) (%weq ib b2-M2)))
+      same <-! b2x f #50 bk vA vB c d
+      l <- b2-class a
+      r <- b2-class b
+      if andB (%weq same #1) (not (%weq l r))
+        do b2m-setf r #3 l
+      ret same
+    vAt0 <- b2m-tag vA
+    vBt0 <- b2m-tag vB
+    if orB (%weq vAt0 b2-LAM) (%weq vBt0 b2-LAM)
+      x <- b2-Var b2-N_ d #0 #0
+      a2 <-! b2x f #1 bk vA x #0 #0
+      b2v <-! b2x f #1 bk vB x #0 #0
+      jump b2x f #50 bk a2 b2v c (%wsucc d)
+    vA1 <- b2-litifctr vA vBt0
+    vAt1 <- b2m-tag vA1
+    vB1 <- b2-litifctr vB vAt1
+    jump b2x f #52 bk vA1 vB1 c d
+  if %weq md #52
+    vAt <- b2m-tag a
+    vBt <- b2m-tag b
+    if %weq vAt b2-VAR
+      ai <- b2m-f a #1
+      bi <- b2m-f b #1
+      ret (hv2-b (andB (%weq vBt b2-VAR) (%weq ai bi)))
+    if %weq vAt b2-REF
+      if not (%weq vBt b2-REF)
+        ret #0
+      ak <- b2m-f a #0
+      bk2 <- b2m-f b #0
+      if %weq ak bk2
+        ret #1
+      ta <- b2-tld bk ak
+      tb <- b2-tld bk bk2
+      na <- b2-tldn ta
+      nb <- b2-tldn tb
+      let n = the Word (if %wlt na nb then nb else na)
+      if %weq n #0
+        ret #0
+      fa <- b2-appvars a d n
+      fb <- b2-appvars b d n
+      jump b2x f #50 bk fa fb c (%wadd d n)
+    if %weq vAt b2-TYP
+      if not (%weq vBt b2-TYP)
+        ret #0
+      ag <- b2m-f a #0
+      bg <- b2m-f b #0
+      if %weq c #0
+        jump b2x f #50 bk ag bg #0 d
+      g <-! b2x f #3 bk ag #0 #0 #0
+      h <-! b2x f #3 bk bg #0 #0 #0
+      gt <- b2m-tag g
+      ht <- b2m-tag h
+      gq <- b2m-f g #0
+      hq <- b2m-f h #0
+      if orB (andB (%weq gt b2-QUA) (%weq gq b2-MANY)) (andB (%weq ht b2-QUA) (not (%weq hq b2-MANY)))
+        ret #1
+      if %weq gt b2-MIN
+        ga <- b2m-f g #0
+        gb <- b2m-f g #1
+        tga <- b2m-n1 b2-TYP #0 ga
+        r1 <-! b2x f #50 bk tga b #1 d
+        if %weq r1 #0
+          ret #0
+        tgb <- b2m-n1 b2-TYP #0 gb
+        jump b2x f #50 bk tgb b #1 d
+      if %weq ht b2-MIN
+        ha <- b2m-f h #0
+        hb <- b2m-f h #1
+        tha <- b2m-n1 b2-TYP #0 ha
+        r1 <-! b2x f #50 bk a tha #1 d
+        if %weq r1 #1
+          ret #1
+        thb <- b2m-n1 b2-TYP #0 hb
+        jump b2x f #50 bk a thb #1 d
+      jump b2x f #50 bk g h #1 d
+    if orB (%weq vAt b2-QNT) (orB (%weq vAt b2-EFQ) (%weq vAt b2-RFL))
+      ret (hv2-b (%weq vBt vAt))
+    if %weq vAt b2-QUA
+      aq <- b2m-f a #0
+      bq <- b2m-f b #0
+      ret (hv2-b (andB (%weq vBt b2-QUA) (%weq aq bq)))
+    if %weq vAt b2-MIN
+      if not (%weq vBt b2-MIN)
+        ret #0
+      x1 <- b2m-f a #0
+      y1 <- b2m-f b #0
+      r1 <-! b2x f #50 bk x1 y1 #0 d
+      if %weq r1 #0
+        ret #0
+      x2 <- b2m-f a #1
+      y2 <- b2m-f b #1
+      jump b2x f #50 bk x2 y2 #0 d
+    if %weq vAt b2-ALL
+      if not (%weq vBt b2-ALL)
+        ret #0
+      aq <- b2m-f a #0
+      bq <- b2m-f b #0
+      if not (%weq aq bq)
+        ret #0
+      ak <- b2m-f a #1
+      aA <- b2m-f a #3
+      bA <- b2m-f b #3
+      r1 <-! b2x f #50 bk bA aA c d
+      if %weq r1 #0
+        ret #0
+      x <- b2-Var ak d #0 #0
+      aB <- b2m-f a #4
+      bB <- b2m-f b #4
+      ax <-! b2x f #2 bk aB x #0 #0
+      bx <-! b2x f #2 bk bB x #0 #0
+      jump b2x f #50 bk ax bx c (%wsucc d)
+    if %weq vAt b2-APP
+      if not (%weq vBt b2-APP)
+        ret #0
+      af <- b2m-f a #0
+      bf <- b2m-f b #0
+      aft <- b2m-tag af
+      bft <- b2m-tag bf
+      if andB (%weq aft b2-REF) (%weq bft b2-REF)
+        afk <- b2m-f af #0
+        bfk <- b2m-f bf #0
+        if not (%weq afk bfk)
+          ret #0
+      else
+        r1 <-! b2x f #50 bk af bf #0 d
+        if %weq r1 #0
+          ret #0
+      ax <- b2m-f a #1
+      bx <- b2m-f b #1
+      jump b2x f #50 bk ax bx #0 d
+    if %weq vAt b2-ADT
+      if not (%weq vBt b2-ADT)
+        ret #0
+      ak <- b2m-f a #0
+      bk2 <- b2m-f b #0
+      axs <- b2m-f a #1
+      bxs <- b2m-f b #1
+      ars <- b2m-f a #2
+      brs <- b2m-f b #2
+      an <- b2m-len axs
+      bn <- b2m-len bxs
+      arn <- b2m-len ars
+      brn <- b2m-len brs
+      if orB (not (%weq ak bk2)) (not (%weq an bn))
+        ret #0
+      if andB (%weq c #0) (not (%weq arn brn))
+        ret #0
+      sub <- b2-subset brs ars
+      if %weq sub #0
+        ret #0
+      jump b2x f #51 bk axs bxs #0 d
+    if %weq vAt b2-CTR
+      if not (%weq vBt b2-CTR)
+        ret #0
+      ak <- b2m-f a #0
+      bk2 <- b2m-f b #0
+      axs <- b2m-f a #1
+      bxs <- b2m-f b #1
+      an <- b2m-len axs
+      bn <- b2m-len bxs
+      if orB (not (%weq ak bk2)) (not (%weq an bn))
+        ret #0
+      jump b2x f #51 bk axs bxs #0 d
+    if %weq vAt b2-LIT
+      if not (%weq vBt b2-LIT)
+        ret #0
+      ak <- b2m-f a #0
+      bk2 <- b2m-f b #0
+      av <- b2m-f a #1
+      bv <- b2m-f b #1
+      if not (%weq ak bk2)
+        ret #0
+      if %weq ak b2-LSTR
+        r <- b2-streq av bv
+        ret r
+      ret (hv2-b (%weq av bv))
+    if %weq vAt b2-MAT
+      if not (%weq vBt b2-MAT)
+        ret #0
+      ak <- b2m-f a #0
+      bk2 <- b2m-f b #0
+      if not (%weq ak bk2)
+        ret #0
+      ah <- b2m-f a #1
+      bh <- b2m-f b #1
+      r1 <-! b2x f #50 bk ah bh #0 d
+      if %weq r1 #0
+        ret #0
+      am <- b2m-f a #2
+      bm <- b2m-f b #2
+      jump b2x f #50 bk am bm #0 d
+    if orB (%weq vAt b2-EQL) (%weq vAt b2-RWT)
+      if not (%weq vBt vAt)
+        ret #0
+      x1 <- b2m-f a #0
+      y1 <- b2m-f b #0
+      r1 <-! b2x f #50 bk x1 y1 #0 d
+      if %weq r1 #0
+        ret #0
+      x2 <- b2m-f a #1
+      y2 <- b2m-f b #1
+      r2 <-! b2x f #50 bk x2 y2 #0 d
+      if %weq r2 #0
+        ret #0
+      x3 <- b2m-f a #2
+      y3 <- b2m-f b #2
+      jump b2x f #50 bk x3 y3 #0 d
+    if %weq vAt b2-HOL
+      ak <- b2m-f a #0
+      bk2 <- b2m-f b #0
+      ret (hv2-b (andB (%weq vBt b2-HOL) (%weq ak bk2)))
+    ret #0
+  if %weq md #51
+    n <- b2m-len a
+    if %weq c n
+      ret #1
+    x <- b2m-at a c
+    y <- b2m-at b c
+    r1 <-! b2x f #50 bk x y #0 d
+    if %weq r1 #0
+      ret #0
+    jump b2x f #51 bk a b (%wsucc c) d
+  ret #0

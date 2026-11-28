@@ -1,0 +1,11 @@
+ief-div : Word → Word → Word
+ief-div a b =
+  let s = %wxor (ief-sgn a) (ief-sgn b)
+  in if orB (ief-isnan a) (ief-isnan b) then ief-NAN
+     else if ief-isinf a then (if ief-isinf b then ief-NAN else ief-inf s)
+     else if ief-isinf b then ief-sbit s
+     else if ief-iszero b then (if ief-iszero a then ief-NAN else ief-inf s)
+     else if ief-iszero a then ief-sbit s
+     else (let n = %wshl (ief-nm a) #38
+               d = ief-nm b
+           in ief-round s (%wdiv n d) (%wsub (%wadd (ief-ne a) #4058) (ief-ne b)) (if %weq (%wmod n d) #0 then #0 else #1))

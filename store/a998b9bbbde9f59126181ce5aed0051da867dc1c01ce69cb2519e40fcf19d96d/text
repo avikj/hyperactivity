@@ -1,0 +1,347 @@
+#!/usr/bin/env python3
+"""Translate a do-notation over the flat heap into hypercubical CPS.
+
+A source file holds plain hypercubical text, except blocks introduced by
+
+  fn NAME (ARG : TYPE)* : RET
+    STMT...
+
+which become `NAME : Word → TYPES… → (RET → Step W Word) → Step W Word` with parameters
+`m ARGS… k`. In expressions the token `M` is the current heap base. Statements:
+
+  x <- rd ADDR          load              wr ADDR VAL          store
+  x <- NAME ARGS…       call a CPS fn     do NAME ARGS…        call, result dropped
+  let x = EXPR          pure binding      ret EXPR             give EXPR to k
+  jump NAME ARGS…       tail call with this k
+  if EXPR               (block)  [elif EXPR (block)]*  [else (block)]
+  out EXPR              write the bytes EXPR (List Word) to stdout
+
+A block that does not end in ret/jump continues with the statements after the if.
+Every continuation's body depends on its bound variable: the heap base is rebound through
+the value just obtained (h4-dep, h4-u), so nothing after a step is evaluated before it.
+"""
+import re, sys
+
+cnt = [0]
+def fresh(p):
+    cnt[0] += 1
+    return f"{p}{cnt[0]}"
+
+def subst_m(expr, m):
+    return re.sub(r'(?<![\w-])M(?![\w-])', m, expr)
+
+def parse_block(lines, i, indent):
+    """returns (list of stmts, next index). stmt = (kind, data, children...)"""
+    out = []
+    while i < len(lines):
+        raw = lines[i]
+        if not raw.strip() or raw.strip().startswith('--'):
+            i += 1; continue
+        ind = len(raw) - len(raw.lstrip(' '))
+        if ind < indent: break
+        if ind > indent:
+            raise SyntaxError(f"unexpected indent at line {i+1}: {raw}")
+        s = raw.strip()
+        # continuation lines: a line ending with an open paren count
+        def opn(t):
+            t = re.sub(r'"[^"]*"', '""', t)
+            return t.count('(') - t.count(')')
+        while opn(s) > 0 and i + 1 < len(lines):
+            i += 1; s += ' ' + lines[i].strip()
+        if s.startswith('if ') or s.startswith('elif ') or s == 'else':
+            kind = s.split(' ', 1)[0]
+            cond = s[len(kind):].strip()
+            body, j = parse_block(lines, i + 1, indent + 2)
+            if kind == 'if':
+                out.append(['if', [(cond, body)], None])
+            elif kind == 'elif':
+                out[-1][1].append((cond, body))
+            else:
+                out[-1][2] = body
+            i = j; continue
+        out.append(['stmt', s])
+        i += 1
+    return out, i
+
+def ends(block):
+    if not block: return False
+    last = block[-1]
+    if last[0] == 'stmt':
+        return last[1].startswith('ret ') or last[1].startswith('jump ') or last[1].startswith('halt ') or last[1].startswith('joinj ')
+    if last[0] == 'if':
+        return all(ends(b) for _, b in last[1]) and last[2] is not None and ends(last[2])
+    return False
+
+MACROS = {}
+SPLITS = {}
+
+def toks(t):
+    """split argument text into top-level atoms (parens and strings kept whole)"""
+    out=[]; cur=''; depth=0; instr=False
+    for c in t.strip():
+        if instr:
+            cur+=c
+            if c=='"': instr=False
+            continue
+        if c=='"': instr=True; cur+=c; continue
+        if c=='(': depth+=1
+        elif c==')': depth-=1
+        if c==' ' and depth==0:
+            if cur: out.append(cur); cur=''
+            continue
+        cur+=c
+    if cur: out.append(cur)
+    return out
+
+def rename_block(block, ren, x):
+    out=[]
+    for st in block:
+        if st[0]=='if':
+            out.append(['if', [(subst_all(c, ren), rename_block(b, ren, x)) for c,b in st[1]],
+                        rename_block(st[2], ren, x) if st[2] is not None else None])
+            continue
+        s=st[1]
+        mm=re.match(r'^ret\s+(.*)$', s)
+        if mm:
+            if x is not None: out.append(['stmt', f"let {x} = {subst_all(mm.group(1), ren)}"])
+            continue
+        out.append(['stmt', subst_all(s, ren)])
+    return out
+
+def subst_all(s, ren):
+    if not ren: return s
+    pat=re.compile(r'(?<![\w-])(' + '|'.join(re.escape(a) for a in sorted(ren, key=len, reverse=True)) + r')(?![\w-])')
+    # leave string literals alone
+    parts=re.split(r'("(?:\\.|[^"\\])*")', s)
+    return ''.join(p if p.startswith('"') else pat.sub(lambda m_: ren[m_.group(1)], p) for p in parts)
+
+def binders(block, acc):
+    for st in block:
+        if st[0]=='if':
+            for c,b in st[1]: binders(b, acc)
+            if st[2] is not None: binders(st[2], acc)
+            continue
+        mm=re.match(r'^(\w[\w-]*)\s*<-', st[1]) or re.match(r'^let\s+(\w[\w-]*)\s*=', st[1])
+        if mm: acc.add(mm.group(1))
+    return acc
+
+def expand(name, x, argtext):
+    params, body = MACROS[name]
+    args = toks(argtext)
+    if len(args)!=len(params): raise SyntaxError(f"macro {name}: {len(params)} params, got {args}")
+    ren={}
+    for b in binders(body, set()): ren[b]=fresh(b.replace('-','_')+'_')
+    pre=[]
+    for p,a in zip(params,args):
+        q=fresh(p.replace('-','_')+'_'); ren[p]=q
+        pre.append(['stmt', f"let {q} = {a}"])
+    return pre + rename_block(body, ren, x)
+
+def mdrun(block):
+    """the leading run of `if %weq md #N` blocks that end"""
+    run=[]
+    for st in block:
+        if st[0]=='if' and len(st[1])==1 and st[2] is None:
+            mm=re.match(r'^%weq md #(\d+)$', st[1][0][0].strip())
+            if mm and ends(st[1][0][1]):
+                run.append((int(mm.group(1)), st)); continue
+        break
+    return run
+
+def gentree(run, rest, m, k):
+    if len(run) <= 2:
+        return gen([st for _,st in run] + rest, m, k)
+    srt=sorted(run, key=lambda x:x[0])
+    h=len(srt)//2
+    piv=srt[h][0]
+    return f"if (%wlt md #{piv}) then ({gentree(srt[:h], rest, m, k)}) else ({gentree(srt[h:], rest, m, k)})"
+
+def gen(block, m, k):
+    run=mdrun(block)
+    if len(run)>=4:
+        return gentree(run, block[len(run):], m, k)
+    if block and block[0][0]=='stmt':
+        s0=block[0][1]
+        mm=re.match(r'^(\w[\w-]*)\s*<-\s*(\S+)\s*(.*)$', s0)
+        if mm and mm.group(2) in MACROS:
+            return gen(expand(mm.group(2), mm.group(1), mm.group(3)) + block[1:], m, k)
+        mm=re.match(r'^do\s+(\S+)\s*(.*)$', s0)
+        if mm and mm.group(1) in MACROS:
+            return gen(expand(mm.group(1), None, mm.group(2)) + block[1:], m, k)
+    if not block:
+        raise SyntaxError("block falls off the end without ret/jump")
+    st = block[0]; rest = block[1:]
+    if st[0] == 'if':
+        branches, els = st[1], st[2]
+        # the paths that run on into the statements after the if: each falling branch, and the
+        # missing else. Two or more share one join continuation (the rest is written once).
+        uses = sum(1 for _, b in branches if not ends(b)) + (1 if els is None or not ends(els) else 0)
+        tiny = len(rest) == 1 and rest[0][0] == 'stmt' and ends(rest)
+        if rest and uses >= 2 and not tiny:
+            j = fresh('jj_'); mj = fresh('mj_')
+            def brj(b):
+                return gen(b if ends(b) else b + [['stmt', f'joinj {j}']], m, k)
+            s = ""
+            for n, (c, b) in enumerate(branches):
+                s += ("if " if n == 0 else " else if ") + f"({subst_m(c, m)}) then ({brj(b)})"
+            s += f" else ({brj(els) if els is not None else j + ' ' + m})"
+            return f"the ((Word → Step W Word) → Step W Word) (λ {j} → {s}) (λ {mj} → {gen(rest, mj, k)})"
+        def br(b):
+            return gen(b if ends(b) else b + rest, m, k)
+        s = ""
+        for n, (c, b) in enumerate(branches):
+            s += ("if " if n == 0 else " else if ") + f"({subst_m(c, m)}) then ({br(b)})"
+        s += f" else ({br(els) if els is not None else gen(rest, m, k)})"
+        return s
+    s = st[1]
+    mm = re.match(r'^(\w[\w-]*)\s*<-\s*rd\s+(.*)$', s)
+    if mm:
+        x, a = mm.group(1), subst_m(mm.group(2), m)
+        m2 = fresh('mm_')
+        return f"scmd (w-load ({a})) (λ {x} → let {m2} = h4-dep {m} {x} in {gen(rest, m2, k)})"
+    mm = re.match(r'^wr\s+(.*)$', s)
+    if mm:
+        a, v = split2(mm.group(1))
+        u = fresh('uu_'); m2 = fresh('mm_')
+        return f"scmd (w-store ({subst_m(a, m)}) ({subst_m(v, m)})) (λ {u} → let {m2} = hv2-u {m} {u} in {gen(rest, m2, k)})"
+    mm = re.match(r'^(\w[\w-]*)\s*<-\s*cmdp\s+(.*)$', s)
+    if mm:
+        x = mm.group(1)
+        return f"scmd ({subst_m(mm.group(2), m)}) (λ {x} → {gen(rest, m, k)})"
+    mm = re.match(r'^(\w[\w-]*)\s*<-\s*cmd\s+(.*)$', s)
+    if mm:
+        x = mm.group(1); m2 = fresh('mm_')
+        return f"scmd ({subst_m(mm.group(2), m)}) (λ {x} → let {m2} = h4-dep {m} {x} in {gen(rest, m2, k)})"
+    mm = re.match(r'^out\s+(.*)$', s)
+    if mm:
+        r = fresh('rr_'); m2 = fresh('mm_')
+        return f"scmd (w-fd-write #1 ({subst_m(mm.group(1), m)})) (λ {r} → let {m2} = h4-dep {m} {r} in {gen(rest, m2, k)})"
+    mm = re.match(r'^(\w[\w-]*)\s*<-!\s*(\S+)\s*(.*)$', s)
+    if mm:
+        x, f, args = mm.group(1), mm.group(2), subst_m(mm.group(3), m)
+        m2 = fresh('mm_')
+        return f"{f} {m} {args} (λ {x} → let {m2} = h4-dep {m} {x} in if (%weq {x} b2-ERR) then ({k} (h4-depl {m2} b2-ERR)) else ({gen(rest, m2, k)}))"
+    mm = re.match(r'^do!\s+(\S+)\s*(.*)$', s)
+    if mm:
+        f, args = mm.group(1), subst_m(mm.group(2), m)
+        x = fresh('dd_'); m2 = fresh('mm_')
+        return f"{f} {m} {args} (λ {x} → let {m2} = h4-dep {m} {x} in if (%weq {x} b2-ERR) then ({k} (h4-depl {m2} b2-ERR)) else ({gen(rest, m2, k)}))"
+    mm = re.match(r'^(\w[\w-]*)\s*<-\[(\S+)\]\s*(\S+)\s*(.*)$', s)
+    if mm:
+        x, dep, f, args = mm.group(1), mm.group(2), mm.group(3), subst_m(mm.group(4), m)
+        m2 = fresh('mm_')
+        return f"{f} {m} {args} (λ {x} → let {m2} = {dep} {m} {x} in {gen(rest, m2, k)})"
+    mm = re.match(r'^(\w[\w-]*)\s*<-\s*(\S+)\s*(.*)$', s)
+    if mm:
+        x, f, args = mm.group(1), mm.group(2), subst_m(mm.group(3), m)
+        m2 = fresh('mm_')
+        return f"{f} {m} {args} (λ {x} → let {m2} = h4-dep {m} {x} in {gen(rest, m2, k)})"
+    mm = re.match(r'^do\s+(\S+)\s*(.*)$', s)
+    if mm:
+        f, args = mm.group(1), subst_m(mm.group(2), m)
+        x = fresh('dd_'); m2 = fresh('mm_')
+        return f"{f} {m} {args} (λ {x} → let {m2} = h4-dep {m} {x} in {gen(rest, m2, k)})"
+    mm = re.match(r'^let\s+(\w[\w-]*)\s*=\s*(.*)$', s)
+    if mm:
+        return f"let {mm.group(1)} = {subst_m(mm.group(2), m)} in {gen(rest, m, k)}"
+    mm = re.match(r'^ret\s+(.*)$', s)
+    if mm:
+        return f"{k} (h4-depl {m} ({subst_m(mm.group(1), m)}))"
+    mm = re.match(r'^joinj\s+(\S+)$', s)
+    if mm:
+        return f"{mm.group(1)} {m}"
+    mm = re.match(r'^jump\s+(\S+)\s*(.*)$', s)
+    if mm:
+        return f"{mm.group(1)} {m} {subst_m(mm.group(2), m)} {k}"
+    mm = re.match(r'^halt\s+(.*)$', s)
+    if mm:
+        return subst_m(mm.group(1), m)
+    raise SyntaxError(f"unknown statement: {s}")
+
+def split2(t):
+    """split 'A B' into two parenthesized-or-atomic expressions"""
+    t = t.strip(); depth = 0
+    for i, c in enumerate(t):
+        if c == '(': depth += 1
+        elif c == ')': depth -= 1
+        elif c == ' ' and depth == 0:
+            return t[:i], t[i+1:].strip()
+    raise SyntaxError(f"wr needs two operands: {t}")
+
+def translate(src):
+    lines = src.split('\n'); out = []; i = 0
+    while i < len(lines):
+        l = lines[i]
+        ms = re.match(r'^@split\s+(\S+)\s+(.*)$', l)
+        if ms:
+            SPLITS[ms.group(1)] = [int(x) for x in ms.group(2).split()]
+            i += 1; continue
+        mc = re.match(r'^macro\s+(\S+)\s*(.*)$', l)
+        if mc:
+            ps = re.findall(r'\((\w[\w-]*)\s*:', mc.group(2))
+            body, j = parse_block(lines, i + 1, 2)
+            MACROS[mc.group(1)] = (ps, body)
+            i = j; continue
+        mr = re.match(r'^fnrec\s+(\S+)\s*(.*?)\s*:\s*([^:]*)$', l)
+        if mr and not l.startswith('  '):
+            name, params, ret = mr.group(1), mr.group(2), mr.group(3).strip()
+            ps = re.findall(r'\((\w[\w-]*)\s*:\s*([^()]*(?:\([^()]*\)[^()]*)*)\)', params)
+            types = ' → '.join(t.strip() for _, t in ps)
+            sig = f"{name} : Word → {types} → ({ret} → Step W Word) → Step W Word"
+            body, j = parse_block(lines, i + 1, 2)
+            z = body[0]
+            assert z[0] == 'stmt' and z[1].startswith('zero:'), name
+            zb = [['stmt', z[1][5:].strip()]]
+            fname = ps[0][0]
+            rest = ' '.join(n for n, _ in ps[1:])
+            if name in SPLITS:
+                # the mode run cut into parts, each its own definition taking the recursion as a
+                # function `rec__` (this definition at the smaller fuel): each is checked alone
+                cuts = SPLITS[name]
+                run = mdrun(body[1:]); after = body[1+len(run):]
+                rtypes = ' → '.join(t.strip() for _, t in ps[1:])
+                rty = f"(Word → {rtypes} → ({ret} → Step W Word) → Step W Word)"
+                pat = re.compile(r'(?<![\w-])' + re.escape(name) + r'\s+' + re.escape(fname) + r'(?![\w-])')
+                def rw(b):
+                    o = []
+                    for x in b:
+                        if x[0] == 'stmt': o.append(['stmt', pat.sub('rec__', x[1])])
+                        else: o.append(['if', [(pat.sub('rec__', c), rw(bb)) for c, bb in x[1]], rw(x[2]) if x[2] is not None else None])
+                    return o
+                bounds = [0] + cuts + [1 << 62]
+                parts = []
+                for q in range(len(bounds) - 1):
+                    sel = [st for md_, st in run if bounds[q] <= md_ < bounds[q+1]]
+                    pn = f"{name}-p{q}"
+                    out.append(f"{pn} : Word → {rty} → {rtypes} → ({ret} → Step W Word) → Step W Word")
+                    out.append(f"{pn} mm_ rec__ {rest} kq_ =\n  " + gen(rw(sel + after), 'mm_', 'kq_'))
+                    parts.append(pn)
+                recx = f"(λ mz__ → {name} mz__ {fname})"
+                def tree(lo, hi):
+                    if hi - lo == 1: return f"{parts[lo]} mm_ {recx} {rest} kq_"
+                    h = (lo + hi) // 2
+                    return f"if (%wlt md #{bounds[h]}) then ({tree(lo, h)}) else ({tree(h, hi)})"
+                out.append(sig)
+                out.append(f"{name} mm_ zero {rest} kq_ =\n  " + gen(zb, 'mm_', 'kq_'))
+                out.append(f"{name} mm_ (suc {fname}) {rest} kq_ =\n  " + tree(0, len(parts)))
+                i = j; continue
+            out.append(sig)
+            out.append(f"{name} mm_ zero {rest} kq_ =\n  " + gen(zb, 'mm_', 'kq_'))
+            out.append(f"{name} mm_ (suc {fname}) {rest} kq_ =\n  " + gen(body[1:], 'mm_', 'kq_'))
+            i = j; continue
+        mm = re.match(r'^fn\s+(\S+)\s*(.*?)\s*:\s*([^:]*)$', l)
+        if mm and not l.startswith('  '):
+            name, params, ret = mm.group(1), mm.group(2), mm.group(3).strip()
+            ps = re.findall(r'\((\w[\w-]*)\s*:\s*([^()]*(?:\([^()]*\)[^()]*)*)\)', params)
+            types = ' → '.join(t.strip() for _, t in ps)
+            sig = f"{name} : Word → " + (types + " → " if types else "") + f"({ret} → Step W Word) → Step W Word"
+            body, j = parse_block(lines, i + 1, 2)
+            argn = ' '.join(n for n, _ in ps)
+            out.append(sig)
+            out.append(f"{name} mm_ {argn}{' ' if argn else ''}kq_ =\n  " + gen(body, 'mm_', 'kq_'))
+            i = j; continue
+        out.append(l); i += 1
+    return '\n'.join(out)
+
+if __name__ == '__main__':
+    sys.stdout.write(translate(open(sys.argv[1]).read()))

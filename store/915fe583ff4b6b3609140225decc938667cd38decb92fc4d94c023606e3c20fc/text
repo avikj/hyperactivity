@@ -1,0 +1,6 @@
+-- reading the result back from memory
+hr-peek-d : Nat → Word → Word → (Word → Step W Word) → (Word → Step W Word) → Step W Word
+hr-peek-d zero m p kd km =
+  if hv2-isvar p then scmd (w-load (hr-va m (hv2-val p))) (λ v → if %weq v #0 then kd p else km (%wsub v #1))
+  else kd p
+hr-peek-d (suc d) m p kd km = hr-peek-d d m p kd (λ p1 → hr-peek-d d m p1 kd km)

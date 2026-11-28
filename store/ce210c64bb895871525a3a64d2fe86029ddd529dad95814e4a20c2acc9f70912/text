@@ -1,0 +1,337 @@
+-- The interaction loop, one function: a step either performs one pending link (the stack at m+48,
+-- links being how every rule connects its wires) or pops a redex and performs its rule; every
+-- memory step is an inline load or store, and the loop calls itself in tail position, so no step
+-- makes a closure (only a call, which places its definition in a loop of its own). The fuel is
+-- the number of steps of a batch; kd is taken when no work is left, km when the fuel is spent.
+hr-go : Nat → Word → List Hv2Def → (Word → Step W Word) → (Word → Step W Word) → Step W Word
+hr-go zero m book kd km = km m
+hr-go (suc f) m book kd km =
+  scmd (w-load (%wadd m #48)) (λ v0 →
+  if %weq v0 #0 then (scmd (w-load (%wadd m #16)) (λ v1 →
+  if %weq v1 #0 then kd m
+  else (scmd (w-load (hr-ba m (%wsub v1 #1))) (λ v2 →
+  scmd (w-store (%wadd m #16) (%wsub v1 #1)) (λ u3 →
+  let m4 = hv2-u m u3 in
+  scmd (w-load (%wadd m4 #24)) (λ v5 →
+  scmd (w-store (%wadd m4 #24) (%wsucc v5)) (λ u6 →
+  let m7 = hv2-u m4 u6 in
+  let a8 = hv2-fst v2
+      b9 = hv2-snd v2
+      rt10 = andB (%weq (hv2-tag a8) hv2-REF) (%weq b9 hv2-root)
+      sw11 = andB (not rt10) (%wlt (hv2-tag b9) (hv2-tag a8))
+      ra12 = if sw11 then b9 else a8
+      rb13 = if sw11 then a8 else b9
+      r14 = if rt10 then hv2-CALL else hv2-rule (hv2-tag ra12) (hv2-tag rb13)
+  in if %weq r14 hv2-LINK then (scmd (w-load (%wadd m7 #48)) (λ v16 →
+  scmd (w-store (hr-lsa m7 v16) (hv2-pair (ra12) (rb13))) (λ u17 →
+  let m18 = hv2-u m7 u17 in
+  scmd (w-store (%wadd m18 #48) (%wsucc v16)) (λ u19 →
+  let m20 = hv2-u m18 u19 in
+  hr-go f m20 book kd km))))
+  else if %weq r14 hv2-CALL then (let d15 = hv2-def-at (%wand (hv2-val ra12) #268435455) book in
+    if %weq (hv2-tag rb13) hv2-DUP
+    then (if hv2d-safe d15 then (scmd (w-load (hr-na m7 (hv2-val rb13))) (λ v21 →
+  scmd (w-load (%wadd m7 #32)) (λ v22 →
+  scmd (w-store (hr-fna m7 v22) (hv2-val rb13)) (λ u23 →
+  let m24 = hv2-u m7 u23 in
+  scmd (w-store (%wadd m24 #32) (%wsucc v22)) (λ u25 →
+  let m26 = hv2-u m24 u25 in
+  scmd (w-load (%wadd m26 #48)) (λ v27 →
+  scmd (w-store (hr-lsa m26 v27) (hv2-pair (ra12) (hv2-fst v21))) (λ u28 →
+  let m29 = hv2-u m26 u28 in
+  scmd (w-store (%wadd m29 #48) (%wsucc v27)) (λ u30 →
+  let m31 = hv2-u m29 u30 in
+  scmd (w-load (%wadd m31 #48)) (λ v32 →
+  scmd (w-store (hr-lsa m31 v32) (hv2-pair (ra12) (hv2-snd v21))) (λ u33 →
+  let m34 = hv2-u m31 u33 in
+  scmd (w-store (%wadd m34 #48) (%wsucc v32)) (λ u35 →
+  let m36 = hv2-u m34 u35 in
+  hr-go f m36 book kd km)))))))))))
+          else hv2-err-clone m7)
+    else hr-call-def d15 m7 rb13 (λ mc → hr-go f mc book kd km))
+  else if %weq r14 hv2-VOID then hr-go f m7 book kd km
+  else if %weq r14 hv2-ERAS then (scmd (w-load (hr-na m7 (hv2-val rb13))) (λ v37 →
+  scmd (w-load (%wadd m7 #32)) (λ v38 →
+  scmd (w-store (hr-fna m7 v38) (hv2-val rb13)) (λ u39 →
+  let m40 = hv2-u m7 u39 in
+  scmd (w-store (%wadd m40 #32) (%wsucc v38)) (λ u41 →
+  let m42 = hv2-u m40 u41 in
+  scmd (w-load (%wadd m42 #48)) (λ v43 →
+  scmd (w-store (hr-lsa m42 v43) (hv2-pair (ra12) (hv2-fst v37))) (λ u44 →
+  let m45 = hv2-u m42 u44 in
+  scmd (w-store (%wadd m45 #48) (%wsucc v43)) (λ u46 →
+  let m47 = hv2-u m45 u46 in
+  scmd (w-load (%wadd m47 #48)) (λ v48 →
+  scmd (w-store (hr-lsa m47 v48) (hv2-pair (ra12) (hv2-snd v37))) (λ u49 →
+  let m50 = hv2-u m47 u49 in
+  scmd (w-store (%wadd m50 #48) (%wsucc v48)) (λ u51 →
+  let m52 = hv2-u m50 u51 in
+  hr-go f m52 book kd km)))))))))))
+  else if %weq r14 hv2-ANNI then (scmd (w-load (hr-na m7 (hv2-val ra12))) (λ v53 →
+  scmd (w-load (hr-na m7 (hv2-val rb13))) (λ v54 →
+  scmd (w-load (%wadd m7 #32)) (λ v55 →
+  scmd (w-store (hr-fna m7 v55) (hv2-val ra12)) (λ u56 →
+  let m57 = hv2-u m7 u56 in
+  scmd (w-store (%wadd m57 #32) (%wsucc v55)) (λ u58 →
+  let m59 = hv2-u m57 u58 in
+  scmd (w-load (%wadd m59 #32)) (λ v60 →
+  scmd (w-store (hr-fna m59 v60) (hv2-val rb13)) (λ u61 →
+  let m62 = hv2-u m59 u61 in
+  scmd (w-store (%wadd m62 #32) (%wsucc v60)) (λ u63 →
+  let m64 = hv2-u m62 u63 in
+  scmd (w-load (%wadd m64 #48)) (λ v65 →
+  scmd (w-store (hr-lsa m64 v65) (hv2-pair (hv2-fst v53) (hv2-fst v54))) (λ u66 →
+  let m67 = hv2-u m64 u66 in
+  scmd (w-store (%wadd m67 #48) (%wsucc v65)) (λ u68 →
+  let m69 = hv2-u m67 u68 in
+  scmd (w-load (%wadd m69 #48)) (λ v70 →
+  scmd (w-store (hr-lsa m69 v70) (hv2-pair (hv2-snd v53) (hv2-snd v54))) (λ u71 →
+  let m72 = hv2-u m69 u71 in
+  scmd (w-store (%wadd m72 #48) (%wsucc v70)) (λ u73 →
+  let m74 = hv2-u m72 u73 in
+  hr-go f m74 book kd km)))))))))))))))
+  else if %weq r14 hv2-COMM then (scmd (w-load (hr-na m7 (hv2-val ra12))) (λ v75 →
+  scmd (w-load (hr-na m7 (hv2-val rb13))) (λ v76 →
+  scmd (w-load (%wadd m7 #32)) (λ v77 →
+  scmd (w-store (hr-fna m7 v77) (hv2-val ra12)) (λ u78 →
+  let m79 = hv2-u m7 u78 in
+  scmd (w-store (%wadd m79 #32) (%wsucc v77)) (λ u80 →
+  let m81 = hv2-u m79 u80 in
+  scmd (w-load (%wadd m81 #32)) (λ v82 →
+  scmd (w-store (hr-fna m81 v82) (hv2-val rb13)) (λ u83 →
+  let m84 = hv2-u m81 u83 in
+  scmd (w-store (%wadd m84 #32) (%wsucc v82)) (λ u85 →
+  let m86 = hv2-u m84 u85 in
+  scmd (w-load (%wadd m86 #32)) (λ v87 →
+  scmd (w-load (hr-fna m86 (%wsub v87 #1))) (λ v88 →
+  scmd (w-load (%wadd m86 #0)) (λ v89 →
+  let i90 = if %weq v87 #0 then v89 else v88 in
+  scmd (w-store (%wadd m86 #32) (if %weq v87 #0 then #0 else %wsub v87 #1)) (λ u91 →
+  let m92 = hv2-u m86 u91 in
+  scmd (w-store (%wadd m92 #0) (if %weq v87 #0 then %wsucc v89 else v89)) (λ u93 →
+  let m94 = hv2-u m92 u93 in
+  scmd (w-load (%wadd m94 #32)) (λ v95 →
+  scmd (w-load (hr-fna m94 (%wsub v95 #1))) (λ v96 →
+  scmd (w-load (%wadd m94 #0)) (λ v97 →
+  let i98 = if %weq v95 #0 then v97 else v96 in
+  scmd (w-store (%wadd m94 #32) (if %weq v95 #0 then #0 else %wsub v95 #1)) (λ u99 →
+  let m100 = hv2-u m94 u99 in
+  scmd (w-store (%wadd m100 #0) (if %weq v95 #0 then %wsucc v97 else v97)) (λ u101 →
+  let m102 = hv2-u m100 u101 in
+  scmd (w-load (%wadd m102 #32)) (λ v103 →
+  scmd (w-load (hr-fna m102 (%wsub v103 #1))) (λ v104 →
+  scmd (w-load (%wadd m102 #0)) (λ v105 →
+  let i106 = if %weq v103 #0 then v105 else v104 in
+  scmd (w-store (%wadd m102 #32) (if %weq v103 #0 then #0 else %wsub v103 #1)) (λ u107 →
+  let m108 = hv2-u m102 u107 in
+  scmd (w-store (%wadd m108 #0) (if %weq v103 #0 then %wsucc v105 else v105)) (λ u109 →
+  let m110 = hv2-u m108 u109 in
+  scmd (w-load (%wadd m110 #32)) (λ v111 →
+  scmd (w-load (hr-fna m110 (%wsub v111 #1))) (λ v112 →
+  scmd (w-load (%wadd m110 #0)) (λ v113 →
+  let i114 = if %weq v111 #0 then v113 else v112 in
+  scmd (w-store (%wadd m110 #32) (if %weq v111 #0 then #0 else %wsub v111 #1)) (λ u115 →
+  let m116 = hv2-u m110 u115 in
+  scmd (w-store (%wadd m116 #0) (if %weq v111 #0 then %wsucc v113 else v113)) (λ u117 →
+  let m118 = hv2-u m116 u117 in
+  scmd (w-load (%wadd m118 #40)) (λ v119 →
+  scmd (w-load (hr-fva m118 (%wsub v119 #1))) (λ v120 →
+  scmd (w-load (%wadd m118 #8)) (λ v121 →
+  let i122 = if %weq v119 #0 then v121 else v120 in
+  scmd (w-store (%wadd m118 #40) (if %weq v119 #0 then #0 else %wsub v119 #1)) (λ u123 →
+  let m124 = hv2-u m118 u123 in
+  scmd (w-store (%wadd m124 #8) (if %weq v119 #0 then %wsucc v121 else v121)) (λ u125 →
+  let m126 = hv2-u m124 u125 in
+  scmd (w-load (%wadd m126 #40)) (λ v127 →
+  scmd (w-load (hr-fva m126 (%wsub v127 #1))) (λ v128 →
+  scmd (w-load (%wadd m126 #8)) (λ v129 →
+  let i130 = if %weq v127 #0 then v129 else v128 in
+  scmd (w-store (%wadd m126 #40) (if %weq v127 #0 then #0 else %wsub v127 #1)) (λ u131 →
+  let m132 = hv2-u m126 u131 in
+  scmd (w-store (%wadd m132 #8) (if %weq v127 #0 then %wsucc v129 else v129)) (λ u133 →
+  let m134 = hv2-u m132 u133 in
+  scmd (w-load (%wadd m134 #40)) (λ v135 →
+  scmd (w-load (hr-fva m134 (%wsub v135 #1))) (λ v136 →
+  scmd (w-load (%wadd m134 #8)) (λ v137 →
+  let i138 = if %weq v135 #0 then v137 else v136 in
+  scmd (w-store (%wadd m134 #40) (if %weq v135 #0 then #0 else %wsub v135 #1)) (λ u139 →
+  let m140 = hv2-u m134 u139 in
+  scmd (w-store (%wadd m140 #8) (if %weq v135 #0 then %wsucc v137 else v137)) (λ u141 →
+  let m142 = hv2-u m140 u141 in
+  scmd (w-load (%wadd m142 #40)) (λ v143 →
+  scmd (w-load (hr-fva m142 (%wsub v143 #1))) (λ v144 →
+  scmd (w-load (%wadd m142 #8)) (λ v145 →
+  let i146 = if %weq v143 #0 then v145 else v144 in
+  scmd (w-store (%wadd m142 #40) (if %weq v143 #0 then #0 else %wsub v143 #1)) (λ u147 →
+  let m148 = hv2-u m142 u147 in
+  scmd (w-store (%wadd m148 #8) (if %weq v143 #0 then %wsucc v145 else v145)) (λ u149 →
+  let m150 = hv2-u m148 u149 in
+  scmd (w-store (hr-na m150 i90) (hv2-pair (hv2-port hv2-VAR i122) (hv2-port hv2-VAR i130))) (λ u151 →
+  let m152 = hv2-u m150 u151 in
+  scmd (w-store (hr-na m152 i98) (hv2-pair (hv2-port hv2-VAR i138) (hv2-port hv2-VAR i146))) (λ u153 →
+  let m154 = hv2-u m152 u153 in
+  scmd (w-store (hr-na m154 i106) (hv2-pair (hv2-port hv2-VAR i122) (hv2-port hv2-VAR i138))) (λ u155 →
+  let m156 = hv2-u m154 u155 in
+  scmd (w-store (hr-na m156 i114) (hv2-pair (hv2-port hv2-VAR i130) (hv2-port hv2-VAR i146))) (λ u157 →
+  let m158 = hv2-u m156 u157 in
+  scmd (w-load (%wadd m158 #48)) (λ v159 →
+  scmd (w-store (hr-lsa m158 v159) (hv2-pair (hv2-port (hv2-tag rb13) i90) (hv2-fst v75))) (λ u160 →
+  let m161 = hv2-u m158 u160 in
+  scmd (w-store (%wadd m161 #48) (%wsucc v159)) (λ u162 →
+  let m163 = hv2-u m161 u162 in
+  scmd (w-load (%wadd m163 #48)) (λ v164 →
+  scmd (w-store (hr-lsa m163 v164) (hv2-pair (hv2-port (hv2-tag rb13) i98) (hv2-snd v75))) (λ u165 →
+  let m166 = hv2-u m163 u165 in
+  scmd (w-store (%wadd m166 #48) (%wsucc v164)) (λ u167 →
+  let m168 = hv2-u m166 u167 in
+  scmd (w-load (%wadd m168 #48)) (λ v169 →
+  scmd (w-store (hr-lsa m168 v169) (hv2-pair (hv2-port (hv2-tag ra12) i106) (hv2-fst v76))) (λ u170 →
+  let m171 = hv2-u m168 u170 in
+  scmd (w-store (%wadd m171 #48) (%wsucc v169)) (λ u172 →
+  let m173 = hv2-u m171 u172 in
+  scmd (w-load (%wadd m173 #48)) (λ v174 →
+  scmd (w-store (hr-lsa m173 v174) (hv2-pair (hv2-port (hv2-tag ra12) i114) (hv2-snd v76))) (λ u175 →
+  let m176 = hv2-u m173 u175 in
+  scmd (w-store (%wadd m176 #48) (%wsucc v174)) (λ u177 →
+  let m178 = hv2-u m176 u177 in
+  hr-go f m178 book kd km)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  else if %weq r14 hv2-OPER then (scmd (w-load (hr-na m7 (hv2-val rb13))) (λ v179 →
+  scmd (w-load (%wadd m7 #32)) (λ v180 →
+  scmd (w-store (hr-fna m7 v180) (hv2-val rb13)) (λ u181 →
+  let m182 = hv2-u m7 u181 in
+  scmd (w-store (%wadd m182 #32) (%wsucc v180)) (λ u183 →
+  let m184 = hv2-u m182 u183 in
+  if %weq (hv2-tag (hv2-fst v179)) hv2-NUM
+  then (scmd (w-load (%wadd m184 #48)) (λ v185 →
+  scmd (w-store (hr-lsa m184 v185) (hv2-pair (hv2-port hv2-NUM (hv2-operate (hv2-val ra12) (hv2-val (hv2-fst v179)))) (hv2-snd v179))) (λ u186 →
+  let m187 = hv2-u m184 u186 in
+  scmd (w-store (%wadd m187 #48) (%wsucc v185)) (λ u188 →
+  let m189 = hv2-u m187 u188 in
+  hr-go f m189 book kd km))))
+  else (scmd (w-load (%wadd m184 #32)) (λ v190 →
+  scmd (w-load (hr-fna m184 (%wsub v190 #1))) (λ v191 →
+  scmd (w-load (%wadd m184 #0)) (λ v192 →
+  let i193 = if %weq v190 #0 then v192 else v191 in
+  scmd (w-store (%wadd m184 #32) (if %weq v190 #0 then #0 else %wsub v190 #1)) (λ u194 →
+  let m195 = hv2-u m184 u194 in
+  scmd (w-store (%wadd m195 #0) (if %weq v190 #0 then %wsucc v192 else v192)) (λ u196 →
+  let m197 = hv2-u m195 u196 in
+  scmd (w-store (hr-na m197 i193) (hv2-pair ra12 (hv2-snd v179))) (λ u198 →
+  let m199 = hv2-u m197 u198 in
+  scmd (w-load (%wadd m199 #48)) (λ v200 →
+  scmd (w-store (hr-lsa m199 v200) (hv2-pair (hv2-fst v179) (hv2-port hv2-OPR i193))) (λ u201 →
+  let m202 = hv2-u m199 u201 in
+  scmd (w-store (%wadd m202 #48) (%wsucc v200)) (λ u203 →
+  let m204 = hv2-u m202 u203 in
+  hr-go f m204 book kd km)))))))))))))))
+  else (scmd (w-load (hr-na m7 (hv2-val rb13))) (λ v205 →
+  scmd (w-load (%wadd m7 #32)) (λ v206 →
+  scmd (w-store (hr-fna m7 v206) (hv2-val rb13)) (λ u207 →
+  let m208 = hv2-u m7 u207 in
+  scmd (w-store (%wadd m208 #32) (%wsucc v206)) (λ u209 →
+  let m210 = hv2-u m208 u209 in
+  if %weq (hv2-u24 (hv2-val ra12)) #0
+  then (scmd (w-load (%wadd m210 #32)) (λ v211 →
+  scmd (w-load (hr-fna m210 (%wsub v211 #1))) (λ v212 →
+  scmd (w-load (%wadd m210 #0)) (λ v213 →
+  let i214 = if %weq v211 #0 then v213 else v212 in
+  scmd (w-store (%wadd m210 #32) (if %weq v211 #0 then #0 else %wsub v211 #1)) (λ u215 →
+  let m216 = hv2-u m210 u215 in
+  scmd (w-store (%wadd m216 #0) (if %weq v211 #0 then %wsucc v213 else v213)) (λ u217 →
+  let m218 = hv2-u m216 u217 in
+  scmd (w-store (hr-na m218 i214) (hv2-pair (hv2-snd v205) (hv2-port hv2-ERA #0))) (λ u219 →
+  let m220 = hv2-u m218 u219 in
+  scmd (w-load (%wadd m220 #48)) (λ v221 →
+  scmd (w-store (hr-lsa m220 v221) (hv2-pair (hv2-port hv2-CON i214) (hv2-fst v205))) (λ u222 →
+  let m223 = hv2-u m220 u222 in
+  scmd (w-store (%wadd m223 #48) (%wsucc v221)) (λ u224 →
+  let m225 = hv2-u m223 u224 in
+  hr-go f m225 book kd km))))))))))
+  else (scmd (w-load (%wadd m210 #32)) (λ v226 →
+  scmd (w-load (hr-fna m210 (%wsub v226 #1))) (λ v227 →
+  scmd (w-load (%wadd m210 #0)) (λ v228 →
+  let i229 = if %weq v226 #0 then v228 else v227 in
+  scmd (w-store (%wadd m210 #32) (if %weq v226 #0 then #0 else %wsub v226 #1)) (λ u230 →
+  let m231 = hv2-u m210 u230 in
+  scmd (w-store (%wadd m231 #0) (if %weq v226 #0 then %wsucc v228 else v228)) (λ u232 →
+  let m233 = hv2-u m231 u232 in
+  scmd (w-load (%wadd m233 #32)) (λ v234 →
+  scmd (w-load (hr-fna m233 (%wsub v234 #1))) (λ v235 →
+  scmd (w-load (%wadd m233 #0)) (λ v236 →
+  let i237 = if %weq v234 #0 then v236 else v235 in
+  scmd (w-store (%wadd m233 #32) (if %weq v234 #0 then #0 else %wsub v234 #1)) (λ u238 →
+  let m239 = hv2-u m233 u238 in
+  scmd (w-store (%wadd m239 #0) (if %weq v234 #0 then %wsucc v236 else v236)) (λ u240 →
+  let m241 = hv2-u m239 u240 in
+  scmd (w-store (hr-na m241 i229) (hv2-pair (hv2-port hv2-ERA #0) (hv2-port hv2-CON i237))) (λ u242 →
+  let m243 = hv2-u m241 u242 in
+  scmd (w-store (hr-na m243 i237) (hv2-pair (hv2-port hv2-NUM (hv2-new hv2-TY-U24 (%wsub (hv2-u24 (hv2-val ra12)) #1))) (hv2-snd v205))) (λ u244 →
+  let m245 = hv2-u m243 u244 in
+  scmd (w-load (%wadd m245 #48)) (λ v246 →
+  scmd (w-store (hr-lsa m245 v246) (hv2-pair (hv2-port hv2-CON i229) (hv2-fst v205))) (λ u247 →
+  let m248 = hv2-u m245 u247 in
+  scmd (w-store (%wadd m248 #48) (%wsucc v246)) (λ u249 →
+  let m250 = hv2-u m248 u249 in
+  hr-go f m250 book kd km))))))))))))))))))))))))))))
+  else (scmd (w-load (hr-lsa m (%wsub v0 #1))) (λ v251 →
+  scmd (w-store (%wadd m #48) (%wsub v0 #1)) (λ u252 →
+  let m253 = hv2-u m u252 in
+  let la254 = hv2-fst v251
+      lb255 = hv2-snd v251
+      sw256 = andB (not (hv2-isvar la254)) (hv2-isvar lb255)
+      a257 = if sw256 then lb255 else la254
+      b258 = if sw256 then la254 else lb255
+  in if not (hv2-isvar a257) then (scmd (w-load (%wadd m253 #16)) (λ v259 →
+  scmd (w-store (hr-ba m253 v259) (hv2-pair (a257) (b258))) (λ u260 →
+  let m261 = hv2-u m253 u260 in
+  scmd (w-store (%wadd m261 #16) (%wsucc v259)) (λ u262 →
+  let m263 = hv2-u m261 u262 in
+  hr-go f m263 book kd km))))
+  else if hv2-isvar b258 then (scmd (w-load (hr-va m253 (hv2-val b258))) (λ v264 →
+  if %weq v264 #0 then (scmd (w-load (hr-va m253 (hv2-val a257))) (λ v265 →
+  scmd (w-store (hr-va m253 (hv2-val a257)) (%wsucc b258)) (λ u266 →
+  let m267 = hv2-u m253 u266 in
+  if %weq v265 #0 then hr-go f m267 book kd km
+  else (scmd (w-store (hr-va m267 (hv2-val a257)) (#0)) (λ u268 →
+  let m269 = hv2-u m267 u268 in
+  scmd (w-load (%wadd m269 #40)) (λ v270 →
+  scmd (w-store (hr-fva m269 v270) (hv2-val a257)) (λ u271 →
+  let m272 = hv2-u m269 u271 in
+  scmd (w-store (%wadd m272 #40) (%wsucc v270)) (λ u273 →
+  let m274 = hv2-u m272 u273 in
+  scmd (w-load (%wadd m274 #48)) (λ v275 →
+  scmd (w-store (hr-lsa m274 v275) (hv2-pair (%wsub v265 #1) (b258))) (λ u276 →
+  let m277 = hv2-u m274 u276 in
+  scmd (w-store (%wadd m277 #48) (%wsucc v275)) (λ u278 →
+  let m279 = hv2-u m277 u278 in
+  hr-go f m279 book kd km)))))))))))
+  else (scmd (w-store (hr-va m253 (hv2-val b258)) (#0)) (λ u280 →
+  let m281 = hv2-u m253 u280 in
+  scmd (w-load (%wadd m281 #40)) (λ v282 →
+  scmd (w-store (hr-fva m281 v282) (hv2-val b258)) (λ u283 →
+  let m284 = hv2-u m281 u283 in
+  scmd (w-store (%wadd m284 #40) (%wsucc v282)) (λ u285 →
+  let m286 = hv2-u m284 u285 in
+  scmd (w-load (%wadd m286 #48)) (λ v287 →
+  scmd (w-store (hr-lsa m286 v287) (hv2-pair (a257) (%wsub v264 #1))) (λ u288 →
+  let m289 = hv2-u m286 u288 in
+  scmd (w-store (%wadd m289 #48) (%wsucc v287)) (λ u290 →
+  let m291 = hv2-u m289 u290 in
+  hr-go f m291 book kd km))))))))))
+  else (scmd (w-load (hr-va m253 (hv2-val a257))) (λ v292 →
+  scmd (w-store (hr-va m253 (hv2-val a257)) (%wsucc b258)) (λ u293 →
+  let m294 = hv2-u m253 u293 in
+  if %weq v292 #0 then hr-go f m294 book kd km
+  else (scmd (w-store (hr-va m294 (hv2-val a257)) (#0)) (λ u295 →
+  let m296 = hv2-u m294 u295 in
+  scmd (w-load (%wadd m296 #40)) (λ v297 →
+  scmd (w-store (hr-fva m296 v297) (hv2-val a257)) (λ u298 →
+  let m299 = hv2-u m296 u298 in
+  scmd (w-store (%wadd m299 #40) (%wsucc v297)) (λ u300 →
+  let m301 = hv2-u m299 u300 in
+  scmd (w-load (%wadd m301 #48)) (λ v302 →
+  scmd (w-store (hr-lsa m301 v302) (hv2-pair (%wsub v292 #1) (b258))) (λ u303 →
+  let m304 = hv2-u m301 u303 in
+  scmd (w-store (%wadd m304 #48) (%wsucc v302)) (λ u305 →
+  let m306 = hv2-u m304 u305 in
+  hr-go f m306 book kd km)))))))))))))))

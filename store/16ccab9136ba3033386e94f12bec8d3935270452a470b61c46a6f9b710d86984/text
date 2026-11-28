@@ -1,0 +1,18 @@
+#!/bin/bash
+# ports/test-hvm2.sh HVM2 BIN: HVM2's run snapshots (tests/snapshots/run__file@*, run__io_file@*) run by BIN;
+# a program passes when its Result line (or, for IO programs, its output) equals the snapshot's
+HVM2=$(cd "$1" && pwd); BIN=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
+cd "$HVM2"; pass=0; fail=0
+for snap in tests/snapshots/run__file@*.snap; do
+  n=${snap#tests/snapshots/run__file@}; n=${n%.snap}; f=${n//__//}
+  if [ -f tests/programs/$f ]; then src=tests/programs/$f; elif [ -f examples/$f ]; then src=examples/$f; else continue; fi
+  want=$(grep '^Result:' $snap); got=$(timeout ${T:-600} "$BIN" $src 2>&1 | grep '^Result:')
+  if [ "$got" = "$want" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $n"; fi
+done
+for snap in tests/snapshots/run__io_file@*.snap; do
+  n=${snap#tests/snapshots/run__io_file@}; n=${n%.snap}; f=${n//__//}
+  if [ -f tests/programs/$f ]; then src=tests/programs/$f; elif [ -f examples/$f ]; then src=examples/$f; else continue; fi
+  want=$(tail -n +5 $snap | sed '1{/^---$/d}'); got=$(echo "io from the tests" | timeout ${T:-600} "$BIN" $src 2>&1 | grep -v "^- ")
+  if [ "$got" = "$want" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL io $n"; fi
+done
+echo "pass $pass fail $fail"

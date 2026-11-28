@@ -1,0 +1,11 @@
+-- set (s true) or delete (s false); the fuel bounds the key's length in binary digits
+hv2t-set : Nat → Hv2T → Word → Bool → Word → Hv2T
+hv2t-set zero t k s v = t
+hv2t-set (suc n) hv2t-e k s v =
+  if %weq k #0 then hv2t-n s v hv2t-e hv2t-e
+  else if %weq (%wand k #1) #0 then hv2t-n false #0 (hv2t-set n hv2t-e (%wshr k #1) s v) hv2t-e
+  else hv2t-n false #0 hv2t-e (hv2t-set n hv2t-e (%wshr k #1) s v)
+hv2t-set (suc n) (hv2t-n s0 v0 l r) k s v =
+  if %weq k #0 then hv2t-n s v l r
+  else if %weq (%wand k #1) #0 then hv2t-n s0 v0 (hv2t-set n l (%wshr k #1) s v) r
+  else hv2t-n s0 v0 l (hv2t-set n r (%wshr k #1) s v)

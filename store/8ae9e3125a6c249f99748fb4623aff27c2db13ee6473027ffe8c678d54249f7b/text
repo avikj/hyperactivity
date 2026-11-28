@@ -1,0 +1,5 @@
+hio-fn-close : HioE → Word → Word → (Word → Step W Word) → Step W Word
+hio-fn-close e m argm k =
+  if not (hio-isnum argm) then hio-err-no m #9 k
+  else if %wlt (hio-u24 argm) #3 then hio-ok m hio-era k
+  else hio-rec m (hio-u24 argm) (λ r → if %weq r #0 then hio-err-no m #9 k else hio-close-rec m (hio-u24 argm) r k)

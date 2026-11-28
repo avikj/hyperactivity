@@ -1,0 +1,25 @@
+b2-fsqrt : Word → Word
+b2-fsqrt x =
+  if orB (ief-isnan x) (ief-iszero x) then x
+  else if %weq (ief-sgn x) #1 then ief-NAN
+  else if ief-isinf x then x
+  else (let be = %wand (%wshr x #23) #255
+            fr = %wand x #8388607
+            me = the (Word × Word) (if %weq be #0 then b2-fnorm (toNat #24) fr #1001 else (%wor fr #8388608 , %wadd be #1000))
+            odd = %weq (%wand (snd me) #1) #1
+            m2 = the Word (if odd then %wshl (fst me) #1 else fst me)
+            e2 = the Word (if odd then %wsub (snd me) #1 else snd me)
+            n = %wshl m2 #38
+            q = b2-isqrt n
+            r = %wsub n (%wmul q q)
+            l = b2-blen q #0
+            sh = %wsub l #24
+            qm = %wshr q sh
+            rest = %wand q (%wsub (%wshl #1 sh) #1)
+            half = %wshl #1 (%wsub sh #1)
+            up = orB (%wlt half rest) (andB (%weq rest half) (orB (not (%weq r #0)) (%weq (%wand qm #1) #1)))
+            qr = the Word (if up then %wsucc qm else qm)
+            p0 = %wsub (%wadd sh (%wshr e2 #1)) #444
+            q2 = the Word (if %weq qr #16777216 then #8388608 else qr)
+            p1 = the Word (if %weq qr #16777216 then %wsucc p0 else p0)
+        in %wor (%wshl p1 #23) (%wsub q2 #8388608))

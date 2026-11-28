@@ -1,0 +1,23 @@
+-- op on u24 values a and b (src/hvm.c operate, case TY_U24)
+hv2-op-u : Word → Word → Word → Word
+hv2-op-u op a b =
+  if %weq op #4 then %wadd a b
+  else if %weq op #5 then hv2-subm a b
+  else if %weq op #6 then hv2-subm b a
+  else if %weq op #7 then %wmul a b
+  else if %weq op #8 then (if %weq b #0 then #0 else %wdiv a b)
+  else if %weq op #9 then (if %weq a #0 then #0 else %wdiv b a)
+  else if %weq op #10 then (if %weq b #0 then #0 else %wmod a b)
+  else if %weq op #11 then (if %weq a #0 then #0 else %wmod b a)
+  else if %weq op #12 then hv2-b (%weq a b)
+  else if %weq op #13 then hv2-b (not (%weq a b))
+  else if %weq op #14 then hv2-b (%wlt a b)
+  else if %weq op #15 then hv2-b (%wlt b a)
+  else if %weq op #16 then %wand a b
+  else if %weq op #17 then %wor a b
+  else if %weq op #18 then hv2-xor a b
+  else if %weq op #19 then %wand (%wshl a (%wand b #31)) hv2-m24
+  else if %weq op #20 then %wand (%wshl b (%wand a #31)) hv2-m24
+  else if %weq op #21 then %wshr a (%wand b #31)
+  else if %weq op #22 then %wshr b (%wand a #31)
+  else #0

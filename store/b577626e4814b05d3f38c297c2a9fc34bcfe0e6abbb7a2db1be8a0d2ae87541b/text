@@ -1,0 +1,6 @@
+-- mode 0: the uses in the term t; mode 1: in the fields at loc, from i to n
+h4-cu : Word → Nat → Word → Word → Word → Word → Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+h4-cu m zero md t loc i n lvl tgt ext k =
+  k (h4-depl m (#0))
+h4-cu m (suc f) md t loc i n lvl tgt ext k =
+  if (%weq md #0) then (if (h4-istgt t lvl tgt ext) then (k (h4-depl m (#1))) else (h4-cu m f #1 #0 (h4-val t) #0 (h4-arity t) lvl tgt ext k)) else (if (not (%wlt i n)) then (k (h4-depl m (#0))) else (h4-rd m (%wadd loc i) (λ c → let m40 = h4-dep m c in h4-cu m40 f #0 c #0 #0 #0 lvl tgt ext (λ a → let m41 = h4-dep m40 a in h4-cu m41 f #1 #0 loc (%wsucc i) n lvl tgt ext (λ b → let m42 = h4-dep m41 b in k (h4-depl m42 ((%wadd a b))))))))

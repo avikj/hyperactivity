@@ -1,0 +1,7 @@
+-- exp of a signed fixed-point value, rounded (|z| below 2^P·128)
+ief-ex-ser : Nat → Word → List Word → List Word → Word → Word × List Word → Word × List Word
+ief-ex-ser zero k t r sr acc = acc
+ief-ex-ser (suc n) k t r sr acc =
+  if bg-is0 t then acc
+  else ief-ex-ser n (%wsucc k) (bg-divw (bg-shr (bg-mul t r) ief-P) (%wsucc k)) r sr
+         (sx-add acc (if %weq (%wand k #1) #0 then (#0 , t) else (sr , t)))

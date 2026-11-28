@@ -1,0 +1,9 @@
+-- an UTF-8 codepoint (src/hvm.c parse_utf8)
+h4-utf8 : List Word → Word × List Word
+h4-utf8 nil = (#0 , nil)
+h4-utf8 (cons b0 r) =
+  if %wlt b0 #128 then (b0 , r)
+  else if %weq (%wand b0 #224) #192 then (%wor (%wshl (%wand b0 #31) #6) (%wand (hv2-nth #0 r) #63) , hv2-drop1 r)
+  else if %weq (%wand b0 #240) #224 then (%wor (%wshl (%wand b0 #15) #12) (%wor (%wshl (%wand (hv2-nth #0 r) #63) #6) (%wand (hv2-nth #1 r) #63)) , hv2-drop1 (hv2-drop1 r))
+  else if %weq (%wand b0 #248) #240 then (%wor (%wshl (%wand b0 #7) #18) (%wor (%wshl (%wand (hv2-nth #0 r) #63) #12) (%wor (%wshl (%wand (hv2-nth #1 r) #63) #6) (%wand (hv2-nth #2 r) #63))) , hv2-drop1 (hv2-drop1 (hv2-drop1 r)))
+  else (b0 , r)

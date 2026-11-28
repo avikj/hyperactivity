@@ -1,0 +1,769 @@
+
+-- ===========================================================================================
+-- The printer (src/hvm.c print_term*): its state in the header (m+136 lambdas bound, m+144 dups
+-- bound, m+152 dups printed, m+160 next lambda name, m+168 next dup name, m+176 quoted, m+184
+-- the ALO binds list, m+192 its length) and its name tables in their own area
+-- ===========================================================================================
+
+h4-dp2 : Word → Word × Word → Word
+h4-dp2 m p = h4-dep m (fst p)
+
+h4-dpb : Word → Bool → Word
+h4-dpb m b = if b then m else %wadd m #0
+
+h4-dps : Word → H4S → Word
+h4-dps m s = h4-dep m (h4s-flab s)
+
+h4-PLL : Word → Word
+h4-PLL m = %wadd m #136
+h4-PDL : Word → Word
+h4-PDL m = %wadd m #144
+h4-PDP : Word → Word
+h4-PDP m = %wadd m #152
+h4-PNL : Word → Word
+h4-PNL m = %wadd m #160
+h4-PND : Word → Word
+h4-PND m = %wadd m #168
+h4-PQ : Word → Word
+h4-PQ m = %wadd m #176
+h4-PS : Word → Word
+h4-PS m = %wadd m #184
+h4-PSL : Word → Word
+h4-PSL m = %wadd m #192
+
+h4-plam : Word → Word → Word
+h4-plam m i = %wadd (h4-plamb m) (%wshl (%wand i #65535) #4)
+
+h4-pdup : Word → Word → Word
+h4-pdup m i = %wadd (h4-pdupb m) (%wmul (%wand i #65535) #24)
+
+-- the name of the lambda whose body is at loc, bound on first sight (print_state_lam)
+fnrec h4-plook (f : Nat) (loc : Word) (i : Word) : Word
+  zero: jump h4-rterr "print_state: too many lambdas"
+  n <- rd (h4-PLL M)
+  if %weq i n
+    nm <- rd (h4-PNL M)
+    wr (h4-PNL M) (%wsucc nm)
+    wr (h4-plam M i) loc
+    wr (%wadd (h4-plam M i) #8) nm
+    wr (h4-PLL M) (%wsucc n)
+    ret nm
+  l <- rd (h4-plam M i)
+  if %weq l loc
+    nm <- rd (%wadd (h4-plam M i) #8)
+    ret nm
+  jump h4-plook f loc (%wsucc i)
+
+-- the name of the dup node whose value is at loc (print_state_dup)
+fnrec h4-dlook (f : Nat) (loc : Word) (lab : Word) (i : Word) : Word
+  zero: jump h4-rterr "print_state: too many dups"
+  n <- rd (h4-PDL M)
+  if %weq i n
+    nm <- rd (h4-PND M)
+    wr (h4-PND M) (%wsucc nm)
+    wr (h4-pdup M i) loc
+    wr (%wadd (h4-pdup M i) #8) nm
+    wr (%wadd (h4-pdup M i) #16) lab
+    wr (h4-PDL M) (%wsucc n)
+    ret nm
+  l <- rd (h4-pdup M i)
+  if %weq l loc
+    nm <- rd (%wadd (h4-pdup M i) #8)
+    ret nm
+  jump h4-dlook f loc lab (%wsucc i)
+
+-- the idx-th entry of an ALO binds list (alo_subst_get)
+fnrec h4-lsget (f : Nat) (ls : Word) (idx : Word) : Word
+  zero: ret ls
+  if orB (%weq idx #0) (%weq ls #0)
+    ret ls
+  x <- rd (h4-ha M (%wadd ls #1))
+  jump h4-lsget f (h4-val x) (%wsub idx #1)
+
+-- an APP/DRY spine: its length (at most 256) and its head
+fnrec h4-spine (f : Nat) (t : Word) (n : Word) : Word × Word
+  zero: ret (n , t)
+  if andB (%wlt n #256) (orB (%weq (h4-tag t) h4-APP) (%weq (h4-tag t) h4-DRY))
+    x <- rd (h4-ha M (h4-val t))
+    jump h4-spine f x (%wsucc n)
+  ret (n , t)
+
+-- a nat's SUC count and what is under them
+fnrec h4-natc (f : Nat) (t : Word) (n : Word) : Word × Word
+  zero: ret (n , t)
+  if andB (%weq (h4-tag t) h4-C01) (%weq (h4-ext t) h4-SUC)
+    x <- rd (h4-ha M (h4-val t))
+    jump h4-natc f x (%wsucc n)
+  ret (n , t)
+
+-- utf-8 bytes, and escapes (print_utf8, print_utf8_can_escape, print_utf8_escape; md 0 char,
+-- md 1 string)
+h4-utf8enc : Word → List Word
+h4-utf8enc c =
+  if %wlt c #128 then cons c nil
+  else if %wlt c #2048 then cons (%wor #192 (%wshr c #6)) (cons (%wor #128 (%wand c #63)) nil)
+  else if %wlt c #65536 then cons (%wor #224 (%wshr c #12)) (cons (%wor #128 (%wand (%wshr c #6) #63)) (cons (%wor #128 (%wand c #63)) nil))
+  else cons (%wor #240 (%wshr c #18)) (cons (%wor #128 (%wand (%wshr c #12) #63)) (cons (%wor #128 (%wand (%wshr c #6) #63)) (cons (%wor #128 (%wand c #63)) nil)))
+
+h4-canesc : Word → Word → Bool
+h4-canesc c md =
+  if %wlt #1114111 c then false
+  else if andB (%wlt #55295 c) (%wlt c #57344) then false
+  else if orB (%weq c #10) (orB (%weq c #9) (orB (%weq c #13) (orB (%weq c #0) (%weq c #92)))) then true
+  else if andB (%weq c #39) (%weq md #0) then true
+  else if andB (%weq c #34) (%weq md #1) then true
+  else if %wlt c #32 then false
+  else if %weq c #127 then false
+  else if andB (%wlt #127 c) (%wlt c #160) then false
+  else true
+
+h4-esc : Word → Word → List Word
+h4-esc c md =
+  if %weq c #10 then (cons #92 (cons #110 nil))
+  else if %weq c #9 then (cons #92 (cons #116 nil))
+  else if %weq c #13 then (cons #92 (cons #114 nil))
+  else if %weq c #0 then (cons #92 (cons #48 nil))
+  else if %weq c #92 then (cons #92 (cons #92 nil))
+  else if andB (%weq c #39) (%weq md #0) then (cons #92 (cons #39 nil))
+  else if andB (%weq c #34) (%weq md #1) then (cons #92 (cons #34 nil))
+  else h4-utf8enc c
+
+-- a string's list is all escapable characters (print_ctr's check)
+fnrec h4-isstr (f : Nat) (x : Word) : Bool
+  zero: ret true
+  if andB (%weq (h4-tag x) h4-C02) (%weq (h4-ext x) h4-CON)
+    h <- rd (h4-ha M (h4-val x))
+    if not (andB (%weq (h4-tag h) h4-C01) (%weq (h4-ext h) h4-CHR))
+      ret false
+    hv <- rd (h4-ha M (h4-val h))
+    if not (%weq (h4-tag hv) h4-NUM)
+      ret false
+    if not (h4-canesc (h4-val hv) #1)
+      ret false
+    nx <- rd (h4-ha M (%wadd (h4-val x) #1))
+    jump h4-isstr f nx
+  ret true
+
+fnrec h4-lend (f : Nat) (x : Word) : Word
+  zero: ret x
+  if andB (%weq (h4-tag x) h4-C02) (%weq (h4-ext x) h4-CON)
+    nx <- rd (h4-ha M (%wadd (h4-val x) #1))
+    jump h4-lend f nx
+  ret x
+
+fnrec h4-strbytes (f : Nat) (x : Word) (acc : List Word) : List Word
+  zero: ret acc
+  if %weq (h4-tag x) h4-C02
+    h <- rd (h4-ha M (h4-val x))
+    c <- rd (h4-ha M (h4-val h))
+    nx <- rd (h4-ha M (%wadd (h4-val x) #1))
+    jump h4-strbytes f nx (list-append acc (h4-esc (h4-val c) #1))
+  ret acc
+
+h4-namestr : List (List Word) → Word → List Word
+h4-namestr tab n = let s = h4-tget-go n tab in if %weq (cli-len s) #0 then h4-nick n else s
+
+h4-matname : List (List Word) → Word → List Word
+h4-matname tab n =
+  if %weq n h4-ZER then "0n" else if %weq n h4-SUC then "1n+" else if %weq n h4-NIL then "[]"
+  else if %weq n h4-CON then "<>" else list-append "#" (h4-namestr tab n)
+
+h4-sub0 : List Word
+h4-sub0 = "₀"
+h4-sub1 : List Word
+h4-sub1 = "₁"
+
+-- the printer: md 0 a term at depth d; 1 an APP/DRY spine; 2 the spine's a arguments; 3 a
+-- constructor; 4 list elements (a 1 the first); 5 constructor fields from a; 6 a match chain;
+-- 7 the dups found (a 1 needs the separator); 8 a term in another mode (a: quoted | len << 1 |
+-- binds << 32)
+fnrec h4-pr (f : Nat) (fu : Nat) (tab : List (List Word)) (md : Word) (t : Word) (d : Word) (a : Word) : Word
+  zero: jump h4-rterr "print: too deep"
+  let tg = h4-tag t
+  let loc = h4-val t
+  if %weq md #0
+    q <- rd (h4-PQ M)
+    if %weq tg h4-NAM
+      out (h4-nick (h4-ext t))
+      ret #0
+    if orB (%weq tg h4-DRY) (%weq tg h4-APP)
+      jump h4-pr f fu tab #1 t d #0
+    if orB (%weq tg h4-BJV) (orB (%weq tg h4-BJ0) (%weq tg h4-BJ1))
+      sl <- rd (h4-PSL M)
+      ss <- rd (h4-PS M)
+      let usebind = andB (not (%weq q #0)) (andB (%wlt #0 loc) (not (%wlt sl loc)))
+      bind <- h4-lsget fu ss (the Word (if usebind then %wsub sl loc else #0))
+      if andB usebind (not (%weq bind #0))
+        v <- rd (h4-ha M bind)
+        if h4-sub v
+          jump h4-pr f fu tab #8 (h4-clrsub v) d #0
+        if %weq tg h4-BJV
+          jump h4-pr f fu tab #8 (h4-new h4-VAR #0 bind) d #0
+        jump h4-pr f fu tab #8 (h4-new (the Word (if %weq tg h4-BJ0 then h4-DP0 else h4-DP1)) (h4-ext t) bind) d #0
+      let nm0 = the Word (if %wlt sl loc then %wsub loc sl else #0)
+      let nm = the Word (if %wlt d nm0 then #0 else nm0)
+      if %weq tg h4-BJV
+        out (h4-alname nm #97)
+        ret #0
+      out (h4-alname nm #65)
+      out (the (List Word) (if %weq tg h4-BJ0 then h4-sub0 else h4-sub1))
+      ret #0
+    if %weq tg h4-NUM
+      out (ce-dec loc)
+      ret #0
+    if %weq tg h4-REF
+      out (list-append "@" (h4-namestr tab (h4-ext t)))
+      ret #0
+    if %weq tg h4-ERA
+      out "&{}"
+      ret #0
+    if %weq tg h4-ANY
+      out "*"
+      ret #0
+    if %weq tg h4-VAR
+      v <- rd (h4-ha M loc)
+      if andB (not (%weq loc #0)) (h4-sub v)
+        jump h4-pr f fu tab #8 (h4-clrsub v) d #0
+      nm <- h4-plook fu loc #0
+      out (h4-alname nm #97)
+      ret #0
+    if orB (%weq tg h4-DP0) (%weq tg h4-DP1)
+      v <- rd (h4-ha M loc)
+      if andB (not (%weq loc #0)) (h4-sub v)
+        jump h4-pr f fu tab #8 (h4-clrsub v) d #0
+      nm <- h4-dlook fu loc (h4-ext t) #0
+      out (h4-alname nm #65)
+      out (the (List Word) (if %weq tg h4-DP0 then h4-sub0 else h4-sub1))
+      ret #0
+    if %weq tg h4-LAM
+      out "λ"
+      if not (%weq q #0)
+        out (h4-alname (%wsucc d) #97)
+        out "."
+        b <- rd (h4-ha M loc)
+        jump h4-pr f fu tab #0 b (%wsucc d) #0
+      nm <- h4-plook fu loc #0
+      out (h4-alname nm #97)
+      out "."
+      b <- rd (h4-ha M loc)
+      jump h4-pr f fu tab #0 b (%wsucc d) #0
+    if %weq tg h4-SUP
+      out (list-append "&" (list-append (h4-nick (h4-ext t)) "{"))
+      x <- rd (h4-ha M loc)
+      do h4-pr f fu tab #0 x d #0
+      out ","
+      y <- rd (h4-ha M (%wadd loc #1))
+      do h4-pr f fu tab #0 y d #0
+      out "}"
+      ret #0
+    if %weq tg h4-DUP
+      if not (%weq q #0)
+        out (list-append "!" (list-append (h4-alname (%wsucc d) #65) (list-append "&" (list-append (h4-nick (h4-ext t)) "="))))
+        x <- rd (h4-ha M loc)
+        do h4-pr f fu tab #0 x d #0
+        out ";"
+        y <- rd (h4-ha M (%wadd loc #1))
+        jump h4-pr f fu tab #0 y (%wsucc d) #0
+      do h4-dlook fu loc (h4-ext t) #0
+      y <- rd (h4-ha M (%wadd loc #1))
+      jump h4-pr f fu tab #0 y d #0
+    if h4-MATISH tg
+      out "λ{"
+      do h4-pr f fu tab #6 t d #0
+      out "}"
+      ret #0
+    if %weq tg h4-USE
+      out "λ{"
+      x <- rd (h4-ha M loc)
+      do h4-pr f fu tab #0 x d #0
+      out "}"
+      ret #0
+    if h4-isctr tg
+      jump h4-pr f fu tab #3 t d #0
+    if %weq tg h4-OP2
+      out "("
+      x <- rd (h4-ha M loc)
+      do h4-pr f fu tab #0 x d #0
+      out (list-append " " (list-append (h4-opsym (h4-ext t)) " "))
+      y <- rd (h4-ha M (%wadd loc #1))
+      do h4-pr f fu tab #0 y d #0
+      out ")"
+      ret #0
+    if %weq tg h4-DSU
+      out "&("
+      x <- rd (h4-ha M loc)
+      do h4-pr f fu tab #0 x d #0
+      out "){"
+      y <- rd (h4-ha M (%wadd loc #1))
+      do h4-pr f fu tab #0 y d #0
+      out ","
+      z <- rd (h4-ha M (%wadd loc #2))
+      do h4-pr f fu tab #0 z d #0
+      out "}"
+      ret #0
+    if %weq tg h4-DDU
+      out "!("
+      x <- rd (h4-ha M loc)
+      do h4-pr f fu tab #0 x d #0
+      out ")="
+      y <- rd (h4-ha M (%wadd loc #1))
+      do h4-pr f fu tab #0 y d #0
+      out ";"
+      z <- rd (h4-ha M (%wadd loc #2))
+      jump h4-pr f fu tab #0 z d #0
+    if %weq tg h4-ALO
+      let len = h4-ext t
+      pr <- rd (h4-ha M loc)
+      let tm = the Word (if %weq len #0 then loc else %wand pr h4-VALM)
+      let ls = the Word (if %weq len #0 then #0 else %wshr pr #32)
+      out "@{"
+      x <- rd (h4-ha M tm)
+      do h4-pr f fu tab #8 x #0 (%wor #1 (%wor (%wshl len #1) (%wshl ls #32)))
+      out "}"
+      ret #0
+    if orB (%weq tg h4-EQL) (orB (%weq tg h4-AND) (%weq tg h4-OR))
+      out "("
+      x <- rd (h4-ha M loc)
+      do h4-pr f fu tab #0 x d #0
+      out (the (List Word) (if %weq tg h4-EQL then " === " else if %weq tg h4-AND then " .&. " else " .|. "))
+      y <- rd (h4-ha M (%wadd loc #1))
+      do h4-pr f fu tab #0 y d #0
+      out ")"
+      ret #0
+    if %weq tg h4-UNS
+      lf <- rd (h4-ha M loc)
+      lv <- rd (h4-ha M (h4-val lf))
+      nf <- h4-plook fu (h4-val lf) #0
+      nv <- h4-plook fu (h4-val lv) #0
+      bd <- rd (h4-ha M (h4-val lv))
+      out (list-append "! " (list-append (h4-alname nf #97) (list-append " = λ " (list-append (h4-alname nv #97) " ; "))))
+      jump h4-pr f fu tab #0 bd (%wadd d #2) #0
+    if %weq tg h4-INC
+      out "↑"
+      x <- rd (h4-ha M loc)
+      jump h4-pr f fu tab #0 x d #0
+    ret #0
+  -- an APP/DRY spine
+  if %weq md #1
+    sh <-[h4-dp2] h4-spine fu t #0
+    let hd = snd sh
+    if %weq (h4-tag hd) h4-LAM
+      out "("
+      do h4-pr f fu tab #0 hd d #0
+      out ")"
+    else
+      do h4-pr f fu tab #0 hd d #0
+    out "("
+    do h4-pr f fu tab #2 t d (fst sh)
+    out ")"
+    ret #0
+  if %weq md #2
+    if %weq a #0
+      ret #0
+    fn0 <- rd (h4-ha M loc)
+    do h4-pr f fu tab #2 fn0 d (%wsub a #1)
+    if %wlt #1 a
+      out ","
+    x <- rd (h4-ha M (%wadd loc #1))
+    jump h4-pr f fu tab #0 x d #0
+  -- a constructor (print_ctr)
+  if %weq md #3
+    let nam = h4-ext t
+    let ari = %wsub tg h4-C00
+    if orB (%weq nam h4-ZER) (%weq nam h4-SUC)
+      nc <-[h4-dp2] h4-natc fu t #0
+      out (list-append (ce-dec (fst nc)) "n")
+      let r = snd nc
+      if andB (%weq (h4-tag r) h4-C00) (%weq (h4-ext r) h4-ZER)
+        ret #0
+      out "+"
+      jump h4-pr f fu tab #0 r d #0
+    if andB (%weq nam h4-CHR) (%weq ari #1)
+      c <- rd (h4-ha M loc)
+      if andB (%weq (h4-tag c) h4-NUM) (h4-canesc (h4-val c) #0)
+        out (list-append "'" (list-append (h4-esc (h4-val c) #0) "'"))
+        ret #0
+    if orB (%weq nam h4-NIL) (%weq nam h4-CON)
+      ok <-[h4-dpb] h4-isstr fu t
+      e <- h4-lend fu t
+      let prop = andB (%weq (h4-tag e) h4-C00) (%weq (h4-ext e) h4-NIL)
+      if andB (%weq nam h4-CON) (andB ok prop)
+        bs <-[h4-dpl] h4-strbytes fu t nil
+        out (list-append (cons #34 nil) (list-append bs (cons #34 nil)))
+        ret #0
+      if prop
+        out "["
+        do h4-pr f fu tab #4 t d #1
+        out "]"
+        ret #0
+      if %weq nam h4-CON
+        x <- rd (h4-ha M loc)
+        do h4-pr f fu tab #0 x d #0
+        out "<>"
+        y <- rd (h4-ha M (%wadd loc #1))
+        jump h4-pr f fu tab #0 y d #0
+    out (list-append "#" (list-append (h4-namestr tab nam) "{"))
+    do h4-pr f fu tab #5 t d #0
+    out "}"
+    ret #0
+  if %weq md #4
+    if not (%weq tg h4-C02)
+      ret #0
+    if %weq a #0
+      out ","
+    x <- rd (h4-ha M loc)
+    do h4-pr f fu tab #0 x d #0
+    nx <- rd (h4-ha M (%wadd loc #1))
+    jump h4-pr f fu tab #4 nx d #0
+  if %weq md #5
+    if %weq a (%wsub tg h4-C00)
+      ret #0
+    if %wlt #0 a
+      out ","
+    x <- rd (h4-ha M (%wadd loc a))
+    do h4-pr f fu tab #0 x d #0
+    jump h4-pr f fu tab #5 t d (%wsucc a)
+  -- a match chain and its default
+  if %weq md #6
+    if h4-MATISH tg
+      out (the (List Word) (if %weq tg h4-SWI then ce-dec (h4-ext t) else h4-matname tab (h4-ext t)))
+      out ":"
+      x <- rd (h4-ha M loc)
+      do h4-pr f fu tab #0 x d #0
+      nx <- rd (h4-ha M (%wadd loc #1))
+      if h4-MATISH (h4-tag nx)
+        out ";"
+      jump h4-pr f fu tab #6 nx d #0
+    if andB (%weq tg h4-NUM) (%weq loc #0)
+      ret #0
+    out ";"
+    if %weq tg h4-USE
+      x <- rd (h4-ha M loc)
+      jump h4-pr f fu tab #0 x d #0
+    jump h4-pr f fu tab #0 t d #0
+  -- the dups found (print_term_finish)
+  if %weq md #7
+    dp <- rd (h4-PDP M)
+    dl <- rd (h4-PDL M)
+    if not (%wlt dp dl)
+      ret #0
+    if %weq a #1
+      out ";"
+    wr (h4-PDP M) (%wsucc dp)
+    l <- rd (h4-pdup M dp)
+    nm <- rd (%wadd (h4-pdup M dp) #8)
+    lb <- rd (%wadd (h4-pdup M dp) #16)
+    out (list-append "!" (list-append (h4-alname nm #65) (list-append "&" (list-append (h4-nick lb) "="))))
+    v <- rd (h4-ha M l)
+    do h4-pr f fu tab #0 (h4-clrsub v) #0 #0
+    out ";"
+    jump h4-pr f fu tab #7 t d #0
+  -- a term in another mode (print_term_mode)
+  if %weq md #8
+    oq <- rd (h4-PQ M)
+    os <- rd (h4-PS M)
+    ol <- rd (h4-PSL M)
+    let nq = %wand a #1
+    wr (h4-PQ M) nq
+    wr (h4-PS M) (%wshr a #32)
+    wr (h4-PSL M) (the Word (if %weq nq #0 then #0 else %wand (%wshr a #1) h4-EXTM))
+    do h4-pr f fu tab #0 t d #0
+    wr (h4-PQ M) oq
+    wr (h4-PS M) os
+    wr (h4-PSL M) ol
+    ret #0
+  ret #0
+
+-- print_term / print_term_quoted: the term, then the dups found
+fn h4-print (fu : Nat) (tab : List (List Word)) (t : Word) (q : Word) : Word
+  wr (h4-PLL M) #0
+  wr (h4-PDL M) #0
+  wr (h4-PDP M) #0
+  wr (h4-PNL M) #1
+  wr (h4-PND M) #1
+  wr (h4-PQ M) q
+  wr (h4-PS M) #0
+  wr (h4-PSL M) #0
+  do h4-pr fu fu tab #0 t #0 #0
+  do h4-pr fu fu tab #7 #0 #0 #1
+  ret #0
+
+-- ===========================================================================================
+-- Collapse (src/hvm.c eval_collapse): a priority queue of (key, credit, seq, loc) in the work
+-- area, ordered by key - credit/16, then by seq; m+104 its length, m+112 the next seq, m+120
+-- the lines printed
+-- ===========================================================================================
+
+h4-QL : Word → Word
+h4-QL m = %wadd m #104
+h4-QS : Word → Word
+h4-QS m = %wadd m #112
+h4-QP : Word → Word
+h4-QP m = %wadd m #120
+
+h4-qa : Word → Word → Word → Word
+h4-qa m i j = h4-wka m (%wadd (%wshl i #2) j)
+
+h4-okey : Word → Word → Word
+h4-okey key credit = let b = %wdiv credit #16 in the Word (if %wlt b key then %wsub key b else #0)
+
+-- task i before task j
+fn h4-qlt (i : Word) (j : Word) : Bool
+  ki <- rd (h4-qa M i #0)
+  ci <- rd (h4-qa M i #1)
+  si <- rd (h4-qa M i #2)
+  kj <- rd (h4-qa M j #0)
+  cj <- rd (h4-qa M j #1)
+  sj <- rd (h4-qa M j #2)
+  let a = h4-okey ki ci
+  let b = h4-okey kj cj
+  ret (the Bool (if %weq a b then %wlt si sj else %wlt a b))
+
+fn h4-qswap (i : Word) (j : Word) : Word
+  a0 <- rd (h4-qa M i #0)
+  a1 <- rd (h4-qa M i #1)
+  a2 <- rd (h4-qa M i #2)
+  a3 <- rd (h4-qa M i #3)
+  b0 <- rd (h4-qa M j #0)
+  b1 <- rd (h4-qa M j #1)
+  b2 <- rd (h4-qa M j #2)
+  b3 <- rd (h4-qa M j #3)
+  wr (h4-qa M i #0) b0
+  wr (h4-qa M i #1) b1
+  wr (h4-qa M i #2) b2
+  wr (h4-qa M i #3) b3
+  wr (h4-qa M j #0) a0
+  wr (h4-qa M j #1) a1
+  wr (h4-qa M j #2) a2
+  wr (h4-qa M j #3) a3
+  ret #0
+
+fnrec h4-qup (f : Nat) (i : Word) : Word
+  zero: ret #0
+  if %weq i #0
+    ret #0
+  let p = %wdiv (%wsub i #1) #2
+  lt <-[h4-dpb] h4-qlt i p
+  if not lt
+    ret #0
+  do h4-qswap i p
+  jump h4-qup f p
+
+fnrec h4-qdown (f : Nat) (i : Word) : Word
+  zero: ret #0
+  n <- rd (h4-QL M)
+  let l = %wadd (%wmul i #2) #1
+  if not (%wlt l n)
+    ret #0
+  let r = %wsucc l
+  rl <-[h4-dpb] h4-qlt r l
+  let best = the Word (if andB (%wlt r n) rl then r else l)
+  lt <-[h4-dpb] h4-qlt best i
+  if not lt
+    ret #0
+  do h4-qswap i best
+  jump h4-qdown f best
+
+fn h4-qpush (key : Word) (credit : Word) (loc : Word) : Word
+  if %weq loc #0
+    ret #0
+  n <- rd (h4-QL M)
+  s <- rd (h4-QS M)
+  wr (h4-QL M) (%wsucc n)
+  wr (h4-QS M) (%wsucc s)
+  wr (h4-qa M n #0) key
+  wr (h4-qa M n #1) credit
+  wr (h4-qa M n #2) s
+  wr (h4-qa M n #3) loc
+  do h4-qup (toNat #64) n
+  ret #0
+
+-- the first task, moved to m+200.. (key, credit, loc); 0 when the queue is empty
+fn h4-qpop : Word
+  n <- rd (h4-QL M)
+  if %weq n #0
+    ret #0
+  k0 <- rd (h4-qa M #0 #0)
+  c0 <- rd (h4-qa M #0 #1)
+  l0 <- rd (h4-qa M #0 #3)
+  wr (%wadd M #200) k0
+  wr (%wadd M #208) c0
+  wr (%wadd M #216) l0
+  let n1 = %wsub n #1
+  wr (h4-QL M) n1
+  if %weq n1 #0
+    ret #1
+  do h4-qswap #0 n1
+  do h4-qdown (toNat #64) #0
+  ret #1
+
+-- one task (eval_collapse_process)
+fnrec h4-ctask (f : Nat) (fu : Nat) (fb : Nat) (tab : List (List Word)) (before : Word) (key : Word) (credit : Word) (limit : Word) : Word
+  zero: ret #0
+  t <- h4-cnf fu fu fb #0 before #0 #0 #0 #0
+  let tg = h4-tag t
+  if %weq tg h4-INC
+    x <- rd (h4-ha M (h4-val t))
+    jump h4-ctask f fu fb tab x (the Word (if %weq key #0 then #0 else %wsub key #1)) (the Word (if %wlt credit #128 then %wsucc credit else credit)) limit
+  if %weq tg h4-SUP
+    do h4-qpush (%wsucc key) credit (h4-val t)
+    do h4-qpush (%wsucc key) credit (%wsucc (h4-val t))
+    ret #0
+  if %weq tg h4-ERA
+    ret #0
+  p <- rd (h4-QP M)
+  wr (h4-QP M) (%wsucc p)
+  if not (%wlt limit (%wsucc p))
+    do h4-print fu tab t #1
+    out (cons #10 nil)
+    ret #0
+  ret #0
+
+fnrec h4-cloop (n : Nat) (fu : Nat) (fb : Nat) (tab : List (List Word)) (limit : Word) : Word
+  zero: ret #0
+  p <- rd (h4-QP M)
+  if not (%wlt p limit)
+    ret #0
+  ok <- h4-qpop
+  if %weq ok #0
+    ret #0
+  r0 <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  k0 <- rd (%wadd M #200)
+  c0 <- rd (%wadd M #208)
+  l0 <- rd (%wadd M #216)
+  bf <- rd (h4-ha M l0)
+  x <- h4-ctask fu fu fb tab bf k0 c0 limit
+  r1 <- cmd (w-sys #901 #0 #0 #0 #0 #0 #0)
+  jump h4-cloop n fu fb tab limit
+
+fn h4-collapse (fu : Nat) (fb : Nat) (tab : List (List Word)) (t : Word) (limit : Word) : Word
+  if %weq limit #0
+    ret #0
+  root <- h4m-alloc #1
+  do h4m-wr root t
+  do h4-qpush #0 #0 root
+  jump h4-cloop fu fu fb tab limit
+
+-- ===========================================================================================
+-- The program (src/hvm.c parse_def, parse_include, main): definitions and includes read in
+-- order, @main looked up, then collapsed (-C, -CN) or normalized
+-- ===========================================================================================
+
+h4-dirof : List Word → List Word
+h4-dirof p =
+  let r = hv2-rev p
+      t = h4-dropto r
+  in hv2-rev t
+
+h4-dropto : List Word → List Word
+h4-dropto nil = nil
+h4-dropto (cons c r) = if %weq c #47 then cons c r else h4-dropto r
+
+h4-join : List Word → List Word → List Word
+h4-join base rel =
+  if %weq (hv2-nth #0 rel) #47 then rel else list-append (h4-dirof base) rel
+
+h4-isnil : List Word → Bool
+h4-isnil nil = true
+h4-isnil (cons c r) = false
+
+h4-stknil : List (List Word × List Word) → Bool
+h4-stknil nil = true
+h4-stknil (cons c r) = false
+
+h4-stkhd : List (List Word × List Word) → List Word × List Word
+h4-stkhd nil = (nil , nil)
+h4-stkhd (cons c r) = c
+
+h4-stktl : List (List Word × List Word) → List (List Word × List Word)
+h4-stktl nil = nil
+h4-stktl (cons c r) = r
+
+h4-seenp : List (List Word) → List Word → Bool
+h4-seenp nil p = false
+h4-seenp (cons x r) p = if cli-eq x p then true else h4-seenp r p
+
+h4-upto : List Word → List Word × List Word
+h4-upto nil = (nil , nil)
+h4-upto (cons c r) = if %weq c #34 then (nil , cons c r) else (let t = h4-upto r in (cons c (fst t) , snd t))
+
+fnrec h4-defs (f : Nat) (s : H4S) (stk : List (List Word × List Word)) (seen : List (List Word)) (file : List Word) : H4S
+  zero: ret s
+  let s1 = h4-skip s
+  if h4-isnil (h4s-src s1)
+    if h4-stknil stk
+      ret s1
+    let top = h4-stkhd stk
+    jump h4-defs f (h4s-wsrc s1 (snd top)) (h4-stktl stk) seen (fst top)
+  let mi = h4-match s1 "#include"
+  if fst mi
+    let s2 = h4-skip (snd mi)
+    let c1 = h4-cons s2 (cons #34 nil)
+    let nm = h4-upto (h4s-src (snd c1))
+    let s3 = h4s-wsrc (snd c1) (hv2-drop1 (snd nm))
+    let path = h4-join file (fst nm)
+    if h4-seenp seen path
+      jump h4-defs f s3 stk seen file
+    fr <- cmdp (w-file-read-named path)
+    if not (%weq (fst fr) #0)
+      halt (cli-say (list-append "Error: could not open '" (list-append path "'")) (sdone #1))
+    jump h4-defs f (h4s-wsrc s3 (snd fr)) (cons (file , h4s-src s3) stk) (cons path seen) path
+  let ma = h4-match s1 "@"
+  if fst ma
+    let nr = h4-name (snd ma)
+    if not (fst nr)
+      halt (h4-perr "expected: name")
+    let c2 = h4-cons (fst (snd nr)) "="
+    if not (fst c2)
+      halt (h4-perr "expected: =")
+    tx <-[h4-dpw] h4p (h4s-fu s) #0 (h4s-wbs (snd c2) nil) #0 #0 #0 #0
+    at <- h4m-alloc #1
+    do h4m-wr at (snd tx)
+    wr (h4-ba M (snd (snd nr))) at
+    jump h4-defs f (fst tx) stk seen file
+  halt (h4-perr "expected: definition or #include")
+
+-- the collapse limit an argument asks for: 0 none (normalize), else the limit + 1
+h4-climit : List (List Word) → Word
+h4-climit nil = #0
+h4-climit (cons a r) =
+  if fst (hv2-pre "-C" a) then (let n = hv2-drop1 (hv2-drop1 a) in if %weq (cli-len n) #0 then hv2-none else %wsucc (h4-decval n #0))
+  else if cli-eq a "--collapse" then hv2-none
+  else h4-climit r
+
+h4-decval : List Word → Word → Word
+h4-decval nil acc = acc
+h4-decval (cons c r) acc = h4-decval r (%wadd (%wmul acc #10) (%wsub c #48))
+
+fn h4-go (fu : Nat) (fb : Nat) (file : List Word) (src : List Word) (cl : Word) : Word
+  wr M #1
+  wr (%wadd M #8) #1
+  s <-[h4-dps] h4-defs fu (h4s src nil #8388608 #2 h4-tab0 nil fu) nil (cons file nil) file
+  let tab = h4s-tab s
+  let mid = h4-tfind-go #0 "main" tab
+  if %weq mid hv2-none
+    halt (cli-say "Error: @main not defined" (sdone #1))
+  b <- rd (h4-ba M mid)
+  if %weq b #0
+    halt (cli-say "Error: @main not defined" (sdone #1))
+  let t = h4-new h4-REF mid #0
+  if %weq cl #0
+    r <- h4-normalize fu fb t
+    do h4-print fu tab r #0
+    out (cons #10 nil)
+    ret #0
+  do h4-collapse fu fb tab t (%wsub cl #1)
+  ret #0
+
+h4-main : List (List Word) → Step W Word
+h4-main nil = cli-say "usage: hvm4 FILE.hvm [-C[N]]   (an HVM4 program, run by hyperactivity)" (sdone #2)
+h4-main (cons file rest) =
+  scmd (w-file-read-named file) (λ fr →
+  if not (%weq (fst fr) #0) then cli-say (list-append "Error: could not open '" (list-append file "'")) (sdone #1) else
+  scmd (w-alloc h4-size) (λ m →
+  let fu = toNat #1048576
+      fb = toNat #2048
+  in h4-go m fu fb file (snd fr) (h4-climit rest) (λ r → sdone #0)))
+
+h4-c : List Word
+h4-c = emit-c-cli-opt (code h4-main)

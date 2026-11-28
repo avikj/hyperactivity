@@ -1,0 +1,37 @@
+#!/bin/bash
+# ports/test-hvm4.sh HVM4 BIN [PATTERN]: HVM4's tests (HVM4/devs/test, by the rules of its _all_.sh) run by BIN
+HVM4=$(cd "$1" && pwd); BIN=$(cd "$(dirname "$2")" && pwd)/$(basename "$2"); PAT=${3:-}
+cd "$HVM4/devs/test"
+pass=0; fail=0
+for f in *.hvm; do
+  name=${f%.hvm}; case "$name" in _*) continue;; esac
+  [ -n "$PAT" ] && [[ "$name" != *$PAT* ]] && continue
+  extra=()
+  while IFS= read -r line; do
+    if [[ "$line" == "//! "* ]]; then read -r -a mf <<< "${line#//! }"; extra+=("${mf[@]}"); continue; fi
+    if [[ "$line" == "//!-"* ]]; then read -r -a mf <<< "${line#//!}"; extra+=("${mf[@]}"); continue; fi
+    [[ -z "$line" ]] && continue; break
+  done < "$f"
+  expected=""; n=0; noc=0; pre=""; con=""
+  while IFS= read -r line; do
+    if [[ "$line" == //* ]]; then
+      if [[ "$line" == "//EXPECT_PREFIX:"* ]]; then pre="${line#//EXPECT_PREFIX:}"; continue; fi
+      if [[ "$line" == "//EXPECT_CONTAINS:"* ]]; then con="${line#//EXPECT_CONTAINS:}"; continue; fi
+      if [[ "$line" == '//!'* ]]; then noc=1; c="${line#//!}"; else c="${line#//}"; fi
+      [ -n "$expected" ] && expected="${c}"$'\n'"$expected"; [ -z "$expected" ] && expected="$c"; n=$((n+1))
+    else break; fi
+  done < <(tac "$f")
+  flags=""
+  if [ $noc -eq 0 ]; then flags="-C"; case "$name" in collapse_*|enum_*) flags="-C$n";; esac; fi
+  cmd=("$BIN" "$PWD/$f"); [ -n "$flags" ] && cmd+=("$flags"); [ ${#extra[@]} -gt 0 ] && cmd+=("${extra[@]}")
+  actual=$(timeout ${T:-10} "${cmd[@]}" 2>&1); st=$?
+  ac=$(echo "$actual" | sed 's/\x1b\[[0-9;]*m//g'); ec=$(echo "$expected" | sed 's/\x1b\[[0-9;]*m//g')
+  ok=0
+  if [ $st -eq 124 ]; then ok=0
+  elif [ -n "$pre" ]; then [[ "$ac" == "$pre"* ]] && ok=1
+  elif [ -n "$con" ]; then [[ "$ac" == *"$con"* ]] && ok=1
+  elif [ "$ec" = "PARSE_ERROR" ]; then [[ "$ac" == PARSE_ERROR* ]] && ok=1
+  else [ "$ac" = "$ec" ] && ok=1; fi
+  if [ $ok = 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "[FAIL] $name ${flags} ${extra[*]} (status $st)"; echo "  want: ${ec:0:300}"; echo "  got:  ${ac:0:300}"; fi
+done
+echo "pass $pass fail $fail"

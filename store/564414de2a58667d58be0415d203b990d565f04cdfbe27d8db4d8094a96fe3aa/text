@@ -1,0 +1,12 @@
+hv2-link1 : Hv2Net → Word → Word → Hv2L
+hv2-link1 net a b =
+  let sw = andB (not (hv2-isvar a)) (hv2-isvar b)
+      a1 = if sw then b else a
+      b1 = if sw then a else b
+  in if not (hv2-isvar a1) then hv2l-done (hv2-push net a1 b1)
+     else (let e = hv2-enter net b1
+               net1 = fst e
+               b2 = snd e
+               old = hv2-var-get net1 (hv2-val a1)
+               net2 = hv2-var-set net1 (hv2-val a1) b2
+           in if %weq old hv2-none then hv2l-done net2 else hv2l-go (hv2-var-del net2 (hv2-val a1)) old b2)

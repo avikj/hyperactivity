@@ -1,0 +1,6 @@
+-- a fork's binders wrapped around the body, innermost first (src/hvm.c parse_term_fork's wrap)
+h4-forkwrap : Word → Nat → Word → Word → Word → Word → Word → Word → Word → (Word → Step W Word) → Step W Word
+h4-forkwrap mm_ zero i d dd dyn lab lt body kq_ =
+  kq_ (h4-depl mm_ (body))
+h4-forkwrap mm_ (suc f) i d dd dyn lab lt body kq_ =
+  if (%weq i #0) then (kq_ (h4-depl mm_ (body))) else (let j = %wsub i #1 in let x = %wadd d (%wmul j dd) in if (%weq dyn #1) then (h4-mk1 mm_ h4-LAM (%wadd x #3) body (λ l1 → let mm_64 = h4-dep mm_ l1 in h4-mk1 mm_64 h4-LAM (%wadd x #2) l1 (λ l0 → let mm_65 = h4-dep mm_64 l0 in h4-mk3 mm_65 h4-DDU #0 lt (h4-new h4-BJV #0 (%wadd x #1)) l0 (λ ddu → let mm_66 = h4-dep mm_65 ddu in h4-mk1 mm_66 h4-LAM (%wadd x #1) ddu (λ lm → let mm_67 = h4-dep mm_66 lm in h4-forkwrap mm_67 f j d dd dyn lab lt lm kq_))))) else (h4-mk2 mm_ h4-DUP lab (h4-new h4-BJV #0 (%wadd x #1)) body (λ dup → let mm_68 = h4-dep mm_ dup in h4-mk1 mm_68 h4-LAM (%wadd x #1) dup (λ lm → let mm_69 = h4-dep mm_68 lm in h4-forkwrap mm_69 f j d dd dyn lab lt lm kq_))))

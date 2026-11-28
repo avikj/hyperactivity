@@ -1,0 +1,26 @@
+-- C's powf, IEEE 754 special values
+ief-pow : Word → Word → Word
+ief-pow x y =
+  let ax = ief-abs x
+      one = #1065353216
+  in if ief-iszero y then one
+     else if %weq x one then one
+     else if orB (ief-isnan x) (ief-isnan y) then ief-NAN
+     else if ief-iszero x
+     then (if %weq (ief-sgn y) #1
+           then (if andB (ief-isodd y) (not (ief-isinf y)) then ief-inf (ief-sgn x) else ief-INF)
+           else (if ief-isodd y then x else #0))
+     else if ief-isinf y
+     then (if %weq ax one then one
+           else if %wlt ax one then (if %weq (ief-sgn y) #1 then ief-INF else #0)
+           else (if %weq (ief-sgn y) #1 then #0 else ief-INF))
+     else if ief-isinf x
+     then (if %weq (ief-sgn x) #1
+           then (if %weq (ief-sgn y) #1 then (if ief-isodd y then ief-SB else #0)
+                 else (if ief-isodd y then ief-inf #1 else ief-INF))
+           else (if %weq (ief-sgn y) #1 then #0 else ief-INF))
+     else if %weq (ief-sgn x) #1
+     then (if ief-isint y
+           then (let r = ief-pow-gen ax y in if ief-isodd y then ief-neg r else r)
+           else ief-NAN)
+     else ief-pow-gen ax y

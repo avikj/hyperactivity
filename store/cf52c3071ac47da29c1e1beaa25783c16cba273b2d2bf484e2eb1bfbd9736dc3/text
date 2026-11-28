@@ -1,0 +1,634 @@
+
+h4-cons : H4S → List Word → Bool × H4S
+h4-cons s0 p = let s1 = h4-skip s0 in let m = h4-match s1 p in (fst m , h4-skip (snd m))
+
+h4-perr-exp : List Word → Step W Word
+h4-perr-exp p = h4-perr (list-append "expected: " p)
+
+h4-perr-var : Word → H4S → Word → Step W Word
+h4-perr-var code s nam = h4-perr (list-append "undefined variable '" (list-append (h4-tget-go nam (h4s-tab s)) "'"))
+
+h4-lamext : Word → Word → Word
+h4-lamext lvl uses = if %weq uses #0 then %wor lvl h4-ERAMASK else lvl
+
+fn h4-supdsu (dyn : Word) (lt : Word) (lab : Word) (a : Word) (b : Word) : Word
+  if %weq dyn #1
+    jump h4-mk3 h4-DSU #0 lt a b
+  jump h4-mk2 h4-SUP lab a b
+
+fnrec h4p (f : Nat) (w : Word) (s0 : H4S) (d : Word) (a1 : Word) (a2 : Word) (a3 : Word) : H4S × Word
+  zero: halt (h4-perr "term too deep")
+  -- 0 term
+  if %weq w #0
+    r <-[h4-dpw] h4p f #1 s0 d #0 #0 #0
+    jump h4p f #8 (fst r) d (snd r) #0 #0
+  -- 1 atom
+  if %weq w #1
+    let s = h4-skip s0
+    let ml = h4-match s "λ"
+    if fst ml
+      jump h4p f #2 (snd ml) d #0 #0 #0
+    let mb = h4-match s "!"
+    if fst mb
+      jump h4p f #3 (snd mb) d #0 #0 #0
+    let ma = h4-match s "&"
+    if fst ma
+      jump h4p f #4 (snd ma) d #0 #0 #0
+    let mh = h4-match s "#"
+    if fst mh
+      let n = h4-name (snd mh)
+      if not (fst n)
+        halt (h4-perr-exp "name")
+      let s1 = fst (snd n)
+      let mc = h4-match (h4-skip s1) "{"
+      if fst mc
+        ch <-[h4-dpw] h4p f #13 (h4-skip (snd mc)) d #0 #0 #0
+        xs <-[h4-dpl] h4-chain (toNat #17) (snd ch) nil
+        t <- h4-ctr (snd (snd n)) xs
+        ret (fst ch , t)
+      t <- h4-ctr (snd (snd n)) nil
+      ret (s1 , t)
+    let mr = h4-match s "@"
+    if fst mr
+      let n = h4-name (snd mr)
+      if not (fst n)
+        halt (h4-perr-exp "name")
+      ret (fst (snd n) , h4-new h4-REF (snd (snd n)) #0)
+    let mc = h4-match s "^"
+    if fst mc
+      let s1 = h4-skip (snd mc)
+      if %weq (h4-peek s1) #40
+        let c1 = h4-cons s1 "("
+        fx <-[h4-dpw] h4p f #0 (snd c1) d #0 #0 #0
+        xx <-[h4-dpw] h4p f #0 (fst fx) d #0 #0 #0
+        let c2 = h4-cons (fst xx) ")"
+        if not (fst c2)
+          halt (h4-perr-exp ")")
+        t <- h4-mk2 h4-DRY #0 (snd fx) (snd xx)
+        ret (snd c2 , t)
+      let n = h4-namenum s1
+      if not (fst n)
+        halt (h4-perr-exp "name")
+      ret (fst (snd n) , h4-new h4-NAM (snd (snd n)) #0)
+    let mu = h4-match s "↑"
+    if fst mu
+      x <-[h4-dpw] h4p f #1 (snd mu) d #0 #0 #0
+      t <- h4-mk1 h4-INC #0 (snd x)
+      ret (fst x , t)
+    let ms = h4-match s "*"
+    if fst ms
+      ret (snd ms , h4-new h4-ANY #0 #0)
+    let mp = h4-match s "("
+    if fst mp
+      x <-[h4-dpw] h4p f #0 (snd mp) d #0 #0 #0
+      let c = h4-cons (fst x) ")"
+      if not (fst c)
+        halt (h4-perr-exp ")")
+      ret (snd c , snd x)
+    let c = h4-peek s
+    if %weq c #91
+      let s1 = h4-skip (h4-adv s)
+      if %weq (h4-peek s1) #93
+        ret (h4-adv s1 , h4-new h4-C00 h4-NIL #0)
+      jump h4p f #12 s1 d #0 #0 #0
+    if %weq c #39
+      let e = h4-chesc (hv2-drop1 (h4s-src s))
+      if not (andB (fst e) (%weq (hv2-nth #0 (snd (snd e))) #39))
+        halt (h4-perr-exp "'")
+      t <- h4-ctr h4-CHR (cons (h4-num (fst (snd e))) nil)
+      ret (h4s-wsrc s (hv2-drop1 (snd (snd e))) , t)
+    if orB (%weq c #34) (%weq c #96)
+      let cs = h4-strchars (toNat (cli-len (h4s-src s))) c (hv2-drop1 (h4s-src s))
+      if not (fst cs)
+        halt (h4-perr-exp "character")
+      t <- h4-strterm (fst (snd cs))
+      ret (h4s-wsrc s (snd (snd cs)) , t)
+    if h4-isdig c
+      let dg = h4-digits (h4s-src s) #0
+      if %weq (hv2-nth #0 (snd dg)) #110
+        let s1 = h4s-wsrc s (hv2-drop1 (snd dg))
+        let mp1 = h4-match s1 "+"
+        if fst mp1
+          x <-[h4-dpw] h4p f #0 (snd mp1) d #0 #0 #0
+          t <- h4-sucs (toNat (fst dg)) (snd x)
+          ret (fst x , t)
+        t <- h4-sucs (toNat (fst dg)) (h4-new h4-C00 h4-ZER #0)
+        ret (s1 , t)
+      ret (h4-skip (h4s-wsrc s (snd dg)) , h4-num (fst dg))
+    -- a variable
+    let n = h4-name s
+    if not (fst n)
+      halt (h4-perr-exp "name")
+    let s1 = fst (snd n)
+    let nam = snd (snd n)
+    let m0 = h4-match s1 "₀"
+    let m1 = h4-match s1 "₁"
+    let side = if fst m0 then #0 else if fst m1 then #1 else #2
+    let s2 = h4-skip (if fst m0 then snd m0 else snd m1)
+    let lk = h4-look s2 nam side
+    if not (%weq (fst lk) #0)
+      halt (h4-perr-var (fst lk) s2 nam)
+    let b = snd lk
+    let sd = if %weq side #2 then (if %wlt (h4b-sd b) #2 then h4b-sd b else if %weq (h4b-fk b) #1 then h4s-fside s2 else #2) else side
+    if %weq (h4b-lab b) h4-DYN
+      ret (s2 , h4-new h4-BJV #0 (%wadd (h4b-lvl b) (if %weq sd #1 then #1 else #0)))
+    ret (s2 , h4-new (if %weq sd #0 then h4-BJ0 else if %weq sd #1 then h4-BJ1 else h4-BJV) (h4b-lab b) (h4b-lvl b))
+  -- 2 λ
+  if %weq w #2
+    let s = h4-skip s0
+    if %weq (h4-peek s) #123
+      let c1 = h4-cons s "{"
+      if %weq (h4-peek (snd c1)) #125
+        let c2 = h4-cons (snd c1) "}"
+        ret (snd c2 , h4-era)
+      hl <- h4-alloc #1
+      do h4-wr hl h4-NUM0
+      jump h4p f #11 (snd c1) d hl hl #0
+    if %weq (h4-peek s) #36
+      let n = h4-name (h4-adv s)
+      if not (fst n)
+        halt (h4-perr-exp "name")
+      let s1 = h4-push (h4-skip (fst (snd n))) (snd (snd n)) (%wadd d #2) #0 #0 #0 #2
+      let sp = h4-sep s1
+      bx <-[h4-dpw] h4p f (if %weq (h4-peek s1) #44 then #2 else if %weq (h4-peek s1) #59 then #2 else #0) (if orB (%weq (h4-peek s1) #44) (%weq (h4-peek s1) #59) then sp else snd (h4-cons s1 ".")) (%wadd d #2) #0 #0 #0
+      let s2 = h4-pop (fst bx)
+      u <- h4-uses s2 (snd bx) (%wadd d #2) h4-BJV #0
+      if %wlt #1 u
+        halt (h4-perr-affine s2 (snd (snd n)) u)
+      ap <- h4-mk2 h4-APP #0 (h4-new h4-BJV #0 (%wadd d #1)) (snd bx)
+      lx <- h4-mk1 h4-LAM (h4-lamext (%wadd d #2) u) ap
+      lf <- h4-mk1 h4-LAM (%wadd d #1) lx
+      t <- h4-mk1 h4-UNS #0 lf
+      ret (s2 , t)
+    let mc = h4-match s "&"
+    let cl = if fst mc then #1 else #0
+    let n = h4-name (snd mc)
+    if not (fst n)
+      halt (h4-perr-exp "name")
+    let nam = snd (snd n)
+    let s1 = h4-skip (fst (snd n))
+    if %weq (h4-peek s1) #38
+      let s2 = h4-skip (h4-adv s1)
+      let dyn = if %weq (h4-peek s2) #40 then #1 else #0
+      if %weq dyn #1
+        lt <-[h4-dpw] h4p f #0 (snd (h4-cons s2 "(")) (%wadd d #1) #0 #0 #0
+        let c3 = h4-cons (fst lt) ")"
+        jump h4p f #15 (h4-skip (snd c3)) d nam cl (snd lt)
+      let pc = h4-peek s2
+      if orB (%weq pc #44) (orB (%weq pc #59) (%weq pc #46))
+        jump h4p f #16 (h4-skip (h4s-wflab s2 (%wsucc (h4s-flab s2)))) d nam cl (h4s-flab s2)
+      let ln = h4-namenum s2
+      if not (fst ln)
+        halt (h4-perr-exp "label")
+      jump h4p f #16 (h4-skip (fst (snd ln))) d nam cl (snd (snd ln))
+    let s2 = h4-push s1 nam (%wadd d #1) #0 #0 cl #2
+    let issep = orB (%weq (h4-peek s2) #44) (%weq (h4-peek s2) #59)
+    let c4 = h4-cons s2 "."
+    if andB (not issep) (not (fst c4))
+      halt (h4-perr-exp ".")
+    bx <-[h4-dpw] h4p f (if issep then #2 else #0) (if issep then h4-sep s2 else snd c4) (%wadd d #1) #0 #0 #0
+    let s3 = h4-pop (fst bx)
+    u <- h4-uses s3 (snd bx) (%wadd d #1) h4-BJV #0
+    if andB (%weq cl #0) (%wlt #1 u)
+      halt (h4-perr-affine s3 nam u)
+    ad <-[h4-dpw] h4-autodup s3 (snd bx) (%wadd d #1) (%wadd d #1) h4-BJV #0 (if %weq cl #1 then u else #0)
+    t <- h4-mk1 h4-LAM (h4-lamext (%wadd d #1) u) (snd ad)
+    ret (fst ad , t)
+  -- 15 λx&(L): a1 the name, a2 cloned, a3 the label term
+  if %weq w #15
+    let s1 = h4-push s0 a1 (%wadd d #2) h4-DYN #0 a2 #2
+    let issep = orB (%weq (h4-peek s1) #44) (%weq (h4-peek s1) #59)
+    let c4 = h4-cons s1 "."
+    if andB (not issep) (not (fst c4))
+      halt (h4-perr-exp ".")
+    bx <-[h4-dpw] h4p f (if issep then #2 else #0) (if issep then h4-sep s1 else snd c4) (%wadd d #3) #0 #0 #0
+    let s2 = h4-pop (fst bx)
+    u0 <- h4-uses s2 (snd bx) (%wadd d #2) h4-BJV #0
+    u1 <- h4-uses s2 (snd bx) (%wadd d #3) h4-BJV #0
+    if andB (%weq a2 #0) (%wlt #1 u0)
+      halt (h4-perr-affine s2 a1 u0)
+    if andB (%weq a2 #0) (%wlt #1 u1)
+      halt (h4-perr-affine s2 a1 u1)
+    b1 <-[h4-dpw] h4-autodup s2 (snd bx) (%wadd d #2) (%wadd d #3) h4-BJV #0 (if %weq a2 #1 then u0 else #0)
+    b2 <-[h4-dpw] h4-autodup (fst b1) (snd b1) (%wadd d #3) (%wadd d #3) h4-BJV #0 (if %weq a2 #1 then u1 else #0)
+    l1 <- h4-mk1 h4-LAM (%wadd d #3) (snd b2)
+    l0 <- h4-mk1 h4-LAM (%wadd d #2) l1
+    dd <- h4-mk3 h4-DDU #0 a3 (h4-new h4-BJV #0 (%wadd d #1)) l0
+    t <- h4-mk1 h4-LAM (h4-lamext (%wadd d #1) (%wadd u0 u1)) dd
+    ret (fst b2 , t)
+  -- 16 λx&L: a1 the name, a2 cloned, a3 the label
+  if %weq w #16
+    let s1 = h4-push s0 a1 (%wadd d #2) a3 #0 a2 #2
+    let issep = orB (%weq (h4-peek s1) #44) (%weq (h4-peek s1) #59)
+    let c4 = h4-cons s1 "."
+    if andB (not issep) (not (fst c4))
+      halt (h4-perr-exp ".")
+    bx <-[h4-dpw] h4p f (if issep then #2 else #0) (if issep then h4-sep s1 else snd c4) (%wadd d #2) #0 #0 #0
+    let s2 = h4-pop (fst bx)
+    u0 <- h4-uses s2 (snd bx) (%wadd d #2) h4-BJ0 a3
+    u1 <- h4-uses s2 (snd bx) (%wadd d #2) h4-BJ1 a3
+    if andB (%weq a2 #0) (%wlt #1 u0)
+      halt (h4-perr-affine s2 a1 u0)
+    if andB (%weq a2 #0) (%wlt #1 u1)
+      halt (h4-perr-affine s2 a1 u1)
+    b1 <-[h4-dpw] h4-autodup s2 (snd bx) (%wadd d #2) (%wadd d #2) h4-BJ1 a3 (if %weq a2 #1 then u1 else #0)
+    b2 <-[h4-dpw] h4-autodup (fst b1) (snd b1) (%wadd d #2) (%wadd d #2) h4-BJ0 a3 (if %weq a2 #1 then u0 else #0)
+    du <- h4-mk2 h4-DUP a3 (h4-new h4-BJV #0 (%wadd d #1)) (snd b2)
+    t <- h4-mk1 h4-LAM (h4-lamext (%wadd d #1) (%wadd u0 u1)) du
+    ret (fst b2 , t)
+  -- 11 match cases: a1 the holder, a2 the tip
+  if %weq w #11
+    let s = h4-skip s0
+    let c = h4-peek s
+    let dg = h4-digits (h4s-src s) #0
+    let sdg = h4-skip (h4s-wsrc s (snd dg))
+    let ce = h4-chesc (hv2-drop1 (h4s-src s))
+    let nh = h4-name (h4-adv s)
+    let kind = if %weq c #39 then #1 else if h4-isdig c then (if %weq (h4-peek sdg) #58 then #2 else if %weq (h4-peek sdg) #110 then (if andB (%weq (fst dg) #0) (not (%weq (h4-peek1 sdg) #43)) then #3 else if andB (%weq (fst dg) #1) (%weq (h4-peek1 sdg) #43) then #4 else #0) else #0) else if andB (%weq c #35) (fst nh) then #5 else if andB (%weq c #91) (%weq (h4-peek1 s) #93) then #6 else if andB (%weq c #60) (%weq (h4-peek1 s) #62) then #7 else #0
+    if not (%weq kind #0)
+      let tg = if orB (%weq kind #1) (%weq kind #2) then h4-SWI else h4-MAT
+      let ex = if %weq kind #1 then fst (snd ce) else if %weq kind #2 then fst dg else if %weq kind #3 then h4-ZER else if %weq kind #4 then h4-SUC else if %weq kind #5 then snd (snd nh) else if %weq kind #6 then h4-NIL else h4-CON
+      let sa = if %weq kind #1 then h4s-wsrc s (hv2-drop1 (snd (snd ce))) else if %weq kind #2 then sdg else if %weq kind #3 then h4-adv sdg else if %weq kind #4 then h4-adv (h4-adv sdg) else if %weq kind #5 then fst (snd nh) else h4-adv (h4-adv s)
+      let c1 = h4-cons sa ":"
+      if not (fst c1)
+        halt (h4-perr-exp ":")
+      vx <-[h4-dpw] h4p f #0 (snd c1) d #0 #0 #0
+      let s2 = h4-sep (h4-skip (fst vx))
+      loc <- h4-alloc #2
+      do h4-wr loc (snd vx)
+      do h4-wr (%wsucc loc) h4-NUM0
+      do h4-wr a2 (h4-new tg ex loc)
+      jump h4p f #11 s2 d a1 (%wsucc loc) #0
+    cur <- h4-rd a1
+    if %weq cur h4-NUM0
+      fx <-[h4-dpw] h4p f #0 s d #0 #0 #0
+      let c2 = h4-cons (h4-sep (h4-skip (fst fx))) "}"
+      if not (fst c2)
+        halt (h4-perr-exp "}")
+      t <- h4-mk1 h4-USE #0 (snd fx)
+      ret (snd c2 , t)
+    if %weq c #125
+      let c2 = h4-cons s "}"
+      ret (snd c2 , cur)
+    let su = if %weq c #95 then snd (h4-cons (h4-adv s) ":") else s
+    dx <-[h4-dpw] h4p f #0 su d #0 #0 #0
+    do h4-wr a2 (snd dx)
+    let c3 = h4-cons (h4-sep (h4-skip (fst dx))) "}"
+    if not (fst c3)
+      halt (h4-perr-exp "}")
+    t <- h4-rd a1
+    ret (snd c3 , t)
+  -- 12 list elements
+  if %weq w #12
+    ex <-[h4-dpw] h4p f #0 s0 d #0 #0 #0
+    let s1 = h4-skip (h4-sep (h4-skip (fst ex)))
+    if %weq (h4-peek s1) #93
+      let c = h4-cons s1 "]"
+      t <- h4-ctr h4-CON (cons (snd ex) (cons (h4-new h4-C00 h4-NIL #0) nil))
+      ret (snd c , t)
+    rx <-[h4-dpw] h4p f #12 s1 d #0 #0 #0
+    t <- h4-ctr h4-CON (cons (snd ex) (cons (snd rx) nil))
+    ret (fst rx , t)
+  -- 13 constructor fields
+  if %weq w #13
+    if %weq (h4-peek s0) #125
+      let c = h4-cons s0 "}"
+      ret (snd c , #0)
+    ax <-[h4-dpw] h4p f #0 s0 d #0 #0 #0
+    rx <-[h4-dpw] h4p f #13 (h4-skip (h4-sep (h4-skip (fst ax)))) d #0 #0 #0
+    cell <- h4-alloc #2
+    do h4-wr cell (snd ax)
+    do h4-wr (%wsucc cell) (snd rx)
+    ret (fst rx , cell)
+  -- 8 operators and calls after the term a1, at least precedence a2
+  if %weq w #8
+    let s = h4-skip s0
+    let mcn = h4-match s "<>"
+    if fst mcn
+      tx <-[h4-dpw] h4p f #0 (snd mcn) d #0 #0 #0
+      t <- h4-ctr h4-CON (cons a1 (cons (snd tx) nil))
+      jump h4p f #8 (fst tx) d t a2 #0
+    let meq = h4-match s "==="
+    if fst meq
+      rx <-[h4-dpw] h4p f #1 (snd meq) d #0 #0 #0
+      ry <-[h4-dpw] h4p f #8 (fst rx) d (snd rx) #4 #0
+      t <- h4-mk2 h4-EQL #0 a1 (snd ry)
+      jump h4p f #8 (fst ry) d t a2 #0
+    let mand = h4-match s ".&."
+    if fst mand
+      rx <-[h4-dpw] h4p f #1 (snd mand) d #0 #0 #0
+      ry <-[h4-dpw] h4p f #8 (fst rx) d (snd rx) #2 #0
+      t <- h4-mk2 h4-AND #0 a1 (snd ry)
+      jump h4p f #8 (fst ry) d t a2 #0
+    let mor = h4-match s ".|."
+    if fst mor
+      rx <-[h4-dpw] h4p f #1 (snd mor) d #0 #0 #0
+      ry <-[h4-dpw] h4p f #8 (fst rx) d (snd rx) #1 #0
+      t <- h4-mk2 h4-OR #0 a1 (snd ry)
+      jump h4p f #8 (fst ry) d t a2 #0
+    let op = h4-opr (h4s-src s)
+    if andB (%wlt (fst op) #99) (not (%wlt (h4-prec (fst op)) a2))
+      let so = if %weq (snd op) #2 then h4-adv (h4-adv s) else h4-adv s
+      rx <-[h4-dpw] h4p f #1 so d #0 #0 #0
+      ry <-[h4-dpw] h4p f #8 (fst rx) d (snd rx) (%wsucc (h4-prec (fst op))) #0
+      t <- h4-mk2 h4-OP2 (fst op) a1 (snd ry)
+      jump h4p f #8 (fst ry) d t a2 #0
+    if not (%weq (h4-peek s) #40)
+      ret (s , a1)
+    let c = h4-cons s "("
+    if %weq (h4-peek (snd c)) #41
+      let c2 = h4-cons (snd c) ")"
+      jump h4p f #8 (snd c2) d a1 a2 #0
+    jump h4p f #14 (snd c) d a1 a2 #0
+  -- 14 call arguments
+  if %weq w #14
+    ax <-[h4-dpw] h4p f #0 s0 d #0 #0 #0
+    t <- h4-mk2 h4-APP #0 a1 (snd ax)
+    let s1 = h4-skip (h4-sep (h4-skip (fst ax)))
+    if %weq (h4-peek s1) #41
+      let c = h4-cons s1 ")"
+      jump h4p f #8 (snd c) d t a2 #0
+    jump h4p f #14 s1 d t a2 #0
+  -- 3 ! (after !)
+  if %weq w #3
+    let ss = h4-match (h4-skip s0) "!"
+    let strict = fst ss
+    let s = h4-skip (snd ss)
+    px <-[h4-dpw] h4p f #9 s d #0 #0 #0
+    if not (%weq (snd px) #0)
+      ret px
+    let mc = h4-match s "&"
+    let cl = if fst mc then #1 else #0
+    let n = h4-name (if fst mc then h4-skip (snd mc) else s)
+    if not (fst n)
+      halt (h4-perr-exp "name")
+    let nam = snd (snd n)
+    let s1 = h4-skip (fst (snd n))
+    if %weq (h4-peek s1) #61
+      let s2 = h4-skip (h4-adv s1)
+      let ml = h4-match s2 "λ"
+      let nv = h4-name (snd ml)
+      let msc = h4-match (h4-skip (fst (snd nv))) ";"
+      if andB (fst ml) (andB (fst nv) (fst msc))
+        let s3 = h4-push (h4-push (h4-skip (snd msc)) nam (%wadd d #1) #0 #0 #0 #2) (snd (snd nv)) (%wadd d #2) #0 #0 #0 #2
+        lf <- h4-alloc #1
+        lv <- h4-alloc #1
+        bx <-[h4-dpw] h4p f #0 s3 (%wadd d #2) #0 #0 #0
+        let s4 = h4-pop (h4-pop (fst bx))
+        uf <- h4-uses s4 (snd bx) (%wadd d #1) h4-BJV #0
+        uv <- h4-uses s4 (snd bx) (%wadd d #2) h4-BJV #0
+        if %wlt #1 uf
+          halt (h4-perr-affine s4 nam uf)
+        if %wlt #1 uv
+          halt (h4-perr-affine s4 (snd (snd nv)) uv)
+        do h4-wr lv (snd bx)
+        do h4-wr lf (h4-new h4-LAM (%wadd d #2) lv)
+        t <- h4-mk1 h4-UNS #0 (h4-new h4-LAM (%wadd d #1) lf)
+        ret (s4 , t)
+      vx <-[h4-dpw] h4p f #0 s2 d #0 #0 #0
+      let s3 = h4-push (h4-sep (h4-skip (fst vx))) nam (%wadd d #1) #0 #0 cl #2
+      loc <- h4-alloc #1
+      bx <-[h4-dpw] h4p f #0 s3 (%wadd d #1) #0 #0 #0
+      let s4 = h4-pop (fst bx)
+      u <- h4-uses s4 (snd bx) (%wadd d #1) h4-BJV #0
+      if andB (%weq cl #0) (%wlt #1 u)
+        halt (h4-perr-affine s4 nam u)
+      ad <-[h4-dpw] h4-autodup s4 (snd bx) (%wadd d #1) (%wadd d #1) h4-BJV #0 (if %weq cl #1 then u else #0)
+      do h4-wr loc (snd ad)
+      let lmt = h4-new h4-LAM (%wadd d #1) loc
+      if strict
+        us <- h4-mk1 h4-USE #0 lmt
+        t <- h4-mk2 h4-APP #0 us (snd vx)
+        ret (fst ad , t)
+      t <- h4-mk2 h4-APP #0 lmt (snd vx)
+      ret (fst ad , t)
+    let c1 = h4-cons s1 "&"
+    if not (fst c1)
+      halt (h4-perr-exp "&")
+    let s2 = snd c1
+    if %weq (h4-peek s2) #40
+      lt <-[h4-dpw] h4p f #0 (snd (h4-cons s2 "(")) d #0 #0 #0
+      let c2 = h4-cons (fst lt) ")"
+      let c3 = h4-cons (snd c2) "="
+      vx <-[h4-dpw] h4p f #0 (snd c3) d #0 #0 #0
+      let s3 = h4-push (h4-skip (h4-sep (h4-skip (fst vx)))) nam (%wadd d #1) h4-DYN #0 cl #2
+      bx <-[h4-dpw] h4p f #0 s3 (%wadd d #2) #0 #0 #0
+      let s4 = h4-pop (fst bx)
+      u0 <- h4-uses s4 (snd bx) (%wadd d #1) h4-BJV #0
+      u1 <- h4-uses s4 (snd bx) (%wadd d #2) h4-BJV #0
+      if andB (%weq cl #0) (%wlt #1 u0)
+        halt (h4-perr-affine s4 nam u0)
+      if andB (%weq cl #0) (%wlt #1 u1)
+        halt (h4-perr-affine s4 nam u1)
+      b1 <-[h4-dpw] h4-autodup s4 (snd bx) (%wadd d #1) (%wadd d #2) h4-BJV #0 (if %weq cl #1 then u0 else #0)
+      b2 <-[h4-dpw] h4-autodup (fst b1) (snd b1) (%wadd d #2) (%wadd d #2) h4-BJV #0 (if %weq cl #1 then u1 else #0)
+      l1 <- h4-mk1 h4-LAM (%wadd d #2) (snd b2)
+      l0 <- h4-mk1 h4-LAM (%wadd d #1) l1
+      t <- h4-mk3 h4-DDU #0 (snd lt) (snd vx) l0
+      ret (fst b2 , t)
+    let fr = %weq (h4-peek s2) #61
+    let ln = h4-namenum s2
+    if andB (not fr) (not (fst ln))
+      halt (h4-perr-exp "label")
+    let lab = if fr then h4s-flab s2 else snd (snd ln)
+    let s3 = if fr then h4s-wflab s2 (%wsucc (h4s-flab s2)) else fst (snd ln)
+    loc <- h4-alloc #2
+    let c2 = h4-cons s3 "="
+    if not (fst c2)
+      halt (h4-perr-exp "=")
+    vx <-[h4-dpw] h4p f #0 (snd c2) d #0 #0 #0
+    do h4-wr loc (snd vx)
+    let s4 = h4-push (h4-skip (h4-sep (h4-skip (fst vx)))) nam (%wadd d #1) lab #0 cl #2
+    bx <-[h4-dpw] h4p f #0 s4 (%wadd d #1) #0 #0 #0
+    let s5 = h4-pop (fst bx)
+    u0 <- h4-uses s5 (snd bx) (%wadd d #1) h4-BJ0 lab
+    u1 <- h4-uses s5 (snd bx) (%wadd d #1) h4-BJ1 lab
+    if andB (%weq cl #0) (%wlt #1 u0)
+      halt (h4-perr-affine s5 nam u0)
+    if andB (%weq cl #0) (%wlt #1 u1)
+      halt (h4-perr-affine s5 nam u1)
+    b1 <-[h4-dpw] h4-autodup s5 (snd bx) (%wadd d #1) (%wadd d #1) h4-BJ1 lab (if %weq cl #1 then u1 else #0)
+    b2 <-[h4-dpw] h4-autodup (fst b1) (snd b1) (%wadd d #1) (%wadd d #1) h4-BJ0 lab (if %weq cl #1 then u0 else #0)
+    do h4-wr (%wsucc loc) (snd b2)
+    ret (fst b2 , h4-new h4-DUP lab loc)
+  -- 9 a dup pattern ! &L{x,y} = v; body (snd 0: none)
+  if %weq w #9
+    let s = h4-skip s0
+    let ma = h4-match s "&"
+    if not (fst ma)
+      ret (s0 , #0)
+    let s1 = h4-skip (snd ma)
+    let c = h4-peek s1
+    let isdyn = %weq c #40
+    let isfresh = %weq c #123
+    let nl = h4-namenum s1
+    if andB (not isdyn) (andB (not isfresh) (not (andB (h4-isinit c) (%weq (h4-peek (fst (snd nl))) #123))))
+      ret (s0 , #0)
+    lt <-[h4-dpw] h4p f #17 s1 d (if isdyn then #1 else #0) #0 #0
+    let s2 = if isdyn then fst lt else if isfresh then s1 else fst (snd nl)
+    let c1 = h4-cons s2 "{"
+    if not (fst c1)
+      halt (h4-perr-exp "{")
+    let p0 = h4-match (snd c1) "&"
+    let n0 = h4-name (if fst p0 then h4-skip (snd p0) else snd c1)
+    let p1 = h4-match (h4-skip (h4-sep (h4-skip (fst (snd n0))))) "&"
+    let n1 = h4-name (if fst p1 then h4-skip (snd p1) else snd p1)
+    let c2 = h4-cons (h4-sep (h4-skip (fst (snd n1)))) "}"
+    if not (andB (fst n0) (andB (fst n1) (fst c2)))
+      halt (h4-perr-exp "dup pattern")
+    if %weq (snd (snd n0)) (snd (snd n1))
+      halt (h4-perr-exp "distinct names in dup pattern")
+    let lab = if isfresh then h4s-flab (snd c2) else snd (snd nl)
+    let s3 = if isfresh then h4s-wflab (snd c2) (%wsucc (h4s-flab (snd c2))) else snd c2
+    let c3 = h4-cons s3 "="
+    if not (fst c3)
+      halt (h4-perr-exp "=")
+    vx <-[h4-dpw] h4p f #0 (snd c3) d #0 #0 #0
+    let s4 = h4-skip (h4-sep (h4-skip (fst vx)))
+    let cl0 = if fst p0 then #1 else #0
+    let cl1 = if fst p1 then #1 else #0
+    let nm0 = snd (snd n0)
+    let nm1 = snd (snd n1)
+    if isdyn
+      let s5 = h4-push (h4-push s4 nm0 (%wadd d #1) h4-DYN #0 cl0 #0) nm1 (%wadd d #1) h4-DYN #0 cl1 #1
+      bx <-[h4-dpw] h4p f #0 s5 (%wadd d #2) #0 #0 #0
+      let s6 = h4-pop (h4-pop (fst bx))
+      u0 <- h4-uses s6 (snd bx) (%wadd d #1) h4-BJV #0
+      u1 <- h4-uses s6 (snd bx) (%wadd d #2) h4-BJV #0
+      b1 <-[h4-dpw] h4-autodup s6 (snd bx) (%wadd d #1) (%wadd d #2) h4-BJV #0 (if %weq cl0 #1 then u0 else #0)
+      b2 <-[h4-dpw] h4-autodup (fst b1) (snd b1) (%wadd d #2) (%wadd d #2) h4-BJV #0 (if %weq cl1 #1 then u1 else #0)
+      if andB (%weq cl0 #0) (%wlt #1 u0)
+        halt (h4-perr-affine s6 nm0 u0)
+      if andB (%weq cl1 #0) (%wlt #1 u1)
+        halt (h4-perr-affine s6 nm1 u1)
+      l1 <- h4-mk1 h4-LAM (%wadd d #2) (snd b2)
+      l0 <- h4-mk1 h4-LAM (%wadd d #1) l1
+      t <- h4-mk3 h4-DDU #0 (snd lt) (snd vx) l0
+      ret (fst b2 , t)
+    let s5 = h4-push (h4-push s4 nm0 (%wadd d #1) lab #0 cl0 #0) nm1 (%wadd d #1) lab #0 cl1 #1
+    bx <-[h4-dpw] h4p f #0 s5 (%wadd d #1) #0 #0 #0
+    let s6 = h4-pop (h4-pop (fst bx))
+    u0 <- h4-uses s6 (snd bx) (%wadd d #1) h4-BJ0 lab
+    u1 <- h4-uses s6 (snd bx) (%wadd d #1) h4-BJ1 lab
+    b1 <-[h4-dpw] h4-autodup s6 (snd bx) (%wadd d #1) (%wadd d #1) h4-BJ1 lab (if %weq cl1 #1 then u1 else #0)
+    b2 <-[h4-dpw] h4-autodup (fst b1) (snd b1) (%wadd d #1) (%wadd d #1) h4-BJ0 lab (if %weq cl0 #1 then u0 else #0)
+    if andB (%weq cl0 #0) (%wlt #1 u0)
+      halt (h4-perr-affine s6 nm0 u0)
+    if andB (%weq cl1 #0) (%wlt #1 u1)
+      halt (h4-perr-affine s6 nm1 u1)
+    t <- h4-mk2 h4-DUP lab (snd vx) (snd b2)
+    ret (fst b2 , t)
+  -- 4 & (after &)
+  if %weq w #4
+    let s = h4-skip s0
+    if %weq (h4-peek s) #123
+      let c1 = h4-cons s "{"
+      let c2 = h4-cons (snd c1) "}"
+      ret (snd c2 , h4-era)
+    let dyn = if %weq (h4-peek s) #40 then #1 else #0
+    let nl = h4-namenum s
+    if andB (%weq dyn #0) (not (fst nl))
+      halt (h4-perr-exp "label")
+    lt <-[h4-dpw] h4p f #17 s d dyn #0 #0
+    let s1 = h4-skip (if %weq dyn #1 then fst lt else fst (snd nl))
+    let lab = if %weq dyn #1 then #0 else snd (snd nl)
+    let ml = h4-match s1 "λ"
+    if fst ml
+      jump h4p f #5 (snd ml) d dyn (snd lt) lab
+    if andB (%weq (h4-peek s1) #33) (%weq (h4-peek1 s1) #123)
+      jump h4p f #7 (snd (h4-cons s1 "!")) d dyn (snd lt) lab
+    if %weq (h4-peek s1) #91
+      jump h4p f #6 (snd (h4-cons s1 "[")) d dyn (snd lt) lab
+    let c1 = h4-cons s1 "{"
+    if not (fst c1)
+      halt (h4-perr-exp "{")
+    x0 <-[h4-dpw] h4p f #0 (snd c1) d #0 #0 #0
+    x1 <-[h4-dpw] h4p f #0 (h4-sep (h4-skip (fst x0))) d #0 #0 #0
+    let c2 = h4-cons (h4-sep (h4-skip (fst x1))) "}"
+    if not (fst c2)
+      halt (h4-perr-exp "}")
+    if %weq dyn #1
+      t <- h4-mk3 h4-DSU #0 (snd lt) (snd x0) (snd x1)
+      ret (snd c2 , t)
+    t <- h4-mk2 h4-SUP lab (snd x0) (snd x1)
+    ret (snd c2 , t)
+  -- 5 fork &Lλx,y{A;B}: a1 dyn, a2 label term, a3 label
+  if %weq w #5
+    let saved = h4s-fside s0
+    let n0 = h4-name s0
+    if not (fst n0)
+      halt (h4-perr-exp "name")
+    let nm = h4-forknames (toNat #16) (h4-skip (fst (snd n0))) (cons (snd (snd n0)) nil)
+    if not (fst nm)
+      halt (h4-perr-exp "name")
+    let names = snd (snd nm)
+    let n = cli-len names
+    let c1 = h4-cons (fst (snd nm)) "{"
+    let dd = if %weq a1 #1 then #3 else #2
+    let s1 = h4-pushfork (snd c1) names #0 d dd (if %weq a1 #1 then h4-DYN else a3)
+    let bd = %wadd d (%wmul n dd)
+    let z0 = h4-match s1 "&₀"
+    let s2 = h4s-wfside (if fst z0 then snd (h4-cons (h4-skip (snd z0)) ":") else s1) #0
+    lx <-[h4-dpw] h4p f #0 s2 bd #0 #0 #0
+    let s3 = h4-skip (h4-sep (h4-skip (fst lx)))
+    let z1 = h4-match s3 "&₁"
+    let s4 = h4s-wfside (if fst z1 then snd (h4-cons (h4-skip (snd z1)) ":") else s3) #1
+    rx <-[h4-dpw] h4p f #0 s4 bd #0 #0 #0
+    let c2 = h4-cons (h4-sep (h4-skip (h4s-wfside (fst rx) saved))) "}"
+    if not (fst c2)
+      halt (h4-perr-exp "}")
+    let s5 = h4-popn (snd c2) (toNat n)
+    fx <-[h4-dpww] h4-forkfix (toNat #17) s5 (h4-mkcaps names) #0 d dd a1 a3 bd (snd lx) (snd rx)
+    body <- h4-supdsu a1 a2 a3 (fst (snd fx)) (snd (snd fx))
+    t <- h4-forkwrap (toNat #17) n d dd a1 a3 a2 body
+    ret (fst fx , t)
+  -- 6 sup-fork [x,&y]{A;B}
+  if %weq w #6
+    let saved = h4s-fside s0
+    let sn = h4-supnames (toNat #17) s0 saved nil
+    if not (fst sn)
+      halt (h4-perr-exp "variable in scope")
+    let c1 = h4-cons (fst (snd sn)) "]"
+    let c2 = h4-cons (snd c1) "{"
+    jump h4p f #10 (h4s-wcap (snd c2) (snd (snd sn))) d a1 a2 a3
+  -- 7 auto-fork !{A;B}
+  if %weq w #7
+    let saved = h4s-fside s0
+    let caps = h4-autocaps (h4-revb (h4s-bs s0) nil) saved nil
+    let c2 = h4-cons s0 "{"
+    jump h4p f #10 (h4s-wcap (snd c2) caps) d a1 a2 a3
+  -- 10 sup-fork core
+  if %weq w #10
+    let saved = h4s-fside s0
+    let caps = h4s-cap s0
+    let n = cli-len-b caps
+    let dd = if %weq a1 #1 then #2 else #1
+    let s1 = h4-pushcaps (h4s-wfside s0 #2) caps #0 d dd (if %weq a1 #1 then h4-DYN else a3)
+    let bd = %wadd d (%wmul n dd)
+    let z0 = h4-match s1 "&₀"
+    let s2 = h4s-wfside (if fst z0 then snd (h4-cons (h4-skip (snd z0)) ":") else s1) #0
+    lx <-[h4-dpw] h4p f #0 s2 bd #0 #0 #0
+    let s3 = h4-skip (h4-sep (h4-skip (fst lx)))
+    let z1 = h4-match s3 "&₁"
+    let s4 = h4s-wfside (if fst z1 then snd (h4-cons (h4-skip (snd z1)) ":") else s3) #1
+    rx <-[h4-dpw] h4p f #0 s4 bd #0 #0 #0
+    let c2 = h4-cons (h4-sep (h4-skip (h4s-wfside (fst rx) saved))) "}"
+    if not (fst c2)
+      halt (h4-perr-exp "}")
+    let s5 = h4-popn (snd c2) (toNat n)
+    fx <-[h4-dpww] h4-forkfix (toNat #17) s5 caps #0 d dd a1 a3 bd (snd lx) (snd rx)
+    body <- h4-supdsu a1 a2 a3 (fst (snd fx)) (snd (snd fx))
+    t <- h4-capwrap (toNat #17) (h4-revb caps nil) n d dd a1 a3 a2 body
+    ret (fst fx , t)
+  -- 17 an optional label term: a1 1 for "(term)", else nothing
+  if %weq w #17
+    if %weq a1 #0
+      ret (s0 , #0)
+    let c1 = h4-cons s0 "("
+    lx <-[h4-dpw] h4p f #0 (snd c1) d #0 #0 #0
+    let c2 = h4-cons (fst lx) ")"
+    if not (fst c2)
+      halt (h4-perr-exp ")")
+    ret (snd c2 , snd lx)
+  halt (h4-perr "parser: no such production")
+

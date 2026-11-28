@@ -1,0 +1,11 @@
+#!/bin/bash
+# ports/regen.sh bend|hvm4: rewrite lib/<what>.hypercubical from its do-notation sources
+# (ports/<what>/*.src, in file order), expanded to CPS by ports/h4gen.py and ordered by ports/topo.py.
+set -e
+cd "$(dirname "$0")/.."
+what=$1; tmp=$(mktemp)
+cat ports/$what/*.src | python3 ports/h4gen.py /dev/stdin \
+  | { if [ "$what" = bend ]; then sed "s/\bh4-dep\b/b2-dep/g"; else cat; fi; } \
+  | python3 ports/topo.py /dev/stdin > "$tmp"
+./hyperactive remove lib/$what.hypercubical > /dev/null 2>&1 || true
+./hyperactive write lib/$what.hypercubical < "$tmp"; rm -f "$tmp"

@@ -1,0 +1,11 @@
+-- SWIT: a number meets a switch node
+hv2-swit : Hv2Net → Word → Word → Hv2Net
+hv2-swit net a b =
+  let av = hv2-u24 (hv2-val a)
+      w = hv2-node-get net (hv2-val b)
+      net1 = hv2-node-del net (hv2-val b)
+      n0 = hv2-nn net1
+      era = hv2-port hv2-ERA #0
+  in if %weq av #0
+     then hv2-ln (hv2-node-set (hv2-alloc net1 #1 #0) n0 (hv2-pair (hv2-snd w) era)) (hv2-port hv2-CON n0) (hv2-fst w)
+     else hv2-ln (hv2-node-set (hv2-node-set (hv2-alloc net1 #2 #0) n0 (hv2-pair era (hv2-port hv2-CON (%wadd n0 #1)))) (%wadd n0 #1) (hv2-pair (hv2-port hv2-NUM (hv2-new hv2-TY-U24 (%wsub av #1))) (hv2-snd w))) (hv2-port hv2-CON n0) (hv2-fst w)

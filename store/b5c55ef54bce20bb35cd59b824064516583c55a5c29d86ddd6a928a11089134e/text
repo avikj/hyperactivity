@@ -1,0 +1,8 @@
+-- the 24 bits of the i24
+ief-to-i24 : Word → Word
+ief-to-i24 x =
+  if ief-isnan x then #0
+  else (let t = ief-trunc x
+        in if %weq (ief-sgn x) #1
+           then (if %wlt t #8388608 then %wand (%wsub #16777216 t) #16777215 else #8388608)
+           else (if %wlt t #8388607 then t else #8388607))

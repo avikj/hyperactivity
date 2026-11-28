@@ -1,0 +1,14 @@
+-- the redexes after a net's root: & [!] tree ~ tree, any number of times
+hv2-rbag-go : Nat → List Word → List (Hv2Tree × Hv2Tree) → List (Hv2Tree × Hv2Tree) × List Word
+hv2-rbag-go zero s acc = (hv2-rev2 acc nil , s)
+hv2-rbag-go (suc n) s0 acc =
+  case hv2-sk s0 of
+    nil → (hv2-rev2 acc nil , nil)
+    cons c r →
+      if %weq c #38 then
+        (let r1 = hv2-sk r
+             r2 = hv2-bang r1
+             x = hv2-tree n r2
+             y = hv2-tree n (hv2-drop1 (hv2-sk (snd x)))
+         in hv2-rbag-go n (snd y) (cons (fst x , fst y) acc))
+      else (hv2-rev2 acc nil , cons c r)

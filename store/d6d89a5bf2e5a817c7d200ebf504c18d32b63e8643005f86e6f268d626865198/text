@@ -1,0 +1,8 @@
+ief-mul : Word → Word → Word
+ief-mul a b =
+  let s = %wxor (ief-sgn a) (ief-sgn b)
+  in if orB (ief-isnan a) (ief-isnan b) then ief-NAN
+     else if orB (ief-isinf a) (ief-isinf b)
+     then (if orB (ief-iszero a) (ief-iszero b) then ief-NAN else ief-inf s)
+     else if orB (ief-iszero a) (ief-iszero b) then ief-sbit s
+     else ief-round s (%wmul (ief-m a) (ief-m b)) (%wsub (%wadd (ief-e a) (ief-e b)) #4096) #0

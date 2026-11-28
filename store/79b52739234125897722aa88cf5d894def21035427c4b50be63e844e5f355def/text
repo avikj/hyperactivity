@@ -1,0 +1,7 @@
+-- a fresh node or variable, outside the loop (the loop's free stacks and fresh counters)
+hio-new-node : Word → (Word → Step W Word) → Step W Word
+hio-new-node m k =
+  scmd (w-load (%wadd m #32)) (λ c →
+  if %weq c #0
+  then scmd (w-load m) (λ i → hr-st m m (%wsucc i) (λ m1 → k (hv2-dep m1 i)))
+  else scmd (w-load (hr-fna m (%wsub c #1))) (λ i → hr-st m (%wadd m #32) (%wsub c #1) (λ m1 → k (hv2-dep m1 i))))

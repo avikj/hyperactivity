@@ -1,0 +1,9 @@
+-- a bracketed symbol: [op], [op N], or a cast [u24]
+hv2-sym-lit : List Word → Word × List Word
+hv2-sym-lit s =
+  let o = hv2-opsym-go hv2-opsyms s
+      r = hv2-sk (snd o)
+  in case r of
+       nil → (hv2-sym-of (fst o) , nil)
+       cons c r2 → if %weq c #93 then (hv2-sym-of (fst o) , r2)
+                   else (let l = hv2-lit r in (hv2-partial (hv2-sym-of (fst o)) (fst l) , hv2-drop1 (hv2-sk (snd l))))

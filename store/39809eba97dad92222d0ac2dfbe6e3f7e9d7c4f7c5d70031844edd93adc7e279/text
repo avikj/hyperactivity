@@ -1,0 +1,10 @@
+-- e^z and e^-z for z >= 0 at 2^P: (n, (a, b)) with e^z = a 2^n, e^-z = b 2^-n
+b2-fexps : List Word → Word × (List Word × List Word)
+b2-fexps z =
+  let l2 = ief-ln2-P
+      nq = fst (bg-divmod (bg-add (bg-shl1 z) l2) (bg-shl1 l2))
+      r = sx-add (#0 , z) (sx-neg (#0 , bg-mul nq l2))
+      ep = ief-ex-ser ief-fuel #1 (snd r) (snd r) (fst r) (#0 , nil)
+      em = ief-ex-ser ief-fuel #1 (snd r) (snd r) (%wxor (fst r) #1) (#0 , nil)
+      one = the (Word × List Word) (#0 , bg-pow2 ief-P)
+  in (bg-lo nq , (snd (sx-add ep one) , snd (sx-add em one)))

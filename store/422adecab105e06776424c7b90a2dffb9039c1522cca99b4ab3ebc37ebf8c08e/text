@@ -1,0 +1,9 @@
+-- CALL: a reference expanded into a fresh copy of its definition (or, a safe one meeting a
+-- duplicator, copied as itself: HVM2's copy optimization)
+hv2-call-def : Hv2Def → Hv2Net → Word → Hv2Net
+hv2-call-def (hv2def s root ns rb nv nn) net b =
+  let nb = hv2-nn net
+      vb = hv2-nv net
+      net1 = hv2-copy-nodes nb vb (hv2-alloc net nn nv) ns
+      net2 = hv2-copy-rbag nb vb net1 rb
+  in hv2-ln net2 (hv2-adjust nb vb root) b

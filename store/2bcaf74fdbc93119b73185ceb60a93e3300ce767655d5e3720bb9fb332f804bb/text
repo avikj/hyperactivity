@@ -1,0 +1,17 @@
+-- the float nearest m·2^(eb-4096) (+ a positive amount below 2^(eb-4096) when st is 1), ties to
+-- even; m below 2^63
+ief-round : Word → Word → Word → Word → Word
+ief-round s m eb st =
+  if %weq m #0 then ief-sbit s
+  else (let lead = %wsub (%wadd eb (bg-wlen m)) #1
+            u0 = %wsub lead #23
+            u = if %wlt u0 #3947 then #3947 else u0
+        in if %wlt u eb then ief-compose s (%wshl m (%wsub eb u)) u
+           else (let d = %wsub u eb
+                 in if %wlt #63 d then ief-sbit s
+                    else if %weq d #0 then ief-compose s m u
+                    else (let q = %wshr m d
+                              rem = %wsub m (%wshl q d)
+                              q1 = %wadd q (ief-up q rem (%wshl #1 (%wsub d #1)) st)
+                          in if %weq q1 #16777216 then ief-compose s #8388608 (%wsucc u)
+                             else ief-compose s q1 u)))

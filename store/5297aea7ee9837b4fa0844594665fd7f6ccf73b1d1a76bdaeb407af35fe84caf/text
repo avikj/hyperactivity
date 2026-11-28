@@ -1,0 +1,7 @@
+hio-close-rec : Word → Word → Word → (Word → Step W Word) → Step W Word
+hio-close-rec m i r k =
+  hio-sync r (λ er →
+  if not (%weq er #0) then hio-err-no (hv2-kp m er) er k
+  else scmd (w-load r) (λ buf → scmd (w-load (%wadd r #48)) (λ pa →
+       scmd (w-free buf) (λ u1 → scmd (w-free pa) (λ u2 → scmd (w-free r) (λ u3 →
+       hr-st (hv2-u (hv2-u (hv2-u m u1) u2) u3) (hr-fta m i) #0 (λ m1 → hio-ok m1 hio-era k)))))))

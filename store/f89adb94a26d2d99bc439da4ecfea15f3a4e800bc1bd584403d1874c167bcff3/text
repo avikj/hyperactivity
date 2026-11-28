@@ -1,0 +1,9 @@
+-- the definition's nodes, written where they were placed
+hr-cd-nodes : List (Word × Word) → Word → Word → Word → List Word → Word → Word → (Word → Step W Word) → Step W Word
+hr-cd-nodes nil m nb vb rb root b k = hr-cd-rb rb m nb vb root b k
+hr-cd-nodes (cons iw r) m nb vb rb root b k =
+  scmd (w-load (hr-fna m (%wadd nb (fst iw)))) (λ g →
+  scmd (w-load (hr-cd-ta m nb vb (hv2-fst (snd iw)))) (λ q1 →
+  scmd (w-load (hr-cd-ta m nb vb (hv2-snd (snd iw)))) (λ q2 →
+  scmd (w-store (hr-na m g) (hv2-pair (hr-cd-adj (hv2-fst (snd iw)) q1) (hr-cd-adj (hv2-snd (snd iw)) q2))) (λ u →
+  hr-cd-nodes r (hv2-u m u) nb vb rb root b k))))

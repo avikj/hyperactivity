@@ -1,0 +1,6 @@
+-- the first free HVM descriptor from 3: 256 when there is none
+hio-slot : Nat → Word → Word → (Word → Step W Word) → Step W Word
+hio-slot zero m i k = k #256
+hio-slot (suc n) m i k =
+  if %wlt #255 i then k #256
+  else scmd (w-load (hr-fta m i)) (λ v → if %weq v #0 then k i else hio-slot n m (%wsucc i) k)

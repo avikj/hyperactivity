@@ -1,0 +1,2573 @@
+-- ===========================================================================================
+-- Errors shown (bend.ts expr_show, err_lost_type, err_show)
+-- ===========================================================================================
+
+b2-reps : Word → Nat → List Word
+b2-reps c zero = nil
+b2-reps c (suc k) = cons c (b2-reps c k)
+
+b2-spaces : Word → List Word
+b2-spaces n = b2-reps #32 (toNat n)
+
+b2-carets : Word → List Word
+b2-carets n = b2-reps #94 (toNat n)
+
+-- a line's text before the caret, each unit but a tab a space
+b2-blank : List Word → List Word
+b2-blank nil = nil
+b2-blank (cons c r) = cons (the Word (if %weq c #9 then #9 else #32)) (b2-blank r)
+
+b2-padstart : Word → List Word → List Word
+b2-padstart n s = list-append (b2-spaces (%wsub n (cli-len s))) s
+
+-- expr_show(book, x, bnd, file): a message's text, or the term at its normal form
+fn b2-exprshow (bk : Word) (x : Word) (bnd : Word) (fl : Word) : List Word
+  tg <- b2m-tag x
+  if %weq tg b2-STR
+    a <- b2m-f x #0
+    r <-[b2-dpl] b2-bytes a
+    ret r
+  y <- b2-snf bk x
+  if %weq y b2-ERR
+    ret nil
+  n <- b2m-vlen bnd
+  l <- b2-lower y n
+  if %weq l b2-ERR
+    ret nil
+  s <-[b2-dpl] b2-show l #0 bnd fl
+  ret s
+
+-- the first n names of a vector, a new vector
+fnrec b2-vtakeg (f : Nat) (v : Word) (ob : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  x <- b2m-vat v j
+  do b2-vpush ob x
+  jump b2-vtakeg f v ob (%wsucc j) n
+
+fn b2-vtake (v : Word) (n : Word) : Word
+  ob <- b2-vec
+  r <- b2-vtakeg (toNat #4294967295) v ob #0 n
+  ret r
+
+-- the widest binder name (UTF-16 units) of the anns array (0 where nothing is bound)
+fnrec b2-annwid (f : Nat) (anns : Word) (j : Word) (n : Word) (w : Word) : Word
+  zero: ret w
+  if %weq j n
+    ret w
+  a <- b2m-at anns j
+  if %weq a #0
+    jump b2-annwid f anns (%wsucc j) n w
+  k <- b2m-rd (%wadd a #1)
+  s <- b2-nstr k
+  l <- b2m-len s
+  jump b2-annwid f anns (%wsucc j) n (the Word (if %wlt w l then l else w))
+
+-- the context's lines
+fnrec b2-ctxlines (f : Nat) (bk : Word) (anns : Word) (bnd : Word) (fl : Word) (wid : Word) (j : Word) (acc : List Word) : List Word
+  zero: ret acc
+  n <- b2m-len anns
+  if %weq j n
+    ret acc
+  a <- b2m-at anns j
+  if %weq a #0
+    jump b2-ctxlines f bk anns bnd fl wid (%wsucc j) acc
+  k <- b2m-rd (%wadd a #1)
+  vT <- b2m-rd (%wadd a #2)
+  ks <- b2-nstr k
+  kl <- b2m-len ks
+  kb <-[b2-dpl] b2-nbytes k
+  b1 <- b2-vtake bnd j
+  ts <-[b2-dpl] b2-exprshow bk vT b1 fl
+  li <- b2-bndlast bnd k
+  let hid = the (List Word) (if %weq li j then nil else " (shadowed)")
+  jump b2-ctxlines f bk anns bnd fl wid (%wsucc j) (list-append acc (list-append (cons #10 "- ") (list-append kb (list-append (b2-spaces (%wsub wid kl)) (list-append " : " (list-append ts hid))))))
+
+-- the anns of a context in index order: an array, 0 where nothing is bound
+fnrec b2-annsput (f : Nat) (ob : Word) (prs : Word) (j : Word) (n : Word) : Word
+  zero: ret ob
+  if not (%wlt j n)
+    ret ob
+  i <- b2m-vat prs j
+  a <- b2m-vat prs (%wsucc j)
+  do b2m-put ob i a
+  jump b2-annsput f ob prs (%wadd j #2) n
+
+-- the count of newlines in the units [0, e) of a RAM string, and the start of the line at e
+fnrec b2-nlcount (f : Nat) (s : Word) (j : Word) (e : Word) (cnt : Word) (ls : Word) : Word
+  zero: ret cnt
+  if %weq j e
+    r <- b2m-r3 cnt ls #0
+    ret r
+  c <- b2m-at s j
+  if %weq c #10
+    jump b2-nlcount f s (%wsucc j) e (%wsucc cnt) (%wsucc j)
+  jump b2-nlcount f s (%wsucc j) e cnt ls
+
+-- the end of the line starting at j (the index of its newline, or the length)
+fnrec b2-lineend (f : Nat) (s : Word) (j : Word) (n : Word) : Word
+  zero: ret j
+  if %weq j n
+    ret j
+  c <- b2m-at s j
+  if %weq c #10
+    ret j
+  jump b2-lineend f s (%wsucc j) n
+
+-- the lines from line number ln (its start j) to e, the caret line under line at
+fnrec b2-spnlines (f : Nat) (s : Word) (j : Word) (ln : Word) (e : Word) (at : Word) (num : Word) (car : List Word) (acc : List Word) : List Word
+  zero: ret acc
+  if %wlt e ln
+    ret acc
+  n <- b2m-len s
+  le <- b2-lineend (toNat #4294967295) s j n
+  lu <-[b2-dpl] b2-slice s j le
+  let l = b2-utf8 lu
+  let ns = b2-padstart num (ce-dec ln)
+  let one = the (List Word) (if %weq ln at then list-append ns (list-append ">| " (list-append l (cons #10 car))) else list-append ns (list-append " | " l))
+  let acc2 = the (List Word) (if h4-isnil acc then one else list-append acc (cons #10 one))
+  jump b2-spnlines f s (%wsucc le) (%wsucc ln) e at num car acc2
+
+-- the start of line number ln (from j at line cur)
+fnrec b2-lnstart (f : Nat) (s : Word) (j : Word) (cur : Word) (ln : Word) : Word
+  zero: ret j
+  if %weq cur ln
+    ret j
+  n <- b2m-len s
+  le <- b2-lineend (toNat #4294967295) s j n
+  jump b2-lnstart f s (%wsucc le) (%wsucc cur) ln
+
+-- the span excerpt: a newline and its lines with a caret
+fn b2-spnshow (spn : Word) : List Word
+  fl <- b2m-f spn #0
+  s <- b2m-f fl #0
+  beg <- b2m-f spn #1
+  end <- b2m-f spn #2
+  n <- b2m-len s
+  nc <- b2-nlcount (toNat #4294967295) s #0 beg #0 #0
+  cnt <- b2m-rd nc
+  ls <- b2m-rd (%wadd nc #1)
+  all <- b2-nlcount (toNat #4294967295) s #0 n #0 #0
+  tot <- b2m-rd all
+  let at = %wsucc cnt
+  let lns = %wsucc tot
+  let b0 = the Word (if %wlt #1 (%wsub at #1) then %wsub at #1 else #1)
+  let e0 = the Word (if %wlt lns (%wsucc at) then lns else %wsucc at)
+  let num = cli-len (ce-dec e0)
+  le <- b2-lineend (toNat #4294967295) s ls n
+  lft <-[b2-dpl] b2-slice s ls beg
+  let ll = %wsub le ls
+  let lf = cli-len lft
+  let w0 = %wsub end beg
+  let w1 = %wsub ll lf
+  let w = the Word (if %wlt w0 w1 then w0 else w1)
+  let car = list-append (b2-spaces num) (list-append " | " (list-append (b2-blank lft) (b2-carets (the Word (if %wlt w #1 then #1 else w)))))
+  j0 <- b2-lnstart (toNat #4294967295) s #0 #1 b0
+  r <-[b2-dpl] b2-spnlines (toNat #4294967295) s j0 b0 e0 at num car nil
+  ret (cons #10 r)
+
+b2-isidhead : Word → Bool
+b2-isidhead c = orB (andB (%wlt #64 c) (%wlt c #91)) (orB (andB (%wlt #96 c) (%wlt c #123)) (%weq c #95))
+
+b2-isidtail : List Word → Bool
+b2-isidtail nil = true
+b2-isidtail (cons c r) = if orB (b2-isidhead c) (orB (andB (%wlt #47 c) (%wlt c #58)) (%weq c #46)) then b2-isidtail r else false
+
+b2-dropws : List Word → List Word
+b2-dropws nil = nil
+b2-dropws (cons c r) = if orB (%weq c #32) (%weq c #9) then b2-dropws r else cons c r
+
+-- the operator after the span: 1 <-, 2 = (not ==), 0 neither
+b2-opafter : List Word → Word
+b2-opafter s =
+  let t = b2-dropws s in
+  if andB (%weq (hv2-nth #0 t) #60) (%weq (hv2-nth #1 t) #45) then #1
+  else if andB (%weq (hv2-nth #0 t) #61) (not (%weq (hv2-nth #1 t) #61)) then #2
+  else #0
+
+-- err_lost_type(err): a do-block's note
+fn b2-losttype (e : Word) : List Word
+  spn <- b2m-f e #4
+  exp <- b2m-f e #2
+  fl <- b2m-f spn #0
+  s <- b2m-f fl #0
+  beg <- b2m-f spn #1
+  end <- b2m-f spn #2
+  n <- b2m-len s
+  ku <-[b2-dpl] b2-slice s beg end
+  nc <- b2-nlcount (toNat #4294967295) s #0 beg #0 #0
+  ls <- b2m-rd (%wadd nc #1)
+  atu <-[b2-dpl] b2-slice s ls beg
+  le <- b2-lineend (toNat #4294967295) s end n
+  afu <-[b2-dpl] b2-slice s end le
+  let k = b2-utf8 ku
+  let op = b2-opafter afu
+  if orB (%weq op #0) (orB (not (b2-allws atu)) (orB (h4-isnil ku) (orB (not (b2-isidhead (hv2-nth #0 ku))) (not (b2-isidtail (hv2-drop1 ku))))))
+    ret nil
+  et <- b2m-tag exp
+  ea <- b2m-f exp #0
+  eb0 <-[b2-dpl] b2-bytes ea
+  let eb = the (List Word) (if %weq et b2-STR then eb0 else nil)
+  if andB (%weq op #1) (orB (andB (%weq et b2-STR) (cli-eq eb "a defined name")) (%weq et b2-TYP))
+    ret (list-append "Note: in a do-block, " (list-append k (list-append " <- m runs m at type " (list-append k (list-append "; to bind its result, write " (list-append k " : A <- m."))))))
+  if andB (%weq op #2) (andB (%weq et b2-STR) (cli-eq eb "a pattern (a binder or a constructor)"))
+    ret (list-append "Note: in a do-block, a let names its type: " (list-append k " : A = v."))
+  ret nil
+
+-- err_show(err)
+fn b2-errshow (e : Word) : List Word
+  bk <- b2m-f e #0
+  ctx <- b2m-f e #1
+  exp <- b2m-f e #2
+  obs <- b2m-f e #3
+  spn <- b2m-f e #4
+  def <- b2m-f e #5
+  nte <- b2m-f e #6
+  fl <- b2-sfile spn
+  bnd <- b2-scope ctx
+  prs <- b2-pairs ctx
+  pn <- b2m-vlen prs
+  mx <- b2-maxkey (toNat #4294967295) prs #0 pn #0
+  anns0 <- b2-arr mx
+  anns <- b2-annsput (toNat #4294967295) anns0 prs #0 pn
+  es <-[b2-dpl] b2-exprshow bk exp bnd fl
+  os <-[b2-dpl] b2-exprshow bk obs bnd fl
+  let msg = the (List Word) (if %weq obs #0 then list-append (cons #10 "- message  : ") es else list-append (cons #10 "- expected : ") (list-append es (list-append (cons #10 "- observed : ") os)))
+  wid <- b2-annwid (toNat #4294967295) anns #0 mx #0
+  cl <-[b2-dpl] b2-ctxlines (toNat #4294967295) bk anns bnd fl wid #0 nil
+  ds0 <-[b2-dpl] b2-nameshow fl def
+  let ds = the (List Word) (if %weq def #0 then nil else cons #32 ds0)
+  sp0 <-[b2-dpl] b2-spnshowif spn
+  let loc = the (List Word) (if andB (h4-isnil ds) (h4-isnil sp0) then nil else list-append (cons #10 "Location:") (list-append ds sp0))
+  nt0 <-[b2-dpl] b2-bytesor nte
+  lt0 <-[b2-dpl] b2-losttypeif e spn
+  let n1 = the (List Word) (if h4-isnil nt0 then nil else cons #10 nt0)
+  let n2 = the (List Word) (if h4-isnil lt0 then nil else cons #10 lt0)
+  ret (list-append "Error:" (list-append msg (list-append (the (List Word) (if %weq pn #0 then nil else cons #10 "Context:")) (list-append cl (list-append loc (list-append n1 n2))))))
+
+fn b2-spnshowif (spn : Word) : List Word
+  if %weq spn #0
+    ret nil
+  r <-[b2-dpl] b2-spnshow spn
+  ret r
+
+fn b2-losttypeif (e : Word) (spn : Word) : List Word
+  if %weq spn #0
+    ret nil
+  r <-[b2-dpl] b2-losttype e
+  ret r
+
+fn b2-bytesor (a : Word) : List Word
+  if %weq a #0
+    ret nil
+  r <-[b2-dpl] b2-bytes a
+  ret r
+
+-- ===========================================================================================
+-- Paths (path.posix: normalize, resolve, relative, dirname)
+-- ===========================================================================================
+
+b2-segsg : List Word → List Word → List (List Word)
+b2-segsg cur nil = cons (hv2-rev cur) nil
+b2-segsg cur (cons c r) = if %weq c #47 then cons (hv2-rev cur) (b2-segsg nil r) else b2-segsg (cons c cur) r
+
+b2-segs : List Word → List (List Word)
+b2-segs p = b2-segsg nil p
+
+-- the segments normalized against a stack (reversed): . and empty dropped, .. pops
+b2-normsg : List (List Word) → List (List Word) → List (List Word)
+b2-normsg st nil = st
+b2-normsg st (cons s r) =
+  if orB (h4-isnil s) (cli-eq s ".") then b2-normsg st r
+  else if cli-eq s ".." then b2-normsg (h4-tl0 st) r
+  else b2-normsg (cons s st) r
+
+b2-joinsegs : List (List Word) → List Word
+b2-joinsegs nil = nil
+b2-joinsegs (cons s r) = if h4-stknil0 r then s else list-append s (cons #47 (b2-joinsegs r))
+
+b2-revsegs : List (List Word) → List (List Word) → List (List Word)
+b2-revsegs acc nil = acc
+b2-revsegs acc (cons s r) = b2-revsegs (cons s acc) r
+
+-- an absolute path normalized
+b2-pnorm : List Word → List Word
+b2-pnorm p = cons #47 (b2-joinsegs (b2-revsegs nil (b2-normsg nil (b2-segs p))))
+
+b2-presolve : List Word → List Word → List Word
+b2-presolve dir rel = if %weq (hv2-nth #0 rel) #47 then b2-pnorm rel else b2-pnorm (list-append dir (cons #47 rel))
+
+-- the directory of a path, with its last slash
+b2-pdir : List Word → List Word
+b2-pdir p = hv2-rev (h4-dropto (hv2-rev p))
+
+b2-pbase : List Word → List Word
+b2-pbase p = b2-afterlast #47 p
+
+b2-ups : List (List Word) → List Word
+b2-ups nil = nil
+b2-ups (cons s r) = list-append "../" (b2-ups r)
+
+b2-nonempty : List (List Word) → List (List Word)
+b2-nonempty nil = nil
+b2-nonempty (cons s r) = if h4-isnil s then b2-nonempty r else cons s (b2-nonempty r)
+
+b2-relsegs : List (List Word) → List (List Word) → List Word
+b2-relsegs nil b = b2-joinsegs b
+b2-relsegs (cons x xs) nil = b2-dropslash (b2-ups (cons x xs))
+b2-relsegs (cons x xs) (cons y ys) = if cli-eq x y then b2-relsegs xs ys else list-append (b2-ups (cons x xs)) (b2-joinsegs (cons y ys))
+
+b2-dropslash : List Word → List Word
+b2-dropslash s = if %weq (hv2-nth #0 (hv2-rev s)) #47 then hv2-rev (hv2-drop1 (hv2-rev s)) else s
+
+-- path.posix.relative(from, to) of two absolute paths
+b2-prel : List Word → List Word → List Word
+b2-prel a b = b2-relsegs (b2-nonempty (b2-segs (b2-pnorm a))) (b2-nonempty (b2-segs (b2-pnorm b)))
+
+b2-isw : Word → Bool
+b2-isw c = orB (b2-isidhead c) (andB (%wlt #47 c) (%wlt c #58))
+
+b2-plainseg : List Word → Bool
+b2-plainseg nil = false
+b2-plainseg (cons c r) = andB (b2-isidhead c) (b2-segtail r)
+
+b2-segtail : List Word → Bool
+b2-segtail nil = true
+b2-segtail (cons c r) = if orB (b2-isw c) (%weq c #45) then b2-segtail r else false
+
+b2-allplain : List (List Word) → Bool
+b2-allplain nil = true
+b2-allplain (cons s r) = if b2-plainseg s then b2-allplain r else false
+
+b2-dropupsn : Nat → List Word → List Word
+b2-dropupsn zero s = s
+b2-dropupsn (suc k) s = if andB (%weq (hv2-nth #0 s) #46) (andB (%weq (hv2-nth #1 s) #46) (%weq (hv2-nth #2 s) #47)) then b2-dropupsn k (hv2-drop1 (hv2-drop1 (hv2-drop1 s))) else s
+
+b2-dropups : List Word → List Word
+b2-dropups s = b2-dropupsn (toNat (cli-len s)) s
+
+-- a local path: a leading slash or ../ runs, then plain names joined by slashes
+b2-pathok : List Word → Bool
+b2-pathok s =
+  let t = if %weq (hv2-nth #0 s) #47 then hv2-drop1 s else b2-dropups s in
+  b2-allplain (b2-segs t)
+
+-- ===========================================================================================
+-- Loading (bend.ts book_load, parse_book; main.ts book_read): seen is a vector of [path, ns]
+-- (names; ns hv2-none while the file loads)
+-- ===========================================================================================
+
+-- the seen entry of a path, or 0
+fnrec b2-seenat (f : Nat) (seen : Word) (p : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  e <- b2m-vat seen j
+  x <- b2m-rd e
+  if %weq x p
+    ret e
+  jump b2-seenat f seen p (%wsucc j) n
+
+-- parse_book(book, dir, src, ns, al): the file record [str, ns, aliases (a vector of pairs)] and
+-- the parser's state
+fn b2-parsebook (bk : Word) (dir : List Word) (src : Word) (ns : Word) (als : Word) (alm : Word) : Word
+  fl <- b2m-n3 b2-FILE #0 src ns als
+  ds <- b2-str dir
+  stk <- b2-vec
+  idx <- b2-map #0
+  ann <- b2-map #0
+  p <- b2m-alloc #9
+  do b2m-wr p fl
+  do b2m-wr (%wadd p #1) #0
+  do b2m-wr (%wadd p #2) bk
+  do b2m-wr (%wadd p #3) ds
+  do b2m-wr (%wadd p #4) stk
+  do b2m-wr (%wadd p #5) idx
+  do b2m-wr (%wadd p #6) #0
+  do b2m-wr (%wadd p #7) ann
+  do b2m-wr (%wadd p #8) alm
+  r <- b2-ploop (toNat #4294967295) p
+  ret r
+
+-- the book's items one at a time (md 13 parses one: 1 another follows, 0 the end, or the
+-- failure): each item's closures are reclaimed once it is in the book (its terms are RAM)
+fnrec b2-ploop (f : Nat) (p : Word) : Word
+  zero: ret #0
+  do b2-pitem p
+  r <- rd (b2-HR M #28)
+  if %weq r #1
+    jump b2-ploop f p
+  ret r
+
+fn b2-pitem (p : Word) : Word
+  mk <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  wr (b2-HR M #31) #0
+  wr (b2-HR M #28) b2-ERR
+  r <-! b2p (toNat #4294967295) #13 p #0 #0 #0 #0
+  wr (b2-HR M #28) r
+  if not (%weq r #1)
+    ret r
+  jump b2-pans #0
+
+fn b2-pans (v : Word) : Word
+  halt (scmd (w-sys #901 #0 #0 #0 #0 #0 #0) kq_)
+
+-- the lines of a text, and back
+b2-lines : List Word → List (List Word)
+b2-lines s = b2-linesg nil s
+
+b2-linesg : List Word → List Word → List (List Word)
+b2-linesg cur nil = cons (hv2-rev cur) nil
+b2-linesg cur (cons c r) = if %weq c #10 then cons (hv2-rev cur) (b2-linesg nil r) else b2-linesg (cons c cur) r
+
+b2-unlines : List (List Word) → List Word
+b2-unlines nil = nil
+b2-unlines (cons l r) = if h4-stknil0 r then l else list-append l (cons #10 (b2-unlines r))
+
+b2-trim : List Word → List Word
+b2-trim s = hv2-rev (b2-dropsp (hv2-rev (b2-dropsp s)))
+
+b2-dropsp : List Word → List Word
+b2-dropsp nil = nil
+b2-dropsp (cons c r) = if orB (%weq c #32) (orB (%weq c #9) (orB (%weq c #13) (orB (%weq c #11) (%weq c #12)))) then b2-dropsp r else cons c r
+
+b2-isspc : Word → Bool
+b2-isspc c = orB (%weq c #32) (orB (%weq c #9) (orB (%weq c #13) (orB (%weq c #11) (%weq c #12))))
+
+b2-takenws : List Word → List Word
+b2-takenws nil = nil
+b2-takenws (cons c r) = if b2-isspc c then nil else cons c (b2-takenws r)
+
+b2-dropnws : List Word → List Word
+b2-dropnws nil = nil
+b2-dropnws (cons c r) = if b2-isspc c then cons c r else b2-dropnws r
+
+b2-takeid : List Word → List Word
+b2-takeid nil = nil
+b2-takeid (cons c r) = if b2-isw c then cons c (b2-takeid r) else nil
+
+b2-dropid : List Word → List Word
+b2-dropid nil = nil
+b2-dropid (cons c r) = if b2-isw c then b2-dropid r else cons c r
+
+-- ws* (#.*)? $
+b2-tailok : List Word → Bool
+b2-tailok s = let t = b2-dropsp s in orB (h4-isnil t) (%weq (hv2-nth #0 t) #35)
+
+-- an import line read: 0 no match, 1 a path alone, 2 a path and an alias
+b2-impkind : List Word → Word
+b2-impkind line =
+  let r0 = hv2-dropn6 line in
+  if not (andB (cli-eq (b2-ltake #6 line) "import") (b2-isspc (hv2-nth #0 r0))) then #0 else
+  let t = b2-dropsp r0 in
+  let rest = b2-dropnws t in
+  if b2-tailok rest then #1 else
+  let r1 = b2-dropsp rest in
+  if not (andB (cli-eq (b2-ltake #2 r1) "as") (b2-isspc (hv2-nth #2 r1))) then #0 else
+  let r2 = b2-dropsp (hv2-drop1 (hv2-drop1 r1)) in
+  if andB (b2-isidhead (hv2-nth #0 r2)) (b2-tailok (b2-dropid r2)) then #2 else #0
+
+hv2-dropn6 : List Word → List Word
+hv2-dropn6 l = hv2-drop1 (hv2-drop1 (hv2-drop1 (hv2-drop1 (hv2-drop1 (hv2-drop1 l)))))
+
+b2-imppath : List Word → List Word
+b2-imppath line = b2-takenws (b2-dropsp (hv2-dropn6 line))
+
+b2-impalias : List Word → List Word
+b2-impalias line = b2-takeid (b2-dropsp (hv2-drop1 (hv2-drop1 (b2-dropsp (b2-dropnws (b2-dropsp (hv2-dropn6 line)))))))
+
+-- the index of the first occurrence of p in s (UTF-16 units of both), or 0
+b2-indexof : List Word → List Word → Word
+b2-indexof s p = b2-indexofg s p #0
+
+b2-indexofg : List Word → List Word → Word → Word
+b2-indexofg nil p j = #0
+b2-indexofg (cons c r) p j = if cli-eq (b2-ltake (cli-len p) (cons c r)) p then j else b2-indexofg r p (%wsucc j)
+
+b2-startsimport : List Word → Bool
+b2-startsimport l = andB (cli-eq (b2-ltake #6 l) "import") (orB (%weq (cli-len l) #6) (b2-isspc (hv2-nth #6 l)))
+
+-- an import error: its span over the original text at beg
+fn b2-impfail (bk : Word) (text : Word) (ns : Word) (als : Word) (beg : Word) (exp : List Word) (obs : List Word) : Word
+  fl <- b2m-n3 b2-FILE #0 text ns als
+  sp <- b2-span fl beg beg
+  ob <- b2-msg obs
+  r <- b2-fail bk #0 exp ob sp #0
+  ret r
+
+b2-hasat : List Word → Bool
+b2-hasat nil = false
+b2-hasat (cons c r) = if %weq c #47 then false else if %weq c #64 then true else b2-hasat r
+
+-- drop a leading ./, and the last five units (.bend)
+b2-okform : List Word → List Word
+b2-okform s =
+  let t = if andB (%weq (hv2-nth #0 s) #46) (%weq (hv2-nth #1 s) #47) then hv2-drop1 (hv2-drop1 s) else s in
+  b2-ltake (%wsub (cli-len t) #5) t
+
+-- book_load(book, file, ns, seen, spn, root); md 0 load (st = [ns, seen, spn], file, root);
+-- md 1 the import lines (st = [rid, ent, text, ns, als, alm, seen, at], dir in file, top in root,
+-- ls the lines left, pre the lines read, reversed)
+fnrec b2-load (f : Nat) (md : Word) (bk : Word) (st : Word) (file : List Word) (root : List Word) (base : List Word) (ls : List (List Word)) (pre : List (List Word)) : Word
+  zero: ret #0
+  if %weq md #0
+    ns <- b2m-rd st
+    seen <- b2m-rd (%wadd st #1)
+    spn <- b2m-rd (%wadd st #2)
+    let real = b2-pnorm file
+    fr <- cmdp (w-file-read-named real)
+    if not (%weq (fst fr) #0)
+      r <- b2-fail bk #0 (list-append "no such file: " file) #0 spn #0
+      ret r
+    rid <- b2-nm real
+    sn <- b2m-vlen seen
+    se <- b2-seenat (toNat #4294967295) seen rid #0 sn
+    if not (%weq se #0)
+      sns <- b2m-rd (%wadd se #1)
+      if %weq sns hv2-none
+        r <- b2-fail bk #0 (list-append "an import cycle through " file) #0 spn #0
+        ret r
+      ov <- b2m-f bk #2
+      on <- b2m-vlen ov
+      ret on
+    ent <- b2m-r3 rid hv2-none #0
+    do b2-vpush seen ent
+    let dir = b2-pdir real
+    let top = the (List Word) (if h4-isnil root then dir else root)
+    let src = b2-u16 (b2-cps (snd fr))
+    text <- b2-arrl src
+    als <- b2-vec
+    alm <- b2-map #0
+    s2 <- b2m-alloc #8
+    do b2m-wr s2 rid
+    do b2m-wr (%wadd s2 #1) ent
+    do b2m-wr (%wadd s2 #2) text
+    do b2m-wr (%wadd s2 #3) ns
+    do b2m-wr (%wadd s2 #4) als
+    do b2m-wr (%wadd s2 #5) alm
+    do b2m-wr (%wadd s2 #6) seen
+    do b2m-wr (%wadd s2 #7) #0
+    jump b2-load f #1 bk s2 dir top base (b2-lines src) nil
+  rid <- b2m-rd st
+  ent <- b2m-rd (%wadd st #1)
+  text <- b2m-rd (%wadd st #2)
+  ns <- b2m-rd (%wadd st #3)
+  als <- b2m-rd (%wadd st #4)
+  alm <- b2m-rd (%wadd st #5)
+  seen <- b2m-rd (%wadd st #6)
+  at <- b2m-rd (%wadd st #7)
+  let line = h4-tget-go #0 ls
+  let tl = b2-trim line
+  let more = not (h4-stknil0 ls)
+  if andB more (orB (h4-isnil tl) (%weq (hv2-nth #0 tl) #35))
+    do b2m-wr (%wadd st #7) (%wadd at (%wsucc (cli-len line)))
+    jump b2-load f #1 bk st file root base (h4-tl0 ls) (cons line pre)
+  if andB more (b2-startsimport tl)
+    let kind = b2-impkind tl
+    let m1 = b2-imppath tl
+    let m2 = b2-impalias tl
+    let beg = %wadd at (b2-indexof line (the (List Word) (if %weq kind #0 then tl else m1)))
+    let tlb = b2-utf8 tl
+    let m1b = b2-utf8 m1
+    if orB (%weq kind #0) (andB (%weq kind #1) (not (cli-eq m1 "Base")))
+      r <- b2-impfail bk text ns als beg "an import ('import Base', or 'import <path> as <Name>')" (cons #39 (list-append tlb (cons #39 nil)))
+      ret r
+    fl <- b2m-n3 b2-FILE #0 text ns als
+    sp <- b2-span fl beg beg
+    do b2m-wr (%wadd st #7) (%wadd at (%wsucc (cli-len line)))
+    if %weq kind #1
+      s3 <- b2m-r3 b2-NEMPTYSTR seen sp
+      do! b2-load f #0 bk s3 base nil base nil nil
+      jump b2-load f #1 bk st file root base (h4-tl0 ls) (cons nil pre)
+    if not (b2-endswith m1 ".bend")
+      r <- b2-impfail bk text ns als beg "an import of a .bend file" (cons #39 (list-append m1b (cons #39 nil)))
+      ret r
+    aid <- b2-nm (b2-utf8 m2)
+    hit <- b2-inmap alm aid
+    if %weq hit #1
+      r <- b2-impfail bk text ns als beg (list-append "a fresh alias (" (list-append (b2-utf8 m2) " names an earlier import)")) (cons #39 (list-append tlb (cons #39 nil)))
+      ret r
+    let bad = the (List Word) "an import path of plain names (each starts with a letter or _, then letters, digits, _ and -)"
+    if b2-hasat m1
+      r <- b2-impfail bk text ns als beg (list-append "a package as <name>@<version>: a-z, 0-9 and -, 1 to 64 characters, at four numbers like 1.0.0.0" nil) (cons #39 (list-append (b2-utf8 (b2-upto #47 m1)) (cons #39 nil)))
+      ret r
+    if not (b2-pathok (b2-okform m1))
+      r <- b2-impfail bk text ns als beg bad (cons #39 (list-append m1b (cons #39 nil)))
+      ret r
+    let got = b2-presolve file m1b
+    fr <- cmdp (w-file-read-named got)
+    if not (%weq (fst fr) #0)
+      r <- b2-fail bk #0 (list-append "no such file: " got) #0 sp #0
+      ret r
+    let sub0 = b2-prel root got
+    let sub = b2-ltake (%wsub (cli-len sub0) #5) sub0
+    if not (b2-pathok sub)
+      r <- b2-impfail bk text ns als beg bad (cons #39 (list-append m1b (list-append "' (resolves to '" (list-append (b2-prel file got) (cons #39 (cons #41 nil))))))
+      ret r
+    sid <- b2-nm sub
+    do b2-mset alm aid sid
+    pr <- b2m-r3 aid sid #0
+    do b2-vpush als pr
+    s3 <- b2m-r3 sid seen sp
+    do! b2-load f #0 bk s3 got root base nil nil
+    jump b2-load f #1 bk st file root base (h4-tl0 ls) (cons nil pre)
+  let bodyu = b2-unlines (list-append (b2-revls pre) ls)
+  body <- b2-arrl bodyu
+  ov <- b2m-f bk #2
+  n0 <- b2m-vlen ov
+  do! b2-parsebook bk file body ns als alm
+  bid <- b2-nm base
+  if %weq rid bid
+    ov2 <- b2m-f bk #2
+    n1 <- b2m-vlen ov2
+    do b2-markbase (toNat #4294967295) bk n0 n1
+  do b2m-wr (%wadd ent #1) ns
+  ret n0
+
+b2-revls : List (List Word) → List (List Word)
+b2-revls l = b2-revsegs nil l
+
+-- the base's events marked b
+fnrec b2-markbase (f : Nat) (bk : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  ov <- b2m-f bk #2
+  k <- b2m-vat ov j
+  t <- b2-tld bk k
+  tg <- b2m-tag t
+  do b2m-setf t (the Word (if %weq tg b2-TADT then #4 else #5)) #1
+  jump b2-markbase f bk (%wsucc j) n
+
+-- ===========================================================================================
+-- The verdict (main.ts cli_verdict, book_promises, term_refs) and the run (book_run, book_err,
+-- book_location, cli_file): `bend FILE` for a file whose main is a value, or that has no main
+-- ===========================================================================================
+
+-- term_refs: the names of Refs and ADTs in a term, into the map out (spans and closures skipped;
+-- seen marks the visited nodes)
+fnrec b2-refs (f : Nat) (md : Word) (t : Word) (j : Word) (out : Word) (seen : Word) : Word
+  zero: ret #0
+  if %weq md #1
+    n <- b2m-len t
+    if %weq j n
+      ret #0
+    x <- b2m-at t j
+    do b2-refs f #0 x #0 out seen
+    jump b2-refs f #1 t (%wsucc j) out seen
+  if %weq t #0
+    ret #0
+  sn <- b2-inmap seen t
+  if %weq sn #1
+    ret #0
+  do b2-mset seen t #1
+  tg <- b2m-tag t
+  if orB (%weq tg b2-CLO) (orB (%weq tg b2-STR) (%weq tg b2-LIT))
+    ret #0
+  if orB (%weq tg b2-REF) (%weq tg b2-ADT)
+    k <- b2m-f t #0
+    do b2-mset out k #1
+  if %weq tg b2-VAR
+    v <- b2m-f t #2
+    c <- b2m-f t #3
+    do b2-refs f #0 v #0 out seen
+    jump b2-refs f #0 c #0 out seen
+  if %weq tg b2-LET
+    vs <- b2m-f t #3
+    g <- b2m-f t #4
+    do b2-refs f #1 vs #0 out seen
+    jump b2-refs f #0 g #0 out seen
+  if orB (%weq tg b2-ADT) (%weq tg b2-CTR)
+    xs <- b2m-f t #1
+    jump b2-refs f #1 xs #0 out seen
+  if orB (%weq tg b2-TYP) (%weq tg b2-QUA)
+    g <- b2m-f t #0
+    jump b2-refs f #0 (the Word (if %weq tg b2-TYP then g else #0)) #0 out seen
+  if %weq tg b2-ALL
+    vA <- b2m-f t #3
+    vB <- b2m-f t #4
+    do b2-refs f #0 vA #0 out seen
+    jump b2-refs f #0 vB #0 out seen
+  if %weq tg b2-LAM
+    g <- b2m-f t #2
+    jump b2-refs f #0 g #0 out seen
+  if %weq tg b2-MAT
+    h <- b2m-f t #1
+    m2 <- b2m-f t #2
+    do b2-refs f #0 h #0 out seen
+    jump b2-refs f #0 m2 #0 out seen
+  if orB (%weq tg b2-EQL) (%weq tg b2-RWT)
+    x <- b2m-f t #0
+    y <- b2m-f t #1
+    z <- b2m-f t #2
+    do b2-refs f #0 x #0 out seen
+    do b2-refs f #0 y #0 out seen
+    jump b2-refs f #0 z #0 out seen
+  if orB (%weq tg b2-MIN) (orB (%weq tg b2-APP) (%weq tg b2-ANN))
+    x <- b2m-f t #0
+    y <- b2m-f t #1
+    do b2-refs f #0 x #0 out seen
+    jump b2-refs f #0 y #0 out seen
+  ret #0
+
+-- the keys of a map's own table, into the vector v
+fnrec b2-mkeys (f : Nat) (t : Word) (cap : Word) (j : Word) (v : Word) : Word
+  zero: ret v
+  if %weq j cap
+    ret v
+  k <- b2m-rd (%wadd t (%wsucc j))
+  if not (%weq k #0)
+    do b2-vpush v k
+  jump b2-mkeys f t cap (%wsucc j) v
+
+fn b2-keys (mp : Word) : Word
+  t <- b2m-rd mp
+  cap <- b2m-rd t
+  v <- b2-vec
+  r <- b2-mkeys (toNat #4294967295) t cap #0 v
+  ret r
+
+-- the order's names, first occurrence each, outside Base
+fnrec b2-ownof (f : Nat) (bk : Word) (ord : Word) (j : Word) (n : Word) (seen : Word) (v : Word) : Word
+  zero: ret v
+  if %weq j n
+    ret v
+  k <- b2m-vat ord j
+  sn <- b2-inmap seen k
+  if %weq sn #1
+    jump b2-ownof f bk ord (%wsucc j) n seen v
+  do b2-mset seen k #1
+  t <- b2-tld bk k
+  b <- b2-tldb t
+  if not (%weq b #1)
+    do b2-vpush v k
+  jump b2-ownof f bk ord (%wsucc j) n seen v
+
+-- the uses walk: the vector reach grows; uses maps a name to the vector of its users
+fnrec b2-reach (f : Nat) (bk : Word) (reach : Word) (inr : Word) (uses : Word) (j : Word) : Word
+  zero: ret #0
+  n <- b2m-vlen reach
+  if %weq j n
+    ret #0
+  k <- b2m-vat reach j
+  t <- b2-tld bk k
+  if %weq t #0
+    jump b2-reach f bk reach inr uses (%wsucc j)
+  rs <- b2-map #0
+  sn <- b2-map #0
+  tg <- b2m-tag t
+  do b2-reftype t rs sn
+  if %weq tg b2-TADT
+    cs <- b2m-f t #3
+    cn <- b2m-vlen cs
+    do b2-refctrs (toNat #4294967295) cs #0 cn rs
+  if %weq tg b2-TDEF
+    e <- b2m-f t #4
+    do b2-refs (toNat #4294967295) #0 e #0 rs sn
+  ks <- b2-keys rs
+  kn <- b2m-vlen ks
+  do b2-reachadd (toNat #4294967295) reach inr uses ks k #0 kn
+  jump b2-reach f bk reach inr uses (%wsucc j)
+
+fn b2-reftype (t : Word) (rs : Word) (sn : Word) : Word
+  vT <- b2m-f t #2
+  l <- b2-lower vT #0
+  if %weq l b2-ERR
+    ret #0
+  do b2-refs (toNat #4294967295) #0 l #0 rs sn
+  ret #0
+
+fnrec b2-refctrs (f : Nat) (cs : Word) (j : Word) (n : Word) (rs : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  c <- b2m-vat cs j
+  sn <- b2-map #0
+  do b2-reftype c rs sn
+  jump b2-refctrs f cs (%wsucc j) n rs
+
+fnrec b2-reachadd (f : Nat) (reach : Word) (inr : Word) (uses : Word) (ks : Word) (k : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  r <- b2m-vat ks j
+  u0 <- b2-mget uses r
+  u <- b2-vecif u0 uses r
+  do b2-vpush u k
+  hit <- b2-inmap inr r
+  if %weq hit #0
+    do b2-mset inr r #1
+    do b2-vpush reach r
+  jump b2-reachadd f reach inr uses ks k (%wsucc j) n
+
+fn b2-vecif (u0 : Word) (uses : Word) (r : Word) : Word
+  if not (%weq u0 hv2-none)
+    ret u0
+  v <- b2-vec
+  do b2-mset uses r v
+  ret v
+
+-- the promises' floods: bad grows by the users of each of its names
+fnrec b2-flood (f : Nat) (bad : Word) (inb : Word) (uses : Word) (j : Word) : Word
+  zero: ret #0
+  n <- b2m-vlen bad
+  if %weq j n
+    ret #0
+  k <- b2m-vat bad j
+  u <- b2-mget uses k
+  if not (%weq u hv2-none)
+    un <- b2m-vlen u
+    do b2-floodadd (toNat #4294967295) bad inb u #0 un
+  jump b2-flood f bad inb uses (%wsucc j)
+
+fnrec b2-floodadd (f : Nat) (bad : Word) (inb : Word) (u : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  x <- b2m-vat u j
+  hit <- b2-inmap inb x
+  if %weq hit #0
+    do b2-mset inb x #1
+    do b2-vpush bad x
+  jump b2-floodadd f bad inb u (%wsucc j) n
+
+-- the defs of a kind: 0 unsafe (u), 1 foreign (i, outside Base)
+fnrec b2-promised (f : Nat) (bk : Word) (keys : Word) (kind : Word) (j : Word) (n : Word) (ob : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  k <- b2m-vat keys j
+  t <- b2-tld bk k
+  tg <- b2m-tag t
+  u <- b2m-f t #6
+  i <- b2m-f t #7
+  b <- b2m-f t #5
+  if andB (%weq tg b2-TDEF) (the Bool (if %weq kind #0 then %weq u #1 else andB (not (%weq u #1)) (andB (not (%weq i #0)) (not (%weq b #1)))))
+    do b2-vpush ob k
+  jump b2-promised f bk keys kind (%wsucc j) n ob
+
+-- own filtered by membership in inb, into ob
+fnrec b2-filterin (f : Nat) (own : Word) (inb : Word) (j : Word) (n : Word) (ob : Word) : Word
+  zero: ret ob
+  if %weq j n
+    ret ob
+  k <- b2m-vat own j
+  hit <- b2-inmap inb k
+  if %weq hit #1
+    do b2-vpush ob k
+  jump b2-filterin f own inb (%wsucc j) n ob
+
+fnrec b2-namelist (f : Nat) (v : Word) (j : Word) (n : Word) (acc : List Word) : List Word
+  zero: ret acc
+  if %weq j n
+    ret acc
+  k <- b2m-vat v j
+  kb <-[b2-dpl] b2-namekey k
+  jump b2-namelist f v (%wsucc j) n (the (List Word) (if %weq j #0 then kb else list-append acc (list-append ", " kb)))
+
+-- any name with no namespace, or a law
+fnrec b2-anyown (f : Nat) (bk : Word) (v : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  k <- b2m-vat v j
+  kb <-[b2-dpl] b2-nbytes k
+  t <- b2-tld bk k
+  l <- b2m-f t #9
+  if orB (not (b2-has #58 kb)) (%weq l #1)
+    ret #1
+  jump b2-anyown f bk v (%wsucc j) n
+
+fnrec b2-addall (f : Nat) (v : Word) (mp : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  k <- b2m-vat v j
+  do b2-mset mp k #1
+  jump b2-addall f v mp (%wsucc j) n
+
+-- one promise's out list: the own defs its flood reaches
+fn b2-promout (own : Word) (ks : Word) (uses : Word) : Word
+  bad <- b2-vec
+  inb <- b2-map #0
+  kn <- b2m-vlen ks
+  do b2-floodadd (toNat #4294967295) bad inb ks #0 kn
+  do b2-flood (toNat #4294967295) bad inb uses #0
+  on <- b2m-vlen own
+  ob <- b2-vec
+  r <- b2-filterin (toNat #4294967295) own inb #0 on ob
+  ret r
+
+-- cli_verdict(book, false): the exit code, the text written
+fn b2-verdict (bk : Word) : Word
+  tl <- b2m-f bk #0
+  keys <- b2-keys tl
+  kn <- b2m-vlen keys
+  un0 <- b2-vec
+  uns <- b2-promised (toNat #4294967295) bk keys #0 #0 kn un0
+  fo0 <- b2-vec
+  fos <- b2-promised (toNat #4294967295) bk keys #1 #0 kn fo0
+  unn <- b2m-vlen uns
+  fon <- b2m-vlen fos
+  if andB (%weq unn #0) (%weq fon #0)
+    out (list-append "ALL PROOFS CHECK" (cons #10 (list-append "Use --verdict for mathematical validity." (cons #10 nil))))
+    ret #0
+  ord <- b2m-f bk #2
+  on <- b2m-vlen ord
+  sn <- b2-map #0
+  own0 <- b2-vec
+  own <- b2-ownof (toNat #4294967295) bk ord #0 on sn own0
+  reach <- b2-vec
+  inr <- b2-map #0
+  owl <- b2m-vlen own
+  do b2-floodadd (toNat #4294967295) reach inr own #0 owl
+  uses <- b2-map #0
+  do b2-reach (toNat #4294967295) bk reach inr uses #0
+  ou <- b2-promout own uns uses
+  ofo <- b2-promout own fos uses
+  oun <- b2m-vlen ou
+  ofn <- b2m-vlen ofo
+  all <- b2-map #0
+  do b2-addall (toNat #4294967295) ou all #0 oun
+  do b2-addall (toNat #4294967295) ofo all #0 ofn
+  n <- b2m-rd (%wadd all #1)
+  l1 <-[b2-dpl] b2-namelist (toNat #4294967295) ou #0 oun nil
+  l2 <-[b2-dpl] b2-namelist (toNat #4294967295) ofo #0 ofn nil
+  let s1 = the (List Word) (if %weq oun #0 then nil else list-append "defs that depend on @unsafe: " (list-append l1 (cons #10 nil)))
+  let s2 = the (List Word) (if %weq ofn #0 then nil else list-append "defs that depend on foreign effects: " (list-append l2 (cons #10 nil)))
+  o1 <- b2-anyown (toNat #4294967295) bk ou #0 oun
+  o2 <- b2-anyown (toNat #4294967295) bk ofo #0 ofn
+  allv <- b2-keys all
+  an <- b2m-vlen allv
+  ul <- b2-vec
+  do b2-pushuniq (toNat #4294967295) ou ul all #0 oun
+  do b2-pushuniq (toNat #4294967295) ofo ul all #0 ofn
+  uln <- b2m-vlen ul
+  l3 <-[b2-dpl] b2-namelist (toNat #4294967295) ul #0 uln nil
+  let hint = the (List Word) (if orB (%weq o1 #1) (%weq o2 #1) then nil else list-append "Hint: no law or proof uses these defs. Move them to a file this proof does not import, and the proofs will check: " (list-append l3 (cons #10 nil)))
+  if %weq n #0
+    out (list-append "ALL PROOFS CHECK" (cons #10 (list-append "Use --verdict for mathematical validity." (cons #10 nil))))
+    ret #0
+  e <- cmd (w-fd-write #2 (list-append "SOME PROOFS FAIL" (list-append (cons #10 nil) (list-append "Error: " (list-append (ce-dec n) (list-append (the (List Word) (if %weq n #1 then " def relies" else " defs rely")) (list-append " on unsafe or foreign code:" (cons #10 (list-append s1 (list-append s2 hint))))))))))
+  ret #1
+
+-- the names of v not yet pushed (the first occurrence order of a Set)
+fnrec b2-pushuniq (f : Nat) (v : Word) (ob : Word) (all : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  k <- b2m-vat v j
+  x <- b2-mget all k
+  if %weq x #1
+    do b2-mset all k #2
+    do b2-vpush ob k
+  jump b2-pushuniq f v ob all (%wsucc j) n
+
+-- book_location(err, seen): a newline, then --> path:line:col
+fnrec b2-srcfind (f : Nat) (seen : Word) (j : Word) (ns : Word) (isbase : Word) (bid : Word) : Word
+  zero: ret #0
+  if %weq j #0
+    ret #0
+  e <- b2m-vat seen (%wsub j #1)
+  p <- b2m-rd e
+  n <- b2m-rd (%wadd e #1)
+  if andB (%weq n ns) (%weq (hv2-b (%weq p bid)) isbase)
+    ret e
+  jump b2-srcfind f seen (%wsub j #1) ns isbase bid
+
+fnrec b2-srcnull (f : Nat) (seen : Word) (j : Word) : Word
+  zero: ret #0
+  if %weq j #0
+    ret #0
+  e <- b2m-vat seen (%wsub j #1)
+  n <- b2m-rd (%wadd e #1)
+  if %weq n hv2-none
+    ret e
+  jump b2-srcnull f seen (%wsub j #1)
+
+fn b2-location (e : Word) (seen : Word) (base : List Word) : List Word
+  spn <- b2m-f e #4
+  if %weq spn #0
+    ret nil
+  bk <- b2m-f e #0
+  fl <- b2m-f spn #0
+  ns <- b2m-f fl #1
+  bl <- b2-tld bk b2-NBool
+  blb <- b2-tldb bl
+  bT <- b2m-f bl #2
+  bs <- b2m-span bT
+  bf <- b2-sfile bs
+  let isbase = hv2-b (andB (not (%weq bl #0)) (andB (%weq blb #1) (%weq bf fl)))
+  bid <- b2-nm base
+  n <- b2m-vlen seen
+  s1 <- b2-srcfind (toNat #4294967295) seen n ns isbase bid
+  s2 <- b2-srcnull (toNat #4294967295) seen n
+  let src = the Word (if %weq s1 #0 then s2 else s1)
+  if %weq src #0
+    ret nil
+  p <- b2m-rd src
+  pb <-[b2-dpl] b2-nbytes p
+  s <- b2m-f fl #0
+  beg <- b2m-f spn #1
+  nc <- b2-nlcount (toNat #4294967295) s #0 beg #0 #0
+  cnt <- b2m-rd nc
+  ls <- b2m-rd (%wadd nc #1)
+  ret (list-append (cons #10 (list-append "--> " pb)) (cons #58 (list-append (ce-dec (%wsucc cnt)) (cons #58 (ce-dec (%wsucc (%wsub beg ls)))))))
+
+-- an Err as main.ts prints it under FAIL
+fn b2-failout (seen : Word) (base : List Word) : Word
+  e <- rd (b2-HERR M)
+  es <-[b2-dpl] b2-errshow e
+  lc <-[b2-dpl] b2-location e seen base
+  w <- cmd (w-fd-write #2 (list-append "SOME PROOFS FAIL" (cons #10 (list-append es (list-append lc (cons #10 nil))))))
+  ret #1
+
+-- io_type(book) != null: main's type at weak normal form, IO opaque, is IO(T)
+fn b2-isio (bk : Word) (main : Word) : Word
+  io <- b2-tld bk b2-NIO
+  iot <- b2m-tag io
+  iob <- b2m-f io #5
+  if orB (%weq io #0) (orB (not (%weq iot b2-TDEF)) (not (%weq iob #1)))
+    ret #0
+  b2 <- b2-bookover bk
+  io2 <- b2-copy io
+  do b2m-setf io2 #3 #0
+  tl <- b2m-f b2 #0
+  do b2-mset tl b2-NIO io2
+  vT <- b2m-f main #2
+  w <-! b2-wnf b2 vT
+  ua <- b2-unapply w
+  h <- b2m-rd ua
+  xs <- b2m-rd (%wadd ua #1)
+  ht <- b2m-tag h
+  hk <- b2m-f h #0
+  xn <- b2m-len xs
+  ret (the Word (if andB (%weq ht b2-REF) (andB (%weq hk b2-NIO) (%weq xn #1)) then #1 else #0))
+
+-- ===========================================================================================
+-- The IO run (comp.ts io_run with one computation, base's effs/*.js): main(R, x => Emit{x}) at
+-- weak normal form; an effect (a foreign def applied to its arguments, R and k) runs here and
+-- the run goes on at k(x); Emit ends it, Halt and Exit end it with their codes
+-- ===========================================================================================
+
+-- a String term's UTF-16 units (at normal form: a literal, or SCon/SNil of Chr)
+-- a list reversed onto another
+b2-lrevo : List Word → List Word → List Word
+b2-lrevo nil a = a
+b2-lrevo (cons x r) a = b2-lrevo r (cons x a)
+
+b2-lrevs : List Word → List Word
+b2-lrevs xs = b2-lrevo xs nil
+
+-- a String's text units: md 0 as output (str_out: a packed code is U+FFFD), md 1 as the
+-- runtime holds it (char_new: a code past the scalars packed as U+DC00 and three units)
+fnrec b2-strof (f : Nat) (md : Word) (t : Word) (acc : List Word) : List Word
+  zero: ret (b2-lrevs acc)
+  s <- b2-strip t
+  tg <- b2m-tag s
+  if %weq tg b2-LIT
+    v <- b2m-f s #1
+    us <-[b2-dpl] b2-units v
+    ret (list-append (b2-lrevs acc) (the (List Word) (if %weq md #0 then b2-stro #0 us else us)))
+  if not (%weq tg b2-CTR)
+    ret (b2-lrevs acc)
+  k <- b2m-f s #0
+  if not (%weq k b2-NSCon)
+    ret (b2-lrevs acc)
+  xs <- b2m-f s #1
+  c <- b2m-at xs #0
+  tl <- b2m-at xs #1
+  cs <- b2-strip c
+  cx <- b2m-f cs #1
+  u0 <- b2m-at cx #0
+  u <- b2-u32ft u0 b2-NU32
+  jump b2-strof f md tl (list-append (b2-lrevs (the (List Word) (if %weq md #0 then b2-chrunits u else b2-chrin u))) acc)
+
+-- char_new's units
+b2-chrin : Word → List Word
+b2-chrin u =
+  if %wlt u #55296 then cons u nil
+  else if andB (%wlt #57343 u) (%wlt u #1114112) then b2-chrunits u
+  else cons #56320 (cons (%wshr u #22) (cons (%wand (%wshr u #11) #2047) (cons (%wand u #2047) nil)))
+
+-- str_out: U+DC00 and the three units after it as U+FFFD (k units still to skip)
+b2-stro : Word → List Word → List Word
+b2-stro k nil = nil
+b2-stro k (cons c r) = if %wlt #0 k then b2-stro (%wsub k #1) r else if %weq c #56320 then cons #65533 (b2-stro #3 r) else cons c (b2-stro #0 r)
+
+-- a Chr's code as text units: a scalar as itself, any other as U+FFFD (str_out)
+b2-chrunits : Word → List Word
+b2-chrunits u =
+  if orB (andB (%wlt #55295 u) (%wlt u #57344)) (%wlt #1114111 u) then cons #65533 nil
+  else if %wlt #65535 u then (let d = %wsub u #65536 in cons (%wadd #55296 (%wshr d #10)) (cons (%wadd #56320 (%wand d #1023)) nil))
+  else cons u nil
+
+fn b2-strval (bk : Word) (t : Word) : List Word
+  r <-[b2-dpl] b2-strw (toNat #4294967295) bk t nil
+  ret r
+
+-- a String's output units read in place: each node, char and code brought to whnf (not a
+-- normal form rebuilt first)
+fnrec b2-strw (f : Nat) (bk : Word) (t : Word) (acc : List Word) : List Word
+  zero: ret (b2-lrevs acc)
+  s <- b2-wnf bk t
+  tg <- b2m-tag s
+  if %weq tg b2-LIT
+    v <- b2m-f s #1
+    us <-[b2-dpl] b2-units v
+    ret (list-append (b2-lrevs acc) (b2-stro #0 us))
+  if not (%weq tg b2-CTR)
+    ret (b2-lrevs acc)
+  k <- b2m-f s #0
+  if not (%weq k b2-NSCon)
+    ret (b2-lrevs acc)
+  xs <- b2m-f s #1
+  c <- b2m-at xs #0
+  tl <- b2m-at xs #1
+  cw <- b2-wnf bk c
+  cx <- b2m-f cw #1
+  u0 <- b2m-at cx #0
+  uw <- b2-wnf bk u0
+  u <- b2-u32ft uw b2-NU32
+  jump b2-strw f bk tl (list-append (b2-lrevs (b2-chrunits u)) acc)
+
+fn b2-u32val (bk : Word) (t : Word) : Word
+  y <- b2-snf bk t
+  u <- b2-u32ft y b2-NU32
+  ret u
+
+fn b2-unitv : Word
+  e <- b2-arr #0
+  r <- b2-Ctr b2-NUnit e #0
+  ret r
+
+fn b2-strlit (us : List Word) : Word
+  a <- b2-arrl us
+  r <- b2m-n2 b2-LIT #0 b2-LSTR a
+  ret r
+
+fn b2-ctr1 (k : Word) (x : Word) : Word
+  xs <- b2-arr1 x
+  r <- b2-Ctr k xs #0
+  ret r
+
+fn b2-ctr2 (k : Word) (x : Word) (y : Word) : Word
+  xs <- b2-arr #2
+  do b2m-put xs #0 x
+  do b2m-put xs #1 y
+  r <- b2-Ctr k xs #0
+  ret r
+
+-- the program's arguments as a List of Strings
+-- file_book: a foreign def that a constructor's name also names (0 when none)
+fnrec b2-ctrclash (f : Nat) (bk : Word) (i : Word) : Word
+  zero: ret #0
+  ord <- b2m-f bk #2
+  n <- b2m-vlen ord
+  if not (%wlt i n)
+    ret #0
+  k <- b2m-vat ord i
+  ctrs <- b2m-f bk #1
+  tld <- b2-tld bk k
+  c <- b2-mget ctrs k
+  if andB (not (%weq tld #0)) (not (%weq c hv2-none))
+    tg <- b2m-tag tld
+    im <- b2m-f tld #7
+    if andB (%weq tg b2-TDEF) (not (%weq im #0))
+      ret k
+  jump b2-ctrclash f bk (%wsucc i)
+
+-- the arguments, md 0 as Strings, md 1 as their UTF-8 bytes (a byte that is not UTF-8 is
+-- U+FFFD's, as Node decodes it first)
+fnrec b2-argsl (f : Nat) (md : Word) (xs : List (List Word)) (acc : Word) : Word
+  zero: ret acc
+  if h4-stknil0 xs
+    ret acc
+  let us = b2-u16 (b2-cps (h4-tget-go #0 xs))
+  s0 <- b2-strlit us
+  s1 <- b2-blistv (b2-utf8 us)
+  nm <- b2-nm "Con"
+  r <- b2-ctr2 nm (the Word (if %weq md #0 then s0 else s1)) acc
+  jump b2-argsl f md (h4-tl0 xs) r
+
+-- an effect's answer (k the effect's name, xs its arguments): hv2-none when none registers it
+fn b2-effect (bk : Word) (k : Word) (xs : Word) (argv : List (List Word)) : Word
+  kb <-[b2-dpl] b2-nbytes k
+  a0 <- b2m-at xs #0
+  if orB (cli-eq kb "IO.print") (orB (cli-eq kb "IO.write") (cli-eq kb "IO.print_err"))
+    us <-[b2-dpl] b2-strval bk a0
+    let nl = the (List Word) (if cli-eq kb "IO.write" then nil else cons #10 nil)
+    if cli-eq kb "IO.print_err"
+      w <- cmd (w-fd-write #2 (list-append (b2-utf8 us) nl))
+      u <- b2-unitv
+      ret u
+    out (list-append (b2-utf8 us) nl)
+    u <- b2-unitv
+    ret u
+  if orB (cli-eq kb "IO.args") (cli-eq kb "IO.args_bytes")
+    nl0 <- b2-nm "Nil"
+    e <- b2-arr #0
+    nil0 <- b2-Ctr nl0 e #0
+    r <- b2-argsl (toNat #4294967295) (the Word (if cli-eq kb "IO.args" then #0 else #1)) (hv2-revl argv) nil0
+    ret r
+  if cli-eq kb "IO.thread_count"
+    r <- b2m-n2 b2-LIT #0 b2-LU32 #1
+    ret r
+  if cli-eq kb "IO.now"
+    now <- cmd w-now
+    t0 <- rd (b2-HR M #24)
+    r <- b2m-n2 b2-LIT #0 b2-LNAT (%wdiv (%wsub now t0) #1000000)
+    ret r
+  if cli-eq kb "IO.sleep"
+    u <- b2-unitv
+    ret u
+  if cli-eq kb "IO.random_u32"
+    now <- cmd w-now
+    s0 <- rd (b2-HR M #25)
+    let s1 = %wxor s0 (%wand now #4294967295)
+    let s2 = %wxor s1 (%wand (%wshl (%wand s1 #524287) #13) #4294967295)
+    let s3 = %wxor s2 (%wshr s2 #17)
+    let s4 = %wxor s3 (%wand (%wshl (%wand s3 #134217727) #5) #4294967295)
+    wr (b2-HR M #25) (the Word (if %weq s4 #0 then #2463534242 else s4))
+    v <- b2m-n2 b2-LIT #0 b2-LU32 s4
+    dn <- b2-nm "Done"
+    r <- b2-ctr1 dn v
+    ret r
+  if cli-eq kb "IO.get_env"
+    us <-[b2-dpl] b2-strval bk a0
+    ev <-[b2-dpe] b2-getenv (b2-utf8 us)
+    if andB (fst ev) (not (orB (b2-has #0 us) (b2-has #61 us)))
+      v <- b2-strlit (b2-u16 (b2-cps (snd ev)))
+      dn <- b2-nm "Done"
+      r <- b2-ctr1 dn v
+      ret r
+    c <- b2m-n2 b2-LIT #0 b2-LU32 #2
+    tx <- b2-strlit (b2-u16 (b2-cps "No such file or directory"))
+    tp <- b2-ctr2 b2-NTuple c tx
+    fl <- b2-nm "Fail"
+    r <- b2-ctr1 fl tp
+    ret r
+  ret hv2-none
+
+hv2-revl : List (List Word) → List (List Word)
+hv2-revl l = b2-revsegs nil l
+
+-- The scheduler (comp.ts io_run, effs/spawn.js, effs/chan.js, effs/sleep.js): runs, a queue of
+-- computations (terms); each takes up to 64 effects a turn. The state at HR 22: [runs (a vector),
+-- head, live, waits (timers by deadline), chans (a vector of rows), turns, look]. A row is [room,
+-- ring, ring head, waiters, waiters head, shut]; a waiter [cont, item, gone, timer] (item
+-- hv2-none: a receiver); a timer [at, cont, kind (1 sleep, 2 a waiter's deadline), row, waiter].
+
+fn b2-ssf (j : Word) : Word
+  ss <- rd (b2-HR M #22)
+  x <- b2m-rd (%wadd ss j)
+  ret x
+
+fn b2-sss (j : Word) (v : Word) : Word
+  ss <- rd (b2-HR M #22)
+  do b2m-wr (%wadd ss j) v
+  ret v
+
+fn b2-push (t : Word) (fresh : Word) : Word
+  q <- b2-ssf #0
+  do b2-vpush q t
+  l <- b2-ssf #2
+  do b2-sss #2 (%wadd l fresh)
+  ret #0
+
+-- io_push(fun, arg): the run that applies the continuation
+fn b2-pushk (bk : Word) (k : Word) (x : Word) : Word
+  t <-! b2-tapp bk k x #0
+  do b2-push t #0
+  ret #0
+
+fn b2-c0 (k : List Word) : Word
+  n <- b2-nm k
+  e <- b2-arr #0
+  r <- b2-Ctr n e #0
+  ret r
+
+fn b2-c1 (k : List Word) (x : Word) : Word
+  n <- b2-nm k
+  r <- b2-ctr1 n x
+  ret r
+
+fn b2-cdone : Word
+  u <- b2-unitv
+  r <- b2-c1 "Done" u
+  ret r
+
+-- the first waiter not gone (0 when none), the dead ones pulled
+fnrec b2-chead (f : Nat) (row : Word) : Word
+  zero: ret #0
+  wv <- b2m-rd (%wadd row #3)
+  wh <- b2m-rd (%wadd row #4)
+  n <- b2m-vlen wv
+  if not (%wlt wh n)
+    ret #0
+  w <- b2m-vat wv wh
+  g <- b2m-rd (%wadd w #2)
+  if %weq g #0
+    ret w
+  do b2m-wr (%wadd row #4) (%wsucc wh)
+  jump b2-chead f row
+
+-- remove a timer from the waits
+fnrec b2-untime (f : Nat) (ws : Word) (t : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  if %weq j n
+    ret #0
+  x <- b2m-vat ws j
+  if %weq x t
+    do b2-vdel ws j
+    ret #0
+  jump b2-untime f ws t (%wsucc j) n
+
+-- the vector without its item j
+fnrec b2-vdelg (f : Nat) (v : Word) (j : Word) (n : Word) : Word
+  zero: ret #0
+  d <- b2m-rd (%wadd v #2)
+  if not (%wlt (%wsucc j) n)
+    do b2m-wr v (%wsub n #1)
+    ret #0
+  x <- b2m-at d (%wsucc j)
+  do b2m-put d j x
+  jump b2-vdelg f v (%wsucc j) n
+
+fn b2-vdel (v : Word) (j : Word) : Word
+  n <- b2m-vlen v
+  r <- b2-vdelg (toNat #4294967295) v j n
+  ret r
+
+-- the waits kept by deadline: t after every timer due no later
+fnrec b2-tinsg (f : Nat) (ws : Word) (t : Word) (j : Word) : Word
+  zero: ret #0
+  d <- b2m-rd (%wadd ws #2)
+  if %weq j #0
+    do b2m-put d #0 t
+    ret #0
+  p <- b2m-at d (%wsub j #1)
+  pa <- b2m-rd p
+  ta <- b2m-rd t
+  if not (%wlt ta pa)
+    do b2m-put d j t
+    ret #0
+  do b2m-put d j p
+  jump b2-tinsg f ws t (%wsub j #1)
+
+fn b2-tins (t : Word) : Word
+  ws <- b2-ssf #3
+  do b2-vpush ws #0
+  n <- b2m-vlen ws
+  r <- b2-tinsg (toNat #4294967295) ws t (%wsub n #1)
+  ret r
+
+-- chan_wake(row, x): the head waiter's run goes on at x (Ready{x} if it had a deadline); its item
+fn b2-cwake (bk : Word) (row : Word) (x : Word) : Word
+  w <- b2-chead (toNat #4294967295) row
+  wh <- b2m-rd (%wadd row #4)
+  do b2m-wr (%wadd row #4) (%wsucc wh)
+  do b2m-wr (%wadd w #2) #1
+  tm <- b2m-rd (%wadd w #3)
+  x2 <- b2-readyif tm x
+  if not (%weq tm #0)
+    ws <- b2-ssf #3
+    n <- b2m-vlen ws
+    do b2-untime (toNat #4294967295) ws tm #0 n
+  k <- b2m-rd w
+  do! b2-pushk bk k x2
+  it <- b2m-rd (%wadd w #1)
+  ret it
+
+fn b2-readyif (tm : Word) (x : Word) : Word
+  if %weq tm #0
+    ret x
+  r <- b2-c1 "Ready" x
+  ret r
+
+fn b2-rsize (row : Word) : Word
+  rv <- b2m-rd (%wadd row #1)
+  rh <- b2m-rd (%wadd row #2)
+  n <- b2m-vlen rv
+  ret (%wsub n rh)
+
+fn b2-rpull (row : Word) : Word
+  rv <- b2m-rd (%wadd row #1)
+  rh <- b2m-rd (%wadd row #2)
+  x <- b2m-vat rv rh
+  do b2m-wr (%wadd row #2) (%wsucc rh)
+  ret x
+
+-- chan_take(row)
+fn b2-ctake (bk : Word) (row : Word) : Word
+  v <- b2-rpull row
+  w <- b2-chead (toNat #4294967295) row
+  if not (%weq w #0)
+    dn <- b2-cdone
+    it <-! b2-cwake bk row dn
+    rv <- b2m-rd (%wadd row #1)
+    do b2-vpush rv it
+  ret v
+
+-- chan_put(row, value): the answer, hv2-none when the sender waits
+fn b2-cput (bk : Word) (row : Word) (v : Word) : Word
+  sh <- b2m-rd (%wadd row #5)
+  if %weq sh #1
+    r <- b2-c1 "Fail" v
+    ret r
+  w <- b2-chead (toNat #4294967295) row
+  wi <- b2m-rd (%wadd w #1)
+  if andB (not (%weq w #0)) (%weq wi hv2-none)
+    sm <- b2-c1 "Some" v
+    do! b2-cwake bk row sm
+    r <- b2-cdone
+    ret r
+  sz <- b2-rsize row
+  room <- b2m-rd row
+  if %wlt sz room
+    rv <- b2m-rd (%wadd row #1)
+    do b2-vpush rv v
+    r <- b2-cdone
+    ret r
+  ret hv2-none
+
+-- chan_get(row)
+fn b2-cget (bk : Word) (row : Word) : Word
+  sz <- b2-rsize row
+  if %wlt #0 sz
+    v <-! b2-ctake bk row
+    r <- b2-c1 "Some" v
+    ret r
+  w <- b2-chead (toNat #4294967295) row
+  wi <- b2m-rd (%wadd w #1)
+  if andB (not (%weq w #0)) (not (%weq wi hv2-none))
+    dn <- b2-cdone
+    it <-! b2-cwake bk row dn
+    r <- b2-c1 "Some" it
+    ret r
+  sh <- b2m-rd (%wadd row #5)
+  if %weq sh #1
+    r <- b2-c0 "None"
+    ret r
+  ret hv2-none
+
+-- chan_park(row, k, item, ms): the waiter queued (with a deadline when ms is given, hv2-none: none)
+fn b2-cpark (row : Word) (k : Word) (item : Word) (ms : Word) : Word
+  w <- b2m-r4 k item #0 #0
+  if not (%weq ms hv2-none)
+    now <- cmd w-now
+    t <- b2m-alloc #5
+    do b2m-wr t (%wadd now (%wmul ms #1000000))
+    do b2m-wr (%wadd t #1) k
+    do b2m-wr (%wadd t #2) #2
+    do b2m-wr (%wadd t #3) row
+    do b2m-wr (%wadd t #4) w
+    do b2m-wr (%wadd w #3) t
+    do b2-tins t
+  wv <- b2m-rd (%wadd row #3)
+  do b2-vpush wv w
+  ret hv2-none
+
+-- chan_wait(item): Wait{rest}, rest Unit for a receiver
+fn b2-cwait (item : Word) : Word
+  if %weq item hv2-none
+    u <- b2-unitv
+    r <- b2-c1 "Wait" u
+    ret r
+  r <- b2-c1 "Wait" item
+  ret r
+
+-- chan_shut(row): every waiter woken (None for a receiver, Fail{item} for a sender)
+fnrec b2-cshut (f : Nat) (bk : Word) (row : Word) : Word
+  zero: ret #0
+  w <- b2-chead (toNat #4294967295) row
+  if %weq w #0
+    ret #0
+  wi <- b2m-rd (%wadd w #1)
+  x <- b2-shutans wi
+  do! b2-cwake bk row x
+  jump b2-cshut f bk row
+
+fn b2-shutans (wi : Word) : Word
+  if %weq wi hv2-none
+    r <- b2-c0 "None"
+    ret r
+  r <- b2-c1 "Fail" wi
+  ret r
+
+fn b2-chan (bk : Word) (t : Word) : Word
+  i <- b2-u32val bk t
+  cs <- b2-ssf #4
+  r <- b2m-vat cs i
+  ret r
+
+-- the scheduler's effects (spawn, sleep, channels): the answer, hv2-none when the run parks, or
+-- hv2-none2 when no effect here registers the name
+-- ===========================================================================================
+-- TCP and UDP (effs/tcp_*.js, udp_*.js): non-blocking sockets; an operation that would wait
+-- parks as a timer of kind 3 and is tried again at each poll (every millisecond while the
+-- queue is empty), the readiness select would report
+-- ===========================================================================================
+
+-- a dotted quad's parts (each 0 or 1..3 digits without a leading 0, below 256), as one word
+-- of its four bytes, or hv2-none
+b2-ipq : Word → Word → Word → Word → List Word → Word
+b2-ipq acc np nd v nil = if andB (%weq np #3) (andB (%wlt #0 nd) (%wlt v #256)) then %wor acc (%wshl v (%wmul np #8)) else hv2-none
+b2-ipq acc np nd v (cons c r) =
+  if %weq c #46 then (if andB (%wlt #0 nd) (andB (%wlt v #256) (%wlt np #3)) then b2-ipq (%wor acc (%wshl v (%wmul np #8))) (%wsucc np) #0 #0 r else hv2-none)
+  else if andB (%wlt #47 c) (%wlt c #58) then (if orB (%wlt #2 nd) (andB (%weq nd #1) (%weq v #0)) then hv2-none else b2-ipq acc np (%wsucc nd) (%wadd (%wmul v #10) (%wsub c #48)) r)
+  else hv2-none
+
+-- io_addr: a sockaddr_in (16 bytes in RAM) for host:port, or 0
+fn b2-netaddr (bk : Word) (host : Word) (port : Word) : Word
+  hs <-[b2-dpl] b2-strval bk host
+  pt <- b2-u32val bk port
+  let q = b2-ipq #0 #0 #0 #0 hs
+  if orB (%weq q hv2-none) (%wlt #65535 pt)
+    ret #0
+  i <- b2m-alloc #2
+  do b2m-wr i (%wor #2 (%wor (%wshl (%wshr pt #8) #16) (%wor (%wshl (%wand pt #255) #24) (%wshl q #32))))
+  do b2m-wr (%wadd i #1) #0
+  ret (b2-a M i)
+
+b2-errtext : Word → List Word
+b2-errtext code = if %weq code #111 then "Connection refused" else if %weq code #98 then "Address already in use" else if %weq code #5 then "Input/output error" else if %weq code #104 then "Connection reset by peer" else if %weq code #32 then "Broken pipe" else if %weq code #24 then "Too many open files" else "Invalid argument"
+
+-- io_fail(code, rest): Fail{((code, text), rest)} (rest 0: Fail{(code, text)})
+fn b2-netfail (code : Word) (rest : Word) : Word
+  c <- b2m-n2 b2-LIT #0 b2-LU32 code
+  t <- b2-strlit (b2-u16 (b2-cps (b2-errtext code)))
+  tp <- b2-ctr2 b2-NTuple c t
+  if %weq rest #0
+    r <- b2-c1 "Fail" tp
+    ret r
+  tp2 <- b2-ctr2 b2-NTuple tp rest
+  r <- b2-c1 "Fail" tp2
+  ret r
+
+-- (sock, io_ready(at, r))
+fn b2-netans (sock : Word) (at : Word) (r : Word) : Word
+  if %weq at #0
+    t <- b2-ctr2 b2-NTuple sock r
+    ret t
+  rd0 <- b2-c1 "Ready" r
+  t <- b2-ctr2 b2-NTuple sock rd0
+  ret t
+
+fn b2-netwait (sock : Word) (rest : Word) : Word
+  w <- b2-c1 "Wait" rest
+  t <- b2-ctr2 b2-NTuple sock w
+  ret t
+
+-- the bytes unsent of a send, from off, as a List of U32
+fn b2-netrest (op : Word) : Word
+  bi <- b2m-rd (%wadd op #3)
+  n <- b2m-rd (%wadd op #4)
+  off <- b2m-rd (%wadd op #5)
+  bs <-[b2-dpl] b2-unpackg (toNat #4294967295) bi n off nil
+  r <- b2-blistv bs
+  ret r
+
+-- an operation tried once: its answer, or hv2-none while it would wait
+-- op: [kind (1 accept, 2 recv, 3 send, 4 recv_from, 5 send_to), fd, sock, buf, len, off,
+--      read (0 text, 1 bytes), at (a deadline in ns, 0 none), peer, data]
+fnrec b2-netgo (f : Nat) (op : Word) : Word
+  zero: ret hv2-none
+  kd <- b2m-rd op
+  fd <- b2m-rd (%wadd op #1)
+  sock <- b2m-rd (%wadd op #2)
+  bi <- b2m-rd (%wadd op #3)
+  n <- b2m-rd (%wadd op #4)
+  off <- b2m-rd (%wadd op #5)
+  rdm <- b2m-rd (%wadd op #6)
+  at <- b2m-rd (%wadd op #7)
+  peer <- b2m-rd (%wadd op #8)
+  now <- cmd w-now
+  let latew = andB (not (%weq at #0)) (not (%wlt now at))
+  if %weq kd #1
+    r <- cmd (w-sys #43 fd #0 #0 #0 #0 #0)
+    let ngw = %wlt #9223372036854775807 r
+    if ngw
+      if latew
+        u <- b2-unitv
+        w <- b2-netwait sock u
+        ret w
+      ret hv2-none
+    s2 <- b2m-n2 b2-LIT #0 b2-LU32 r
+    dn <- b2-c1 "Done" s2
+    a <- b2-netans sock at dn
+    ret a
+  if orB (%weq kd #2) (%weq kd #4)
+    r <- cmd (w-sys #45 fd (b2-a M bi) n #64 (the Word (if %weq kd #4 then peer else #0)) #0)
+    let ngw = %wlt #9223372036854775807 r
+    if ngw
+      if latew
+        u <- b2-unitv
+        w <- b2-netwait sock u
+        ret w
+      ret hv2-none
+    bs <-[b2-dpl] b2-unpackg (toNat #4294967295) bi r #0 nil
+    let txt = %weq rdm #0
+    sv <- b2-strlit (b2-u16 (b2-cps bs))
+    lv <- b2-blistv bs
+    let v = the Word (if txt then sv else lv)
+    if %weq kd #2
+      if %weq r #0
+        nn <- b2-c0 "None"
+        dn <- b2-c1 "Done" nn
+        a <- b2-netans sock at dn
+        ret a
+      sm <- b2-c1 "Some" v
+      dn <- b2-c1 "Done" sm
+      a <- b2-netans sock at dn
+      ret a
+    pw <- cmd (w-load peer)
+    let hb = %wshr pw #32
+    let hstr = list-append (ce-dec (%wand hb #255)) (cons #46 (list-append (ce-dec (%wand (%wshr hb #8) #255)) (cons #46 (list-append (ce-dec (%wand (%wshr hb #16) #255)) (cons #46 (ce-dec (%wand (%wshr hb #24) #255)))))))
+    let prt = %wor (%wshl (%wand (%wshr pw #16) #255) #8) (%wand (%wshr pw #24) #255)
+    hl <- b2-strlit (b2-u16 (b2-cps hstr))
+    pl <- b2m-n2 b2-LIT #0 b2-LU32 prt
+    t2 <- b2-ctr2 b2-NTuple pl v
+    t3 <- b2-ctr2 b2-NTuple hl t2
+    dn <- b2-c1 "Done" t3
+    a <- b2-netans sock at dn
+    ret a
+  if %weq kd #5
+    r <- cmd (w-sys #44 fd (b2-a M bi) n #16448 peer #0)
+    let ngw = %wlt #9223372036854775807 r
+    if ngw
+      if latew
+        dat <- b2m-rd (%wadd op #9)
+        w <- b2-netwait sock dat
+        ret w
+      ret hv2-none
+    u <- b2-unitv
+    dn <- b2-c1 "Done" u
+    a <- b2-netans sock at dn
+    ret a
+  -- a send: what is left, until all is taken
+  if not (%wlt off n)
+    u <- b2-unitv
+    dn <- b2-c1 "Done" u
+    a <- b2-netans sock at dn
+    ret a
+  r <- cmd (w-sys #44 fd (%wadd (b2-a M bi) off) (%wsub n off) #16448 #0 #0)
+  let ngw = %wlt #9223372036854775807 r
+  if ngw
+    if latew
+      rest <- b2-netrest op
+      w <- b2-netwait sock rest
+      ret w
+    ret hv2-none
+  if %weq r #0
+    rest <- b2-netrest op
+    fl <- b2-netfail #5 rest
+    a <- b2-netans sock at fl
+    ret a
+  do b2m-wr (%wadd op #5) (%wadd off r)
+  jump b2-netgo f op
+
+-- a send's bytes: a String's UTF-8 (str_out), or a List's values
+fn b2-netbytes (bk : Word) (byt : Bool) (dat : Word) : List Word
+  if byt
+    db <-[b2-dpl] b2-fbytesarg bk true dat
+    ret db
+  ds <-[b2-dpl] b2-strval bk dat
+  ret (b2-utf8 ds)
+
+fn b2-netaddr2 (bk : Word) (c : Bool) (host : Word) (port : Word) : Word
+  if not c
+    ret #0
+  r <- b2-netaddr bk host port
+  ret r
+
+-- park op as a poll timer for kont
+fn b2-netpark (op : Word) (kont : Word) : Word
+  now <- cmd w-now
+  t <- b2m-alloc #5
+  do b2m-wr t now
+  do b2m-wr (%wadd t #1) kont
+  do b2m-wr (%wadd t #2) #3
+  do b2m-wr (%wadd t #3) op
+  do b2m-wr (%wadd t #4) #0
+  do b2-tins t
+  ret hv2-none
+
+fn b2-netop (kd : Word) (fd : Word) (sock : Word) (n : Word) (rdm : Word) (at : Word) (peer : Word) : Word
+  op <- b2m-alloc #10
+  bi <- b2m-alloc (%wadd (%wdiv n #8) #1)
+  do b2m-wr op kd
+  do b2m-wr (%wadd op #1) fd
+  do b2m-wr (%wadd op #2) sock
+  do b2m-wr (%wadd op #3) bi
+  do b2m-wr (%wadd op #4) n
+  do b2m-wr (%wadd op #5) #0
+  do b2m-wr (%wadd op #6) rdm
+  do b2m-wr (%wadd op #7) at
+  do b2m-wr (%wadd op #8) peer
+  do b2m-wr (%wadd op #9) #0
+  ret op
+
+-- the effects: the answer, hv2-none parked, hv2-none2 when the name is none of these
+fn b2-neteffect (bk : Word) (kb : List Word) (xs : Word) (kont : Word) : Word
+  x0 <- b2m-at xs #0
+  x1 <- b2m-at xs #1
+  x2 <- b2m-at xs #2
+  x3 <- b2m-at xs #3
+  x4 <- b2m-at xs #4
+  now <- cmd w-now
+  if orB (cli-eq kb "Socket.close") (cli-eq kb "Listener.close")
+    fd <- b2-u32val bk x0
+    c <- cmd (w-sys #3 fd #0 #0 #0 #0 #0)
+    u <- b2-unitv
+    ret u
+  if orB (cli-eq kb "TCP.listen") (orB (cli-eq kb "TCP.connect") (cli-eq kb "UDP.bind"))
+    ad <- b2-netaddr bk x0 x1
+    if %weq ad #0
+      r <- b2-netfail #22 #0
+      ret r
+    let lis = cli-eq kb "TCP.listen"
+    let udp = cli-eq kb "UDP.bind"
+    fd <- cmd (w-sys #41 #2 (the Word (if udp then #2050 else if lis then #2049 else #1)) #0 #0 #0 #0)
+    let ngw = %wlt #9223372036854775807 fd
+    if ngw
+      r <- b2-netfail #24 #0
+      ret r
+    if cli-eq kb "TCP.connect"
+      c <- cmd (w-sys #42 fd ad #0 #0 #0 #0)
+      let cngw = %wlt #9223372036854775807 c
+      if cngw
+        z <- cmd (w-sys #3 fd #0 #0 #0 #0 #0)
+        r <- b2-netfail #111 #0
+        ret r
+      s2 <- b2m-n2 b2-LIT #0 b2-LU32 fd
+      r <- b2-c1 "Done" s2
+      ret r
+    b <- cmd (w-sys #49 fd ad #0 #0 #0 #0)
+    let bngw = %wlt #9223372036854775807 b
+    l <- cmd (w-sys #50 fd #512 #0 #0 #0 #0)
+    let lngw = andB lis (%wlt #9223372036854775807 l)
+    if orB bngw lngw
+      z <- cmd (w-sys #3 fd #0 #0 #0 #0 #0)
+      r <- b2-netfail #98 #0
+      ret r
+    s2 <- b2m-n2 b2-LIT #0 b2-LU32 fd
+    r <- b2-c1 "Done" s2
+    ret r
+  let istry = orB (cli-eq kb "TCP.try_accept") (orB (cli-eq kb "TCP.try_recv") (orB (cli-eq kb "TCP.try_recv_bytes") (orB (cli-eq kb "TCP.try_send") (orB (cli-eq kb "TCP.try_send_bytes") (orB (cli-eq kb "UDP.try_recv_from") (orB (cli-eq kb "UDP.try_recv_bytes_from") (orB (cli-eq kb "UDP.try_send_to") (cli-eq kb "UDP.try_send_bytes_to"))))))))
+  if orB (cli-eq kb "TCP.accept") (cli-eq kb "TCP.try_accept")
+    fd <- b2-u32val bk x0
+    ms <- b2-u32val bk (the Word (if istry then x1 else x0))
+    let at = the Word (if istry then %wadd now (%wmul ms #1000000) else #0)
+    op <- b2-netop #1 fd x0 #8 #0 at #0
+    r <- b2-netpark op kont
+    ret r
+  let recv = orB (cli-eq kb "TCP.recv") (orB (cli-eq kb "TCP.try_recv") (orB (cli-eq kb "TCP.recv_bytes") (cli-eq kb "TCP.try_recv_bytes")))
+  let recvf = orB (cli-eq kb "UDP.recv_from") (orB (cli-eq kb "UDP.try_recv_from") (orB (cli-eq kb "UDP.recv_bytes_from") (cli-eq kb "UDP.try_recv_bytes_from")))
+  if orB recv recvf
+    fd <- b2-u32val bk x0
+    mx <- b2-u32val bk x1
+    ms <- b2-u32val bk (the Word (if istry then x2 else x1))
+    let at = the Word (if istry then %wadd now (%wmul ms #1000000) else #0)
+    if %weq mx #0
+      fl <- b2-netfail #22 #0
+      r <- b2-netans x0 at fl
+      ret r
+    let cap = the Word (if recvf then (if %wlt #65507 mx then #65507 else mx) else (if %wlt #65536 mx then #65536 else mx))
+    let byt = orB (cli-eq kb "TCP.recv_bytes") (orB (cli-eq kb "TCP.try_recv_bytes") (orB (cli-eq kb "UDP.recv_bytes_from") (cli-eq kb "UDP.try_recv_bytes_from")))
+    pi <- b2m-alloc #2
+    op <- b2-netop (the Word (if recvf then #4 else #2)) fd x0 cap (the Word (if byt then #1 else #0)) at (b2-a M pi)
+    if recvf
+      r <- b2-netpark op kont
+      ret r
+    r0 <- b2-netgo (toNat #4294967295) op
+    if %weq r0 hv2-none
+      r <- b2-netpark op kont
+      ret r
+    ret r0
+  let send = orB (cli-eq kb "TCP.send") (orB (cli-eq kb "TCP.try_send") (orB (cli-eq kb "TCP.send_bytes") (cli-eq kb "TCP.try_send_bytes")))
+  let sendt = orB (cli-eq kb "UDP.send_to") (orB (cli-eq kb "UDP.try_send_to") (orB (cli-eq kb "UDP.send_bytes_to") (cli-eq kb "UDP.try_send_bytes_to")))
+  if orB send sendt
+    let byt = orB (cli-eq kb "TCP.send_bytes") (orB (cli-eq kb "TCP.try_send_bytes") (orB (cli-eq kb "UDP.send_bytes_to") (cli-eq kb "UDP.try_send_bytes_to")))
+    fd <- b2-u32val bk x0
+    let dat = the Word (if sendt then x3 else x1)
+    ms <- b2-u32val bk (the Word (if istry then (if sendt then x4 else x2) else x0))
+    let at = the Word (if istry then %wadd now (%wmul ms #1000000) else #0)
+    bs <-[b2-dpl] b2-netbytes bk byt dat
+    if b2-has #256 bs
+      fl <- b2-netfail #22 dat
+      r <- b2-netans x0 at fl
+      ret r
+    ad <- b2-netaddr2 bk sendt x1 x2
+    if andB sendt (%weq ad #0)
+      fl <- b2-netfail #22 dat
+      r <- b2-netans x0 at fl
+      ret r
+    let nb = cli-len bs
+    op <- b2-netop (the Word (if sendt then #5 else #3)) fd x0 nb #0 at ad
+    bi <- b2m-rd (%wadd op #3)
+    do b2-packg (toNat #4294967295) bi bs #0 #0
+    do b2m-wr (%wadd op #9) dat
+    r0 <- b2-netgo (toNat #4294967295) op
+    if %weq r0 hv2-none
+      r <- b2-netpark op kont
+      ret r
+    ret r0
+  ret hv2-none2
+
+fn b2-effect2 (bk : Word) (kb : List Word) (xs : Word) (kont : Word) : Word
+  nx <- b2-neteffect bk kb xs kont
+  if not (%weq nx hv2-none2)
+    ret nx
+  x0 <- b2m-at xs #0
+  x1 <- b2m-at xs #1
+  x2 <- b2m-at xs #2
+  x3 <- b2m-at xs #3
+  if cli-eq kb "IO.spawn"
+    r0 <- b2-unitv
+    t1 <-! b2-tapp bk x1 r0 #0
+    em <- b2-nm "Emit"
+    cl <- b2m-clo #9 em #0 #0 #0
+    kl <- b2-Lam b2-N_ #0 cl #0 b2-NOQ
+    t2 <-! b2-tapp bk t1 kl #0
+    do b2-push t2 #1
+    u <- b2-unitv
+    ret u
+  if cli-eq kb "IO.sleep"
+    ms <- b2-u32val bk x0
+    now <- cmd w-now
+    t <- b2m-alloc #5
+    do b2m-wr t (%wadd now (%wmul ms #1000000))
+    do b2m-wr (%wadd t #1) kont
+    do b2m-wr (%wadd t #2) #1
+    do b2m-wr (%wadd t #3) #0
+    do b2m-wr (%wadd t #4) #0
+    do b2-tins t
+    ret hv2-none
+  if cli-eq kb "Chan.new"
+    room <- b2-u32val bk x1
+    rv <- b2-vec
+    wv <- b2-vec
+    row <- b2m-alloc #6
+    do b2m-wr row room
+    do b2m-wr (%wadd row #1) rv
+    do b2m-wr (%wadd row #2) #0
+    do b2m-wr (%wadd row #3) wv
+    do b2m-wr (%wadd row #4) #0
+    do b2m-wr (%wadd row #5) #0
+    cs <- b2-ssf #4
+    n <- b2m-vlen cs
+    do b2-vpush cs row
+    r <- b2m-n2 b2-LIT #0 b2-LU32 n
+    ret r
+  if cli-eq kb "Chan.send"
+    row <- b2-chan bk x1
+    x <-! b2-cput bk row x2
+    if not (%weq x hv2-none)
+      ret x
+    r <- b2-cpark row kont x2 hv2-none
+    ret r
+  if cli-eq kb "Chan.recv"
+    row <- b2-chan bk x1
+    x <-! b2-cget bk row
+    if not (%weq x hv2-none)
+      ret x
+    r <- b2-cpark row kont hv2-none hv2-none
+    ret r
+  if orB (cli-eq kb "Chan.try_send") (cli-eq kb "Chan.try_recv")
+    let snd0 = cli-eq kb "Chan.try_send"
+    row <- b2-chan bk x1
+    ms <- b2-u32val bk (the Word (if snd0 then x3 else x2))
+    let item = the Word (if snd0 then x2 else hv2-none)
+    x <-! b2-trycall bk snd0 row x2
+    if not (%weq x hv2-none)
+      r <- b2-c1 "Ready" x
+      ret r
+    if %weq ms #0
+      r <- b2-cwait item
+      ret r
+    r <- b2-cpark row kont item ms
+    ret r
+  if cli-eq kb "Chan.close"
+    row <- b2-chan bk x1
+    sh <- b2m-rd (%wadd row #5)
+    if %weq sh #0
+      do b2m-wr (%wadd row #5) #1
+      do! b2-cshut (toNat #4294967295) bk row
+    u <- b2-unitv
+    ret u
+  ret hv2-none2
+
+fn b2-trycall (bk : Word) (snd0 : Bool) (row : Word) (v : Word) : Word
+  if snd0
+    r <-! b2-cput bk row v
+    ret r
+  r <-! b2-cget bk row
+  ret r
+
+-- one effect of a run, its closures reclaimed (see b2-wnfbatch): the answer in the registers,
+-- HR 7: 0 go on at the term HR 8 (the same run), 1 the run stops (parked, ended or requeued),
+-- 2 the program exits with the code HR 8
+fn b2-iostep (bk : Word) (t : Word) (argv : List (List Word)) (left : Word) : Word
+  mk <- cmd (w-sys #900 #0 #0 #0 #0 #0 #0)
+  wr (b2-HR M #31) #0
+  w <-! b2-wnf bk t
+  tg <- b2m-tag w
+  if %weq tg b2-CTR
+    k <- b2m-f w #0
+    kb <-[b2-dpl] b2-nbytes k
+    xs <- b2m-f w #1
+    if cli-eq kb "Emit"
+      l <- b2-ssf #2
+      do b2-sss #2 (%wsub l #1)
+      jump b2-ioans #1 #0
+    c0 <- b2m-at xs #0
+    cde0 <- b2-u32val bk c0
+    if cli-eq kb "Halt"
+      m0 <- b2m-at xs #1
+      us <-[b2-dpl] b2-strval bk m0
+      e <- cmd (w-fd-write #2 (list-append (b2-utf8 us) (cons #10 nil)))
+      cde <- b2-ioexit cde0
+      jump b2-ioans #2 cde
+    cde <- b2-ioexit cde0
+    jump b2-ioans #2 cde
+  ua <- b2-unapply w
+  h <- b2m-rd ua
+  xs <- b2m-rd (%wadd ua #1)
+  ht <- b2m-tag h
+  hk <- b2m-f h #0
+  n <- b2m-len xs
+  if andB (%weq ht b2-REF) (%wlt #1 n)
+    kont <- b2m-at xs (%wsub n #1)
+    kb0 <-[b2-dpl] b2-nbytes hk
+    x2 <-! b2-effect2 bk kb0 xs kont
+    x <- b2-effect1 bk hk xs argv x2
+    if %weq x hv2-none
+      jump b2-ioans #1 #0
+    if not (%weq x hv2-none2)
+      t2 <-! b2-tapp bk kont x #0
+      if %weq left #1
+        do b2-push t2 #0
+        jump b2-ioans #1 #0
+      jump b2-ioans #0 t2
+    kb <-[b2-dpl] b2-namekey hk
+    e <- cmd (w-fd-write #2 (list-append "bend: no effect registers " (list-append kb (cons #10 nil))))
+    jump b2-ioans #2 #1
+  e <- cmd (w-fd-write #2 (list-append "bend: an IO program stuck at a term that is no effect" (cons #10 nil)))
+  jump b2-ioans #2 #1
+
+-- the synchronous effects when the scheduler's do not register the name
+fn b2-effect1 (bk : Word) (hk : Word) (xs : Word) (argv : List (List Word)) (x2 : Word) : Word
+  if not (%weq x2 hv2-none2)
+    ret x2
+  kb <-[b2-dpl] b2-nbytes hk
+  fx <- b2-feffect bk kb xs
+  if not (%weq fx hv2-none2)
+    ret fx
+  x <- b2-effect bk hk xs argv
+  ret (the Word (if %weq x hv2-none then hv2-none2 else x))
+
+-- the answer into the registers, then the rewind, continuing at the caller's continuation
+fn b2-ioans (kd : Word) (v : Word) : Word
+  wr (b2-HR M #7) kd
+  wr (b2-HR M #8) v
+  halt (scmd (w-sys #901 #0 #0 #0 #0 #0 #0) kq_)
+
+-- the due timers fired: a sleep's run goes on at Unit, a waiter's deadline (if it was not woken)
+-- at Wait{rest}
+fnrec b2-fire (f : Nat) (bk : Word) (now : Word) : Word
+  zero: ret #0
+  ws <- b2-ssf #3
+  n <- b2m-vlen ws
+  if %weq n #0
+    ret #0
+  t <- b2m-vat ws #0
+  at <- b2m-rd t
+  if %wlt now at
+    ret #0
+  do b2-vdel ws #0
+  k <- b2m-rd (%wadd t #1)
+  kd <- b2m-rd (%wadd t #2)
+  if %weq kd #1
+    u <- b2-unitv
+    do! b2-pushk bk k u
+    jump b2-fire f bk now
+  -- a socket operation that would wait: tried again, parked again a millisecond on
+  if %weq kd #3
+    op <- b2m-rd (%wadd t #3)
+    r <- b2-netgo (toNat #4294967295) op
+    if %weq r hv2-none
+      do b2m-wr t (%wadd now #1000000)
+      do b2-tins t
+      jump b2-fire f bk now
+    do! b2-pushk bk k r
+    jump b2-fire f bk now
+  w <- b2m-rd (%wadd t #4)
+  g <- b2m-rd (%wadd w #2)
+  if %weq g #0
+    do b2m-wr (%wadd w #2) #1
+    it <- b2m-rd (%wadd w #1)
+    x <- b2-cwait it
+    do! b2-pushk bk k x
+  jump b2-fire f bk now
+
+-- io_run's loop: md 0 a turn of the queue, md 1 a run's effects (t, left)
+fnrec b2-sched (f : Nat) (md : Word) (bk : Word) (t : Word) (left : Word) (argv : List (List Word)) : Word
+  zero: ret #1
+  if %weq md #1
+    x <-! b2-iostep bk t argv left
+    kd <- rd (b2-HR M #7)
+    v <- rd (b2-HR M #8)
+    if %weq kd #2
+      ret v
+    if %weq kd #1
+      jump b2-sched f #0 bk #0 #0 argv
+    jump b2-sched f #1 bk v (%wsub left #1) argv
+  q <- b2-ssf #0
+  qh <- b2-ssf #1
+  qn <- b2m-vlen q
+  ws <- b2-ssf #3
+  wn <- b2m-vlen ws
+  if not (%wlt qh qn)
+    l <- b2-ssf #2
+    if %weq l #0
+      ret #0
+    if %weq wn #0
+      e <- cmd (w-fd-write #2 (list-append "bend: deadlock: every computation waits on a channel" (cons #10 nil)))
+      ret #1
+    t0 <- b2m-vat ws #0
+    at <- b2m-rd t0
+    now <- cmd w-now
+    if %wlt now at
+      z <- cmdp (w-sleep (%wsub at now))
+    now2 <- cmd w-now
+    do! b2-fire (toNat #4294967295) bk now2
+    jump b2-sched f #0 bk #0 #0 argv
+  tn <- b2-ssf #5
+  do b2-sss #5 (%wsucc tn)
+  if andB (%weq (%wand tn #63) #0) (%wlt #0 wn)
+    now <- cmd w-now
+    look <- b2-ssf #6
+    t0 <- b2m-vat ws #0
+    at <- b2m-rd t0
+    if orB (not (%wlt now look)) (not (%wlt now at))
+      do b2-sss #6 (%wadd now #10000000)
+      do! b2-fire (toNat #4294967295) bk now
+  t1 <- b2m-vat q qh
+  do b2-sss #1 (%wsucc qh)
+  jump b2-sched f #1 bk t1 #64 argv
+
+fn b2-ioexit (cde : Word) : Word
+  if %wlt #255 cde
+    e <- cmd (w-fd-write #2 (list-append "bend: exit code must be in 0..255" (cons #10 nil)))
+    ret #1
+  ret cde
+
+-- main(R, x => Emit{x}) run on the scheduler
+fn b2-io (bk : Word) (main : Word) (argv : List (List Word)) : Word
+  wr (b2-HR M #20) #1
+  q <- b2-vec
+  ws <- b2-vec
+  cs <- b2-vec
+  ss <- b2m-alloc #7
+  do b2m-wr ss q
+  do b2m-wr (%wadd ss #1) #0
+  do b2m-wr (%wadd ss #2) #0
+  do b2m-wr (%wadd ss #3) ws
+  do b2m-wr (%wadd ss #4) cs
+  do b2m-wr (%wadd ss #5) #0
+  do b2m-wr (%wadd ss #6) #0
+  wr (b2-HR M #22) ss
+  mv <- b2m-f main #3
+  r0 <- b2-unitv
+  t1 <-! b2-tapp bk mv r0 #0
+  em <- b2-nm "Emit"
+  cl <- b2m-clo #9 em #0 #0 #0
+  kl <- b2-Lam b2-N_ #0 cl #0 b2-NOQ
+  t2 <-! b2-tapp bk t1 kl #0
+  do b2-push t2 #1
+  r <- b2-sched (toNat #4294967295) #0 bk #0 #0 argv
+  ret r
+
+-- the process environment (/proc/self/environ: NAME=VALUE entries, each ended by a NUL)
+b2-envsplit : List Word → List Word → List (List Word)
+b2-envsplit cur nil = if h4-isnil cur then nil else cons (hv2-rev cur) nil
+b2-envsplit cur (cons c r) = if %weq c #0 then cons (hv2-rev cur) (b2-envsplit nil r) else b2-envsplit (cons c cur) r
+
+-- the value of NAME in the entries: (found, value)
+b2-envget : List (List Word) → List Word → Bool × List Word
+b2-envget nil k = (false , nil)
+b2-envget (cons e r) k = if andB (cli-eq (b2-ltake (cli-len k) e) k) (%weq (hv2-nth (cli-len k) e) #61) then (true , ief-dropn (toNat (%wsucc (cli-len k))) e) else b2-envget r k
+
+fn b2-getenv (k : List Word) : (Bool × List Word)
+  fr <- cmdp (w-file-read-named "/proc/self/environ")
+  if not (%weq (fst fr) #0)
+    ret (false , nil)
+  ret (b2-envget (b2-envsplit nil (snd fr)) k)
+
+-- a path made absolute against the working directory ($PWD)
+fn b2-abspath (p : List Word) : List Word
+  if %weq (hv2-nth #0 p) #47
+    ret p
+  e <-[b2-dpe] b2-getenv "PWD"
+  ret (list-append (snd e) (cons #47 p))
+
+-- ===========================================================================================
+-- Files (effs/file_*.js): a file opened is read whole into a vector of bytes; a write changes
+-- the vector and writes it back whole, so the file on disk always holds what was written. A
+-- handle is a U32 (3 the first, as a fresh process numbers them); 1 and 2 write to stdout and
+-- stderr. The table at HR 23: a vector of [path (a RAM string), bytes (a vector), position,
+-- append (0/1), open (0/1)]
+-- ===========================================================================================
+
+-- bytes into RAM words, 8 a word (little-endian), from the heap index i
+fnrec b2-packg (f : Nat) (i : Word) (bs : List Word) (w : Word) (j : Word) : Word
+  zero: ret #0
+  if h4-isnil bs
+    if not (%weq j #0)
+      do b2m-wr i w
+    ret #0
+  let w2 = %wor w (%wshl (%wand (hv2-nth #0 bs) #255) (%wmul j #8))
+  if %weq j #7
+    do b2m-wr i w2
+    jump b2-packg f (%wsucc i) (hv2-drop1 bs) #0 #0
+  jump b2-packg f i (hv2-drop1 bs) w2 (%wsucc j)
+
+-- a NUL-ended copy of bytes in RAM: its address
+fn b2-cbuf (bs : List Word) : Word
+  i <- b2m-alloc (%wadd (%wdiv (cli-len bs) #8) #2)
+  do b2-packg (toNat #4294967295) i (list-append bs (cons #0 nil)) #0 #0
+  ret (b2-a M i)
+
+-- the bytes of RAM words from index i, n of them
+fnrec b2-unpackg (f : Nat) (i : Word) (n : Word) (j : Word) (acc : List Word) : List Word
+  zero: ret acc
+  if %weq j n
+    ret (hv2-rev acc)
+  w <- b2m-rd (%wadd i (%wdiv j #8))
+  let b = %wand (%wshr w (%wmul (%wmod j #8) #8)) #255
+  jump b2-unpackg f i n (%wsucc j) (cons b acc)
+
+-- a file's bytes, or hv2-none when it cannot be read
+fn b2-fread (path : List Word) : Word
+  pa <- b2-cbuf path
+  sz <- cmd (w-sys #904 pa #0 #0 #0 #0 #0)
+  if %wlt #9223372036854775807 sz
+    ret hv2-none
+  i <- b2m-alloc (%wadd (%wdiv sz #8) #1)
+  got <- cmd (w-sys #902 pa (b2-a M i) sz #0 #0 #0)
+  if %wlt #9223372036854775807 got
+    ret hv2-none
+  bs <-[b2-dpl] b2-unpackg (toNat #4294967295) i got #0 nil
+  v <- b2-vec
+  do b2-vpushl (toNat #4294967295) v bs
+  ret v
+
+fnrec b2-vpushl (f : Nat) (v : Word) (bs : List Word) : Word
+  zero: ret v
+  if h4-isnil bs
+    ret v
+  do b2-vpush v (hv2-nth #0 bs)
+  jump b2-vpushl f v (hv2-drop1 bs)
+
+-- the bytes of a vector
+fnrec b2-vbytes (f : Nat) (v : Word) (j : Word) (n : Word) (acc : List Word) : List Word
+  zero: ret acc
+  if %weq j n
+    ret (hv2-rev acc)
+  x <- b2m-vat v j
+  jump b2-vbytes f v (%wsucc j) n (cons x acc)
+
+-- write the vector whole to the path
+fn b2-fflush (path : List Word) (v : Word) : Word
+  n <- b2m-vlen v
+  bs <-[b2-dpl] b2-vbytes (toNat #4294967295) v #0 n nil
+  pa <- b2-cbuf path
+  i <- b2m-alloc (%wadd (%wdiv n #8) #1)
+  do b2-packg (toNat #4294967295) i bs #0 #0
+  r <- cmd (w-sys #903 pa (b2-a M i) n #0 #0 #0)
+  ret r
+
+-- io_fail(code): Fail{(code, strerror)}
+fn b2-iofail (code : Word) : Word
+  let tx = the (List Word) (if %weq code #2 then "No such file or directory" else if %weq code #17 then "File exists" else if %weq code #9 then "Bad file descriptor" else if %weq code #21 then "Is a directory" else if %weq code #13 then "Permission denied" else "Invalid argument")
+  c <- b2m-n2 b2-LIT #0 b2-LU32 code
+  t <- b2-strlit (b2-u16 (b2-cps tx))
+  tp <- b2-ctr2 b2-NTuple c t
+  r <- b2-c1 "Fail" tp
+  ret r
+
+fn b2-tup (a : Word) (b : Word) : Word
+  r <- b2-ctr2 b2-NTuple a b
+  ret r
+
+-- a List of byte literals, and back
+fnrec b2-blist (f : Nat) (bs : List Word) (acc : Word) : Word
+  zero: ret acc
+  if h4-isnil bs
+    ret acc
+  x <- b2m-n2 b2-LIT #0 b2-LU32 (hv2-nth #0 bs)
+  cn <- b2-nm "Con"
+  r <- b2-ctr2 cn x acc
+  jump b2-blist f (hv2-drop1 bs) r
+
+fn b2-blistv (bs : List Word) : Word
+  nl0 <- b2-c0 "Nil"
+  r <- b2-blist (toNat #4294967295) (hv2-rev bs) nl0
+  ret r
+
+-- the U32 items of a List term (at normal form), hv2-none past 255 or for a non-literal
+fnrec b2-unlist (f : Nat) (t : Word) (acc : List Word) : List Word
+  zero: ret acc
+  s <- b2-strip t
+  tg <- b2m-tag s
+  if not (%weq tg b2-CTR)
+    ret (hv2-rev acc)
+  xs <- b2m-f s #1
+  n <- b2m-len xs
+  if %weq n #0
+    ret (hv2-rev acc)
+  h <- b2m-at xs #0
+  tl <- b2m-at xs #1
+  u <- b2-u32ft h b2-NU32
+  jump b2-unlist f tl (cons (the Word (if %wlt #255 u then #256 else u)) acc)
+
+fn b2-ftab : Word
+  t <- rd (b2-HR M #23)
+  if not (%weq t #0)
+    ret t
+  v <- b2-vec
+  wr (b2-HR M #23) v
+  ret v
+
+-- the open file record of a handle, 0 when none
+fn b2-fileof (bk : Word) (t : Word) : Word
+  h <- b2-u32val bk t
+  tb <- b2-ftab
+  n <- b2m-vlen tb
+  if orB (%wlt h #3) (not (%wlt (%wsub h #3) n))
+    ret #0
+  r <- b2m-vat tb (%wsub h #3)
+  o <- b2m-rd (%wadd r #4)
+  ret (the Word (if %weq o #1 then r else #0))
+
+-- write bytes into the file record at position at (the vector grows), its new position
+fnrec b2-fput (f : Nat) (v : Word) (at : Word) (bs : List Word) : Word
+  zero: ret at
+  if h4-isnil bs
+    ret at
+  n <- b2m-vlen v
+  if %wlt at n
+    d <- b2m-rd (%wadd v #2)
+    do b2m-put d at (hv2-nth #0 bs)
+    jump b2-fput f v (%wsucc at) (hv2-drop1 bs)
+  if %wlt n at
+    do b2-vpush v #0
+    jump b2-fput f v at bs
+  do b2-vpush v (hv2-nth #0 bs)
+  jump b2-fput f v (%wsucc at) (hv2-drop1 bs)
+
+-- up to max bytes from at (to and with a newline when line)
+fnrec b2-fget (f : Nat) (v : Word) (at : Word) (mx : Word) (line : Bool) (acc : List Word) : List Word
+  zero: ret (hv2-rev acc)
+  n <- b2m-vlen v
+  if orB (%weq mx #0) (not (%wlt at n))
+    ret (hv2-rev acc)
+  x <- b2m-vat v at
+  if andB line (%weq x #10)
+    ret (hv2-rev (cons x acc))
+  jump b2-fget f v (%wsucc at) (%wsub mx #1) line (cons x acc)
+
+-- the file effects: the answer, or hv2-none2 when the name is no file effect
+fn b2-feffect (bk : Word) (kb : List Word) (xs : Word) : Word
+  x0 <- b2m-at xs #0
+  x1 <- b2m-at xs #1
+  x2 <- b2m-at xs #2
+  if orB (cli-eq kb "File.open") (cli-eq kb "File.open_bytes")
+    p0 <-[b2-dpl] b2-strval bk x0
+    pb0 <-[b2-dpl] b2-fbytesarg bk (cli-eq kb "File.open_bytes") x0
+    md <-[b2-dpl] b2-strval bk x1
+    let pb = the (List Word) (if cli-eq kb "File.open" then b2-utf8 p0 else pb0)
+    let mode = b2-utf8 md
+    if h4-isnil pb
+      r <- b2-iofail #2
+      ret r
+    if b2-has #256 pb
+      r <- b2-iofail #22
+      ret r
+    if b2-has #0 pb
+      r <- b2-iofail #84
+      ret r
+    if not (orB (cli-eq mode "r") (orB (cli-eq mode "r+") (orB (cli-eq mode "w") (orB (cli-eq mode "a") (cli-eq mode "x")))))
+      r <- b2-iofail #22
+      ret r
+    pab <-[b2-dpl] b2-abspath pb
+    cur <- b2-fread pab
+    if andB (orB (cli-eq mode "r") (cli-eq mode "r+")) (%weq cur hv2-none)
+      r <- b2-iofail #2
+      ret r
+    if andB (cli-eq mode "x") (not (%weq cur hv2-none))
+      r <- b2-iofail #17
+      ret r
+    v0 <- b2-vec
+    let fresh = orB (cli-eq mode "w") (orB (cli-eq mode "x") (%weq cur hv2-none))
+    let v = the Word (if fresh then v0 else cur)
+    if fresh
+      do b2-fflush pab v
+    n <- b2m-vlen v
+    ps <- b2-str pab
+    rec5 <- b2m-alloc #6
+    do b2m-wr (%wadd rec5 #5) (the Word (if cli-eq mode "r" then #1 else if cli-eq mode "r+" then #3 else #2))
+    do b2m-wr rec5 ps
+    do b2m-wr (%wadd rec5 #1) v
+    do b2m-wr (%wadd rec5 #2) (the Word (if cli-eq mode "a" then n else #0))
+    do b2m-wr (%wadd rec5 #3) (hv2-b (cli-eq mode "a"))
+    do b2m-wr (%wadd rec5 #4) #1
+    tb <- b2-ftab
+    hn <- b2m-vlen tb
+    do b2-vpush tb rec5
+    h <- b2m-n2 b2-LIT #0 b2-LU32 (%wadd hn #3)
+    r <- b2-c1 "Done" h
+    ret r
+  if cli-eq kb "File.close"
+    fr <- b2-fileof bk x0
+    if not (%weq fr #0)
+      do b2m-wr (%wadd fr #4) #0
+    u <- b2-unitv
+    ret u
+  if orB (cli-eq kb "File.write") (orB (cli-eq kb "File.write_bytes") (cli-eq kb "File.write_at"))
+    let at0 = cli-eq kb "File.write_at"
+    h <- b2-u32val bk x0
+    ds <-[b2-dpl] b2-strval bk (the Word (if at0 then x2 else x1))
+    db <-[b2-dpl] b2-fbytesarg bk (not (cli-eq kb "File.write")) (the Word (if at0 then x2 else x1))
+    let bs = the (List Word) (if cli-eq kb "File.write" then b2-utf8 ds else db)
+    if b2-has #256 bs
+      r0 <- b2-iofail #22
+      r <- b2-tup x0 r0
+      ret r
+    if orB (%weq h #1) (%weq h #2)
+      w <- cmd (w-fd-write h bs)
+      u <- b2-unitv
+      d <- b2-c1 "Done" u
+      r <- b2-tup x0 d
+      ret r
+    fr <- b2-fileof bk x0
+    if %weq fr #0
+      r0 <- b2-iofail #9
+      r <- b2-tup x0 r0
+      ret r
+    v <- b2m-rd (%wadd fr #1)
+    ap <- b2m-rd (%wadd fr #3)
+    fm <- b2m-rd (%wadd fr #5)
+    if %weq (%wand fm #2) #0
+      r0 <- b2-iofail #9
+      r <- b2-tup x0 r0
+      ret r
+    if andB at0 (%weq ap #1)
+      r0 <- b2-iofail #22
+      r <- b2-tup x0 r0
+      ret r
+    pos <- b2m-rd (%wadd fr #2)
+    off <- b2-u32val bk x1
+    n <- b2m-vlen v
+    let st = the Word (if at0 then off else if %weq ap #1 then n else pos)
+    e <- b2-fput (toNat #4294967295) v st bs
+    if not at0
+      do b2m-wr (%wadd fr #2) e
+    ps <- b2m-rd fr
+    pb <-[b2-dpl] b2-bytes ps
+    do b2-fflush pb v
+    u <- b2-unitv
+    d <- b2-c1 "Done" u
+    r <- b2-tup x0 d
+    ret r
+  if orB (cli-eq kb "File.read") (orB (cli-eq kb "File.read_line") (orB (cli-eq kb "File.read_bytes") (cli-eq kb "File.read_at")))
+    let at0 = cli-eq kb "File.read_at"
+    fr <- b2-fileof bk x0
+    if %weq fr #0
+      r0 <- b2-iofail #9
+      r <- b2-tup x0 r0
+      ret r
+    v <- b2m-rd (%wadd fr #1)
+    fm <- b2m-rd (%wadd fr #5)
+    if %weq (%wand fm #1) #0
+      r0 <- b2-iofail #9
+      r <- b2-tup x0 r0
+      ret r
+    pos <- b2m-rd (%wadd fr #2)
+    a1 <- b2-u32val bk x1
+    a2 <- b2-u32val bk x2
+    let mx = the Word (if at0 then a2 else a1)
+    let st = the Word (if at0 then a1 else pos)
+    bs <-[b2-dpl] b2-fget (toNat #4294967295) v st mx (cli-eq kb "File.read_line") nil
+    if not at0
+      do b2m-wr (%wadd fr #2) (%wadd pos (cli-len bs))
+    if orB (cli-eq kb "File.read") (cli-eq kb "File.read_line")
+      sv <- b2-strlit (b2-u16 (b2-cps bs))
+      d <- b2-c1 "Done" sv
+      r <- b2-tup x0 d
+      ret r
+    lv <- b2-blistv bs
+    d <- b2-c1 "Done" lv
+    r <- b2-tup x0 d
+    ret r
+  if cli-eq kb "File.size"
+    fr <- b2-fileof bk x0
+    if %weq fr #0
+      r0 <- b2-iofail #9
+      r <- b2-tup x0 r0
+      ret r
+    v <- b2m-rd (%wadd fr #1)
+    n <- b2m-vlen v
+    c <- b2m-n2 b2-LIT #0 b2-LU32 n
+    d <- b2-c1 "Done" c
+    r <- b2-tup x0 d
+    ret r
+  ret hv2-none2
+
+-- a List<U32> argument's bytes (when asked), else nothing
+fn b2-fbytesarg (bk : Word) (c : Bool) (t : Word) : List Word
+  if not c
+    ret nil
+  r <-[b2-dpl] b2-unlistw (toNat #4294967295) bk t nil
+  ret r
+
+-- a List of U32's values, each node and head brought to whnf in place (a normal form is not
+-- rebuilt: a 64 KiB list sent 256 times read 16 M nodes a copy each)
+fnrec b2-unlistw (f : Nat) (bk : Word) (t : Word) (acc : List Word) : List Word
+  zero: ret (hv2-rev acc)
+  s <- b2-wnf bk t
+  tg <- b2m-tag s
+  if not (%weq tg b2-CTR)
+    ret (hv2-rev acc)
+  xs <- b2m-f s #1
+  n <- b2m-len xs
+  if %weq n #0
+    ret (hv2-rev acc)
+  h <- b2m-at xs #0
+  tl <- b2m-at xs #1
+  hw <- b2-wnf bk h
+  u <- b2-u32ft hw b2-NU32
+  jump b2-unlistw f bk tl (cons (the Word (if %wlt #255 u then #256 else u)) acc)
+
+-- the memory's header, the names the kernel spells, the empty book
+fn b2-init : Word
+  wr M #1
+  wr (b2-HERR M) #0
+  wr (b2-HSP M) #0
+  names <- b2-map #0
+  wr (b2-HNAMES M) names
+  ids <- b2-vec
+  wr (b2-HIDS M) ids
+  do b2-internall (toNat #64) b2-fixed
+  rigid <- b2-booknil
+  wr (b2-HRIGID M) rigid
+  im <- b2-map #0
+  do b2-intrinit (toNat #256) im b2-intrnames b2-intrcodes
+  wr (b2-HR M #21) im
+  t0 <- cmd w-now
+  wr (b2-HR M #24) t0
+  wr (b2-HR M #25) (%wor (%wand t0 #4294967295) #1)
+  ret #0
+
+-- bend FILE: check the book (Base read from base), then print main at its normal form, or the
+-- verdict when there is no main
+fn b2-go (file0 : List Word) (base : List Word) : Word
+  file <-[b2-dpl] b2-abspath file0
+  do b2-init
+  bk <- b2-booknil
+  seen <- b2-vec
+  st <- b2m-r3 b2-NEMPTYSTR seen #0
+  r <- b2-load (toNat #4294967295) #0 bk st file nil base nil nil
+  if %weq r b2-ERR
+    c <- b2-failout seen base
+    ret c
+  let pb = b2-pbase file
+  if cli-eq pb "PROOF.bend"
+    let laws = list-append (b2-pdir (b2-pnorm file)) "LAWS.bend"
+    lr <- cmdp (w-file-read-named laws)
+    lid <- b2-nm laws
+    sn <- b2m-vlen seen
+    se <- b2-seenat (toNat #4294967295) seen lid #0 sn
+    if andB (%weq (fst lr) #0) (%weq se #0)
+      w <- cmd (w-fd-write #2 (list-append "SOME PROOFS FAIL" (cons #10 (list-append "Error: PROOF.bend must import ./LAWS.bend" (cons #10 nil)))))
+      ret #1
+  v <- b2-bvalid bk #0
+  if %weq v b2-ERR
+    c <- b2-failout seen base
+    ret c
+  h <- b2m-f bk #3
+  if %wlt #0 h
+    w <- cmd (w-fd-write #2 (list-append "SOME PROOFS FAIL" (cons #10 (list-append "Error: " (list-append (ce-dec h) (list-append (the (List Word) (if %weq h #1 then " TODO" else " TODOs")) (list-append " found." (cons #10 (list-append "The code is incomplete, and not a valid proof yet." (cons #10 nil))))))))))
+    ret #1
+  main <- b2-tld bk b2-Nmain
+  mt <- b2m-tag main
+  mv <- b2m-f main #3
+  mi <- b2m-f main #7
+  if orB (%weq main #0) (orB (not (%weq mt b2-TDEF)) (andB (%weq mv #0) (%weq mi #0)))
+    c <- b2-verdict bk
+    ret c
+  cl <- b2-ctrclash (toNat #4294967295) bk #0
+  if not (%weq cl #0)
+    kb <-[b2-dpl] b2-namekey cl
+    w <- cmd (w-fd-write #2 (list-append "Error: " (list-append kb (list-append " names both a constructor and a foreign def: name one apart" (cons #10 nil)))))
+    ret #1
+  io <- b2-isio bk main
+  if andB (%weq io #1) (not (%weq mi #0))
+    w <- cmd (w-fd-write #2 (list-append "Error: main must be a filled def: a foreign main cannot anchor IO" (cons #10 nil)))
+    ret #1
+  if %weq io #1
+    c <- b2-io bk main (cons file0 nil)
+    if %weq c b2-ERR
+      c2 <- b2-failout seen base
+      ret c2
+    ret c
+  y <- b2-snf bk mv
+  if %weq y b2-ERR
+    c <- b2-failout seen base
+    ret c
+  l <- b2-lower y #0
+  bnd <- b2-vec
+  s <-[b2-dpl] b2-show l #0 bnd #0
+  out (list-append s (cons #10 nil))
+  ret #0
+
+-- Base: the second argument, else $BEND_DIR/base.bend, else bend2's in this checkout
+fn b2-base (rest : List (List Word)) : List Word
+  if not (h4-stknil0 rest)
+    ret (h4-tget-go #0 rest)
+  e <-[b2-dpe] b2-getenv "BEND_DIR"
+  if fst e
+    ret (list-append (snd e) "/base.bend")
+  ret nil
+
+b2-main : List (List Word) → Step W Word
+b2-main nil = cli-say "usage: bend FILE.bend [BASE.bend]   (Bend checked and run by hyperactivity)" (sdone #2)
+b2-main (cons file rest) =
+  scmd (w-alloc b2-size) (λ m →
+  b2-base m rest (λ base → if cli-eq base nil then cli-say "bend: no base.bend: set BEND_DIR to bend2's directory, or pass BASE.bend" (sdone #2) else b2-go m file base (λ r → sdone r)))
+
+b2-c : List Word
+b2-c = emit-c-cli-opt (code b2-main)
+
+-- b2-c in pieces (lib/emit-slices), one per run: b2-c-head, b2-c-protos, b2-c-part 0 .. (the
+-- functions, b2-c-count of them, 1000 a piece), b2-c-main, concatenated, are b2-c
+b2-c-count : Word
+b2-c-count = es-count (code b2-main)
+
+b2-c-head : List Word
+b2-c-head = es-head (code b2-main)
+
+b2-c-protos : List Word
+b2-c-protos = es-protos (code b2-main)
+
+b2-c-part : Word → List Word
+b2-c-part k = es-part (code b2-main) #1000 k
+
+b2-c-main : List Word
+b2-c-main = es-main (code b2-main)
+
+-- no effect here registers the name
+hv2-none2 : Word
+hv2-none2 = #18446744073709551613

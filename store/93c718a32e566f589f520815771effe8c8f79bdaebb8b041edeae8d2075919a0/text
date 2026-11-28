@@ -1,0 +1,6 @@
+-- the name of the lambda whose body is at loc, bound on first sight (print_state_lam)
+h4-plook : Word → Nat → Word → Word → (Word → Step W Word) → Step W Word
+h4-plook m zero loc i k =
+  h4-rterr m "print_state: too many lambdas" k
+h4-plook m (suc f) loc i k =
+  scmd (w-load ((h4-PLL m))) (λ n → let m2768 = h4-dep m n in if (%weq i n) then (scmd (w-load ((h4-PNL m2768))) (λ nm → let m2769 = h4-dep m2768 nm in scmd (w-store ((h4-PNL m2769)) ((%wsucc nm))) (λ u2770 → let m2771 = hv2-u m2769 u2770 in scmd (w-store ((h4-plam m2771 i)) (loc)) (λ u2772 → let m2773 = hv2-u m2771 u2772 in scmd (w-store ((%wadd (h4-plam m2773 i) #8)) (nm)) (λ u2774 → let m2775 = hv2-u m2773 u2774 in scmd (w-store ((h4-PLL m2775)) ((%wsucc n))) (λ u2776 → let m2777 = hv2-u m2775 u2776 in k (h4-depl m2777 (nm)))))))) else (scmd (w-load ((h4-plam m2768 i))) (λ l → let m2778 = h4-dep m2768 l in if (%weq l loc) then (scmd (w-load ((%wadd (h4-plam m2778 i) #8))) (λ nm → let m2779 = h4-dep m2778 nm in k (h4-depl m2779 (nm)))) else (h4-plook m2778 f loc (%wsucc i) k))))

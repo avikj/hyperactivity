@@ -1,0 +1,142 @@
+# HigherOrderCO's runtimes in hyperactivity
+
+Three of Higher Order Company's systems run as hyperactivity modules and are emitted to C. Each
+is checked against its upstream on the upstream's own tests.
+
+| module | what it is | upstream | result |
+|---|---|---|---|
+| `lib/hvm2` | HVM2: interaction combinators under HVM2's rule table (LINK CALL VOID ERAS ANNI COMM OPER SWIT); u24, i24 and f24 numbers; safety analysis; readback; IO | HigherOrderCO/HVM `src/hvm.rs`, `src/run.c` | 20 of 20 run snapshots that have a program (`tests/snapshots/run__*`) |
+| `lib/ieee32` | IEEE binary32 on words: exact results rounded to nearest; Rust's casts, decimal reading and shortest display; correctly rounded transcendentals in 2^-256 fixed point | used by `lib/hvm2` and `lib/bend` | carried by hvm2's f24 snapshots and bend's F32 tests |
+| `lib/hvm4` | HVM4: the Interaction Calculus runtime behind SupGen, with its parser, lazy book, reduction (every interaction), collapser and printer | HigherOrderCO/HVM4 `src/hvm.c` | 217 of 217 tests (`devs/test`) |
+| `lib/bend` | Bend: bend2's parser, pattern flattener, machine, checker and verdict, plus the IO lane's scheduler, files, TCP/UDP, and the JS lane's U32/Nat/F32/String/Array operations | HigherOrderCO/bend `bend2/bend.ts`, `main.ts`, `comp.ts` | 1724 of 1872 tests print the same bytes as `bun bend2/main.ts` |
+| `lib/emit-slices` | emits a module's C in pieces, one view each, so no view holds the whole emission | — | used to build `lib/bend` |
+
+Two of bend's IO tests (`io/chan_buffer_drain`, `io/http_fetch_eof`) depend on timing and can fail
+when the suite runs in parallel; they pass run alone.
+
+`lib/bend` also checks all five checker benches (`bench/checker`) and prints what bun prints.
+
+## Where the files are
+
+`ports/README.md` and the do-notation sources `ports/bend/*.src` and `ports/hvm4/*.src` are
+documents in the store's root: a document's text is its module's texts in order. This writes
+them to disk from the repository's top:
+
+    r=$(cat store/ROOT/root); p=$(printf ports/ | od -An -tx1 | tr -d ' \n')
+    grep "^$p" store/$r/root | while read x h; do
+      f=$(printf "$(echo $x | sed 's/../\\x&/g')"); mkdir -p "$(dirname "$f")"
+      for t in $(cat store/$h/module); do cat store/$t/text; done > "$f"
+    done
+
+The tools are Python and shell, which the repository does not hold (`lib/guard.hypercubical`).
+They are on the pull request that brought these modules, in its comments: `h4gen.py` and `topo.py`
+(the do-notation expander and the definition orderer), `hvm2/gen_go.py` (hvm2's interaction
+loop), `build.sh`, `regen.sh`, `test-bend.sh`, `test-hvm4.sh` and `test-hvm2.sh`. Put them under
+`ports/` to run the commands below.
+
+## Build and test
+
+    ./ports/build.sh bend          # ./bend  (BEND_DIR=<bend checkout>/bend2, or pass BASE.bend second)
+    ./ports/build.sh hvm4          # ./hvm4
+    ./ports/build.sh hvm2          # ./hvm2
+    ./ports/test-bend.sh <bend checkout> ./bend
+    ./ports/test-hvm4.sh <HVM4 checkout> ./hvm4
+    ./ports/test-hvm2.sh <HVM2 checkout> ./hvm2
+
+`build.sh` compiles with `cc -O2`; the results above hold under gcc and clang. Building `bend`
+takes about 15 minutes, one view per 1000 functions.
+
+## Sources
+
+`lib/bend` and `lib/hvm4` are generated. Edit their sources, not the modules:
+
+- `ports/bend/*.src` and `ports/hvm4/*.src` are the sources, written in a do-notation over flat
+  memory.
+- `ports/h4gen.py` expands that do-notation into the continuation-passing form the modules hold.
+- `ports/topo.py` orders the generated definitions.
+- `ports/regen.sh bend|hvm4` rewrites a module from its sources. `build/cubical --root` then publishes the root
+  (`store/ROOT/root`) that a commit records.
+
+`lib/hvm2` and `lib/ieee32` are written directly, except hvm2's interaction loop (`hr-go`), which
+`ports/hvm2/gen_go.py` prints; the module holds that output verbatim.
+
+Regenerating names its fresh binders by a counter in the store, so a regenerated module's hash
+depends on the store it is written into. Two regenerations of the same sources differ only in
+those names.
+
+## What does not run in `lib/bend`
+
+- **113 tests** call the test's own foreign JavaScript. Running them needs a JavaScript
+  interpreter plus the JS lane's value conversions.
+- **20 tests** call `Process.run`, mostly `rm -f` to clean up. The C runtime has no fork, exec or
+  unlink call.
+- **9 tests** use Window or Audio.
+- **2 tests** run out of memory on long channel loops. The RAM heap has no collector; its objects
+  carry no header saying where their pointers are.
+- **4 tests** depend on compile-time layout checks of the C and JS compilers.
+- Socket calls return -1 without errno. A failed connect is reported as ECONNREFUSED, and a
+  failed bind or listen as EADDRINUSE.
+
+## How `lib/bend` runs
+
+**Code and memory.** The sources are continuation-passing code over one flat memory of words.
+Every load and store passes the memory base on through the value it produced, so nothing after
+a step can run before it.
+
+**Reclaiming closures.** The runtime has one mark slot: `w-sys 900` marks and `w-sys 901`
+rewinds. Outer regions rewind their closures when they finish:
+- a book item (`b2-pitem`)
+- a definition's check (`b2-bvstep`)
+- an IO step (`b2-iostep`)
+
+An inner mark would move the outer region's rewind past the closures made before it. So inner
+regions mark only when they run long:
+- a wnf run marks after its first 8 batches of 512 steps;
+- a flatten scan marks after the first 4096 scans in an item.
+
+Answers leave a region through RAM registers.
+
+**Bounding the C stack.** A continuation-passing step is a C call. A command returns to the
+runtime's trampoline, so `w-now` is issued as a no-op:
+- in the parser,
+- at each flatten level,
+- in check and infer,
+- every 256 `term_higher` steps.
+
+**The machine.** It is bend.ts's wnf over an explicit frame stack in RAM. The frame kinds:
+
+| kind | frame |
+|---|---|
+| 1 | APP |
+| 2 | MAT |
+| 3 | VAR (share-cell write-back) |
+| 4, 5 | MNA, MNB |
+| 6 | a native's argument evaluated, then the call retried |
+| 7 | IO-lane call by value: the argument evaluated, then back to the lambda with its lhs |
+
+Native arguments are evaluated on this stack, never by a nested run. A nested run would take
+the mark slot from the batch around it.
+
+**Natives (`b2-intrnames` / `b2-intrcodes`).**
+
+| codes | operations | lane |
+|---|---|---|
+| 1–37 | U32, Nat | every lane |
+| 40–84 | F32 | IO lane only, as the JS lane's natives |
+| 90–93 | String | IO lane only, as the JS lane's natives |
+| 100–118 | Array | IO lane only, as the JS lane's natives |
+
+The checker evaluates only by Base's definitions, as bend.ts does.
+
+**Text, arrays and sockets.**
+- **Strings.** A String literal holds an array of UTF-16 units, or a rope `[ROPE, left, right,
+  length]` made by `String.append`. A rope is flattened the first time it is read, and the
+  result is kept as `[FWD, array]`. A code point past the scalars is packed as U+DC00 and three
+  units, as `char_new` packs it.
+- **Arrays.** An Array on the IO lane is a literal of kind 4 over a RAM array of cells. A match
+  on it sees `ALeaf` or `ANode` halves.
+- **Sockets.** A socket operation that would wait parks as a scheduler timer of kind 3, and is
+  tried again every millisecond while the queue is empty.
+
+**Open: the RAM heap has no collector.** Its objects carry no header saying where their pointers
+are. A collector needs that layout first, and is what long-running programs here are missing.

@@ -1,0 +1,10 @@
+-- src/hvm.c expand: references at the port called, one at a time, against the root
+hio-exp-go : Nat → HioE → Word → Word → Word → (Word → Word → Step W Word) → Step W Word
+hio-exp-go zero e m p old k = hr-st m (hr-va m #0) old (λ m1 → k m1 p)
+hio-exp-go (suc f) e m p old k =
+  hr-peek m p (λ got →
+  if %weq (hv2-tag got) hv2-REF
+  then hio-boot m got hv2-root (λ m1 →
+       hio-run e m1 (λ m2 →
+       scmd (w-load (hr-va m2 #0)) (λ v → hio-exp-go f e m2 (hio-rootp v) old k)))
+  else hr-st m (hr-va m #0) old (λ m1 → k m1 got))

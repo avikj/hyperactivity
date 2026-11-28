@@ -1,0 +1,19 @@
+-- op on i24 values (two's complement in 24 bits): the comparisons give u24, the rest i24
+hv2-op-i : Word → Word → Word → Word
+hv2-op-i op a b =
+  if %weq op #4 then hv2-new hv2-TY-I24 (%wadd a b)
+  else if %weq op #5 then hv2-new hv2-TY-I24 (hv2-subm a b)
+  else if %weq op #6 then hv2-new hv2-TY-I24 (hv2-subm b a)
+  else if %weq op #7 then hv2-new hv2-TY-I24 (%wmul a b)
+  else if %weq op #8 then hv2-new hv2-TY-I24 (if %weq b #0 then #0 else hv2-idiv a b)
+  else if %weq op #9 then hv2-new hv2-TY-I24 (if %weq a #0 then #0 else hv2-idiv b a)
+  else if %weq op #10 then hv2-new hv2-TY-I24 (if %weq b #0 then #0 else hv2-irem a b)
+  else if %weq op #11 then hv2-new hv2-TY-I24 (if %weq a #0 then #0 else hv2-irem b a)
+  else if %weq op #12 then hv2-new hv2-TY-U24 (hv2-b (%weq a b))
+  else if %weq op #13 then hv2-new hv2-TY-U24 (hv2-b (not (%weq a b)))
+  else if %weq op #14 then hv2-new hv2-TY-U24 (hv2-b (hv2-ilt a b))
+  else if %weq op #15 then hv2-new hv2-TY-U24 (hv2-b (hv2-ilt b a))
+  else if %weq op #16 then hv2-new hv2-TY-I24 (%wand a b)
+  else if %weq op #17 then hv2-new hv2-TY-I24 (%wor a b)
+  else if %weq op #18 then hv2-new hv2-TY-I24 (hv2-xor a b)
+  else hv2-new hv2-TY-I24 #0

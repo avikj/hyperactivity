@@ -1,0 +1,6 @@
+-- code points as UTF-16 units
+b2-u16 : List Word → List Word
+b2-u16 nil = nil
+b2-u16 (cons c r) =
+  if %wlt c #65536 then cons c (b2-u16 r)
+  else (let d = %wsub c #65536 in cons (%wadd #55296 (%wshr d #10)) (cons (%wadd #56320 (%wand d #1023)) (b2-u16 r)))

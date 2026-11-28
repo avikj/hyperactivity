@@ -1,0 +1,16 @@
+hio-fn-write : HioE → Word → Word → (Word → Step W Word) → Step W Word
+hio-fn-write e m argm k =
+  hio-tup (toNat #1) e m argm nil (λ m1 tup →
+  if not (%weq (cli-len tup) #2) then hio-err-type m1 k
+  else hio-bytes (hio-nb e) e m1 (hio-at #1 tup) nil (λ m2 bs →
+       (let fp = hio-at #0 tup
+        in if not (hio-isnum fp) then hio-err-no m2 #9 k
+           else if %wlt (hio-u24 fp) #3
+           then (if %weq (hio-u24 fp) #0 then hio-err-no m2 #1 k
+                 else scmd (w-fd-write (hio-u24 fp) bs) (λ w →
+                      if %weq w (cli-len bs) then hio-ok (hv2-kp m2 w) hio-era k else hio-err-no (hv2-kp m2 w) #1 k))
+           else hio-rec m2 (hio-u24 fp) (λ r →
+                if %weq r #0 then hio-err-no m2 #9 k
+                else scmd (w-load (%wadd r #32)) (λ md →
+                     if %weq (%wand md #2) #0 then hio-err-no (hv2-kp m2 md) #1 k
+                     else hio-put m2 r bs (λ m3 → hio-ok m3 hio-era k))))))

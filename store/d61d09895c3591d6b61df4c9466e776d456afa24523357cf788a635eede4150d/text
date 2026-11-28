@@ -1,0 +1,16 @@
+ief-pmag : Word → List Word → Word
+ief-pmag s t =
+  if orB (cli-eq t "inf") (cli-eq t "infinity") then ief-inf s
+  else if cli-eq t "nan" then ief-NAN
+  else (let n = ief-num t
+            d = fst n
+            k = fst (snd n)
+            e = fst (snd (snd n))
+        in if not (snd (snd (snd n))) then ief-NAN
+           else if bg-is0 d then ief-sbit s
+           else if %wlt #4135 e then ief-inf s
+           else if %wlt e #4096
+           then (if %wlt (%wsub #4096 e) (%wadd k #60)
+                 then ief-ratio s d (bg-pow10 (toNat (%wsub #4096 e))) #4096 #0
+                 else ief-sbit s)
+           else ief-ratio s (bg-mul d (bg-pow10 (toNat (%wsub e #4096)))) bg-one #4096 #0)

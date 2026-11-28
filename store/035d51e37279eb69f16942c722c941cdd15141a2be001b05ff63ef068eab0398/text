@@ -1,0 +1,14 @@
+-- f32_show: the shortest decimal that reads back, as JavaScript prints that number, with ".0"
+-- after an integer part that has no point
+b2-jsnum : List Word → Word → List Word
+b2-jsnum ds e =
+  let k = cli-len ds
+      n = %wadd e k
+  in if andB (not (%wlt n #4096)) (andB (not (%wlt (%wsub n #4096) k)) (not (%wlt #4117 n)))
+     then list-append ds (ief-zeros (toNat (%wsub (%wsub n #4096) k)))
+     else if andB (%wlt #4096 n) (not (%wlt #4117 n))
+     then list-append (ief-take (toNat (%wsub n #4096)) ds) (cons #46 (ief-dropn (toNat (%wsub n #4096)) ds))
+     else if andB (%wlt #4090 n) (not (%wlt #4096 n))
+     then list-append "0." (list-append (ief-zeros (toNat (%wsub #4096 n))) ds)
+     else list-append (cons (hv2-nth #0 ds) (if %weq k #1 then nil else cons #46 (hv2-drop1 ds)))
+            (cons #101 (if %wlt n #4097 then cons #45 (ce-dec (%wsub #4097 n)) else cons #43 (ce-dec (%wsub n #4097))))

@@ -1,0 +1,14 @@
+b2-fasin : Word → Word
+b2-fasin x =
+  let sg = ief-sgn x
+  in if ief-isnan x then x
+     else if ief-iszero x then x
+     else if ief-isinf x then ief-NAN
+     else (let xx = b2-fxfix x
+               one = bg-pow2 ief-P
+               hpi = bg-shr ief-pi-P #1
+           in if bg-ge xx (bg-add one bg-one) then ief-NAN
+              else if %wlt (bg-bitlen xx) (%wsub ief-P #12) then x
+              else (let d = b2-fcomp xx
+                        at = the (List Word) (if bg-ge d xx then ief-atan01 xx d else bg-sub hpi (ief-atan01 d xx))
+                    in ief-round-bg sg at (%wsub #4096 ief-P) #1))
