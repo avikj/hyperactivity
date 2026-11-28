@@ -1,0 +1,14 @@
+-- Returns `some (tmpl , (m , fvs))` where `tmpl = lam-k m body` is closed and `fvs` are the call-site de Bruijn args
+code-abstract : Code → Opt (Code × (Word × Lst Word))
+code-abstract u =
+  if hf-factorable-head u then
+    let sz = code-node-size u
+    in if %wlt sz #4 then none
+       else
+         let fvs = code-free-vars u
+             m = l-count fvs
+         in if %wlt m #5 then
+              let body = code-map (hf-canon-var fvs m) #0 u
+              in some (lam-k m body , (m , fvs))
+            else none
+  else none

@@ -1,0 +1,16 @@
+-- one command: the state the session reached (session/state, read in constant time; the log only grows),
+-- the action taken (the walk's chunks are cut only when hy-show displays a walking state)
+hy-begin : List Word → List Word → List (List Word) → Proc W Unit
+hy-begin st m a =
+  bind (h-file-time ".git/HEAD") (λ gt →
+  bind (if wlt #0 gt then h-run (cons "/usr/bin/env" (cons "git" (cons "config" (cons "core.hooksPath" (cons ".githooks" nil))))) else ret {lzero} {W} #0) (λ g →
+  bind (h-mkdir st) (λ u → bind (h-mkdir (list-append st "/session")) (λ u2 →
+  bind (hy-get st "session/state") (λ rawSt →
+  if andB (h-not (hy-held rawSt)) (andB (h-not (h-null (hy-head a))) (orB (h-has (hy-head a) hy-work-words) (h-has (hy-head a) hy-bridge-words)))
+  then bind (hy-append (list-append st "/session/log") (h-line (hy-sep " " a))) (λ b1 →
+       bind (h-write (list-append st "/session/state") "working") (λ b2 →
+       bind (hy-act st m a) (λ u4 → exit #0)))
+  else
+    bind (hy-count st) (λ n →
+    bind (hy-state-or-log st n (hy-state-parse rawSt)) (λ s →
+    bind (hy-take-at st m n a s) (λ u4 → exit #0))))))))

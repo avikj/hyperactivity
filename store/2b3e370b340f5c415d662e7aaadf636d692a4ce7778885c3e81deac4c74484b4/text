@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p19 : List Word
+hyperos-arm64-kernel-c-p19 =
+  os-lines-q
+    (cons "}"
+    (cons nil
+    (cons "static void hid_poll_one(VioQueue *vq, VirtioInputEv evs[32]) {"
+    (cons "    if (!vq->base) return;"
+    (cons "    dmb_ish();"
+    (cons "    while (vq->last_used != vq->used->idx) {"
+    (cons "        uint16_t slot = vq->last_used & 15u;"
+    (cons "        uint32_t id = vq->used->ring[slot].id & 15u;"
+    (cons "        VirtioInputEv ev = evs[id];"
+    (cons "        if (ev.type == 1u && ev.value == 1u) g_key_events++;"
+    (cons "        else if (ev.type == 2u) {"
+    (cons "            if (ev.code == 0u) g_mouse_x += (int32_t)ev.value;"
+    (cons "            else if (ev.code == 1u) g_mouse_y += (int32_t)ev.value;"
+    (cons "            if (g_mouse_x < 0) g_mouse_x = 0;"
+    (cons "            if (g_mouse_y < 0) g_mouse_y = 0;"
+    (cons "            if ((uint32_t)g_mouse_x >= g_fb_w) g_mouse_x = (int32_t)g_fb_w - 1;"
+    (cons "            if ((uint32_t)g_mouse_y >= g_fb_h) g_mouse_y = (int32_t)g_fb_h - 1;"
+    (cons "        }"
+    (cons "        uint16_t av = vq->avail->idx;"
+    (cons "        vq->avail->ring[av & 15u] = (uint16_t)id;"
+    (cons "        dmb_ish();"
+    (cons "        vq->avail->idx = (uint16_t)(av + 1u);"
+    nil))))))))))))))))))))))

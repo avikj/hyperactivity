@@ -1,0 +1,26 @@
+hyperos-arm64-mkimg-c-p1 : List Word
+hyperos-arm64-mkimg-c-p1 =
+  os-lines-q
+    (cons "  return (const char *)(o->buf + rd64(st + 24) + rd32(sh_ptr(o, si)));"
+    (cons "}"
+    (cons nil
+    (cons "int main(int argc, char **argv) {"
+    (cons "  if (argc < 3) return 1;"
+    (cons "  const char *out_path = argv[1];"
+    (cons "  int nobj = argc - 2;"
+    (cons "  Obj objs[8]; memset(objs, 0, sizeof objs);"
+    (cons "  for (int i = 0; i < nobj; i++) {"
+    (cons "    FILE *f = fopen(argv[i + 2], `rb`);"
+    (cons "    if (!f) return 2;"
+    (cons "    fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);"
+    (cons "    objs[i].buf = (uint8_t *)calloc(1, (size_t)sz + 64);"
+    (cons "    objs[i].len = fread(objs[i].buf, 1, (size_t)sz, f);"
+    (cons "    fclose(f);"
+    (cons "    objs[i].shoff = rd64(objs[i].buf + 40);"
+    (cons "    objs[i].shent = rd16(objs[i].buf + 58);"
+    (cons "    objs[i].shnum = rd16(objs[i].buf + 60);"
+    (cons "    objs[i].shstr = rd16(objs[i].buf + 62);"
+    (cons "  }"
+    (cons "  Sec secs[128]; int nsec = 0;"
+    (cons "  int sec_map[8][128]; memset(sec_map, -1, sizeof sec_map);"
+    nil))))))))))))))))))))))

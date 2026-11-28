@@ -1,0 +1,10 @@
+-- Clean direct %wlt Schmitt trigger:
+--   d2 <= 144  <==>  d2 < 145   ==> true  (pinch engaged!)
+--   d2 >= 324  <==>  323 < d2   ==> false (pinch released!)
+--   otherwise                   ==> prev  (tremor-immune hold!)
+vp-pinch-step : Bool → Vec3i → Vec3i → Bool
+vp-pinch-step prev thumb idx =
+  let d2 = vp-dist2 thumb idx
+  in if %wlt d2 #145 then true
+     else if %wlt #323 d2 then false
+     else prev

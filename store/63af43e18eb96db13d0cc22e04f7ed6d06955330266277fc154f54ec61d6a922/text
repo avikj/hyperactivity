@@ -1,0 +1,24 @@
+vpf-unpack-hud : Word → List Word → Sum Unit FounderHud
+vpf-unpack-hud key bs =
+  if %weq (fromNat (list-length bs)) #32 then
+    let p0 = vpf-get32 bs
+        mg = fst p0
+        p1 = vpf-get32 (snd p0)
+        sq = fst p1
+        p2 = vpf-get32 (snd p1)
+        vm = fst p2
+        p3 = vpf-get32 (snd p2)
+        sm = fst p3
+        p4 = vpf-get32 (snd p3)
+        bp = fst p4
+        p5 = vpf-get32 (snd p4)
+        p6 = vpf-get32 (snd p5)
+        m1 = fst p6
+        p7 = vpf-get32 (snd p6)
+        m2 = fst p7
+        ex1 = vpf-mac32 key sq vm sm bp
+        ex2 = vpf-mix32 ex1 #1337
+    in if andB (%weq mg vpf-hxsv-magic) (andB (%weq m1 ex1) (%weq m2 ex2))
+       then inr (mk-hud sq vm sm bp)
+       else inl unit
+  else inl unit

@@ -1,0 +1,26 @@
+hyperos-cli-main : List (List Word) → Step W Word
+hyperos-cli-main args =
+  let a1  = ho-arg1 args
+      a2  = ho-arg2 args
+      mode = if cli-eq a1 nil then "all"
+             else if cli-eq a1 "emit" then "emit"
+             else if cli-eq a1 "baremetal" then "baremetal"
+             else if cli-eq a1 "mesh" then "mesh"
+             else if cli-eq a1 "daemon" then "daemon"
+             else if cli-eq a1 "visionpro" then "visionpro"
+             else if cli-eq a1 "all" then "all"
+             else "emit"
+      dir = if cli-eq a1 nil then "/tmp/hy_out/hyperos"
+            else if cli-eq a2 nil then
+              (if cli-eq mode "emit" then
+                 (if cli-eq a1 "emit" then "/tmp/hy_out/hyperos" else a1)
+               else "/tmp/hy_out/hyperos")
+            else a2
+  in ho-materialize-all dir (λ totB →
+       if cli-eq mode "emit" then
+         cli-say (list-append "[HX-HYPEROS] Materialized Dual-Arch ARM64+x86-64 Bare-Metal Hyperkernel + VZ + m1n1 + HXSV Mesh ("
+           (list-append (ce-dec totB) (list-append "B) -> " dir)))
+           (sdone #0)
+       else
+         cli-system (list-append "/bin/sh " (list-append dir (list-append "/hx_oneclick_deploy.sh " (list-append mode (list-append " " (list-append dir " ."))))))
+           (λ rc → sdone rc))

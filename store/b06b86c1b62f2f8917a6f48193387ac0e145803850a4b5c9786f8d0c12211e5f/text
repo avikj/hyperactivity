@@ -1,0 +1,26 @@
+hyperos-arm64-boot-asm-p1 : List Word
+hyperos-arm64-boot-asm-p1 =
+  os-lines-q
+    (cons "_real_start:"
+    (cons "    mov     x19, x0                     /* Preserve FDT physical pointer in x19 */"
+    (cons "    mrs     x1, CurrentEL"
+    (cons "    lsr     x1, x1, #2"
+    (cons "    and     x1, x1, #3"
+    (cons "    cmp     x1, #2"
+    (cons "    b.ne    1f"
+    (cons nil
+    (cons "    /* Running in EL2 (bare-metal Apple Silicon m1n1 or EL2 HV): drop cleanly to EL1h */"
+    (cons "    mov     x2, #3"
+    (cons "    msr     cnthctl_el2, x2"
+    (cons "    msr     cntvoff_el2, xzr"
+    (cons "    mov     x2, #(1 << 31)              /* HCR_EL2.RW = 1 (EL1 is AArch64) */"
+    (cons "    msr     hcr_el2, x2"
+    (cons "    mov     x2, #0x3c5                  /* SPSR_EL2 = EL1h, DAIF masked */"
+    (cons "    msr     spsr_el2, x2"
+    (cons "    adr     x2, 1f"
+    (cons "    msr     elr_el2, x2"
+    (cons "    isb"
+    (cons "    eret"
+    (cons nil
+    (cons "1:"
+    nil))))))))))))))))))))))

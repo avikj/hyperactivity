@@ -1,0 +1,8 @@
+pool-factor-step : Word → Lst Code → Opt ((Word × Code) × Lst Code)
+pool-factor-step gid pool =
+  case hf-best-cand pool (pool-candidates pool) none return (λ _ → Opt ((Word × Code) × Lst Code)) of
+    none → none
+    some bg →
+      let tmpl = fst bg
+          factored = l-map (code-factor-with tmpl gid) pool
+      in some ((gid , tmpl) , factored)

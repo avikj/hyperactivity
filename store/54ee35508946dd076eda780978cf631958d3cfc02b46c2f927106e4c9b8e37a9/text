@@ -1,0 +1,26 @@
+vpf-ota-deploy-sh-q4 : List Word
+vpf-ota-deploy-sh-q4 =
+  vpf-lines-q
+    (cons "    /usr/bin/codesign --force --sign - `$OUT/HyperactivityVisionPro.app` || true"
+    (cons "  fi"
+    (cons "  mkdir -p `$OUT/tmp` `$OUT/modcache`"
+    (cons "  TMPDIR=`$OUT/tmp` xcrun -sdk xrsimulator swiftc -O -parse-as-library -swift-version 5 -target arm64-apple-xros2.0-simulator \"
+    (cons "    -module-cache-path `$OUT/modcache` -import-objc-header `$OUT/hx_vp_bridge.h` \"
+    (cons "    `$OUT/HyperactivityVisionPro.swift` `$OUT/libvp_xrsim.a` \"
+    (cons "    -framework SwiftUI -framework CompositorServices -framework ARKit -framework Metal -framework AVFAudio -framework GameController \"
+    (cons "    -lc++ -o `$OUT/HyperactivityVisionProSim.app/HyperactivityVisionPro`"
+    (cons "  /usr/bin/codesign --force --sign - `$OUT/HyperactivityVisionProSim.app` || true"
+    (cons nil
+    (cons "  echo `[4/4] Pushing OTA to Apple Vision Pro...`"
+    (cons "  if [ -n `$VP_CORE_ID` ]; then"
+    (cons "    xcrun devicectl device install app --device `$VP_CORE_ID` `$APP_TO_INSTALL`"
+    (cons "    xcrun devicectl device process launch --device `$VP_CORE_ID` `$BUNDLE_ID` || true"
+    (cons "    echo `[VISION PRO LIVE] Installed & launched $BUNDLE_ID on Apple Vision Pro ($VP_CORE_ID)!`"
+    (cons "  else"
+    (cons "    SIM_ID=`$(xcrun simctl list devices booted 2>/dev/null | sed -n 's/.*Apple Vision Pro (\([0-9A-F-]\{36\}\)).*/\1/p' | head -n 1)`"
+    (cons "    if [ -n `$SIM_ID` ]; then"
+    (cons "      xcrun simctl install `$SIM_ID` `$OUT/HyperactivityVisionProSim.app`"
+    (cons "      xcrun simctl launch `$SIM_ID` `$BUNDLE_ID` || true"
+    (cons "      echo `[VISIONOS SIM LIVE] Installed & launched on booted Apple Vision Pro Simulator ($SIM_ID)!`"
+    (cons "    else"
+    nil))))))))))))))))))))))

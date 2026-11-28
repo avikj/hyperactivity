@@ -1,0 +1,13 @@
+vpi-after-self : List (List Word) → Sum Unit (List (List Word))
+vpi-after-self nil = inl unit
+vpi-after-self (cons a rest) =
+  if h-eq a "--with" then
+    case rest of
+      nil → inl unit
+      cons _ rest2 →
+        case rest2 of
+          nil → inl unit
+          cons _ rest3 → vpi-after-self rest3
+  else if h-prefix "--" a then vpi-after-self rest
+  else if vpi-infix "hx-visionpro-founder" a then inr rest
+  else vpi-after-self rest

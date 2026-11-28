@@ -1,0 +1,8 @@
+dg-read-bound-1 : List Word → List Word → Proc W (List Word)
+dg-read-bound-1 p1 p2 =
+  bind (h-read p1) (λ r1 →
+  let k1 = h-take (toNat #64) (h-before (cons #10 nil) (s-or nil r1)) in
+  if s-hex64 k1 then ret {lzero} {W} k1
+  else bind (h-read p2) (λ r2 →
+       let k2 = h-take (toNat #64) (h-before (cons #10 nil) (s-or nil r2)) in
+       if s-hex64 k2 then ret {lzero} {W} k2 else ret {lzero} {W} nil))

@@ -1,0 +1,26 @@
+vpf-c-impl-q11 : List Word
+vpf-c-impl-q11 =
+  vpf-lines-q
+    (cons "  o->l_chord = lc; o->r_chord = rc;"
+    (cons "  o->bimanual_cmd = kbd ? kbd : ((lc << 4u) | rc);"
+    (cons "  o->founder_act = chord_to_action(o->bimanual_cmd);"
+    (cons "  o->tonnetz_triad = tonnetz_next((s->voice_tok + lc + rc + (kbd & 7u)) % 24u, (rc + kbd) % 3u);"
+    (cons "  uint64_t kw = (uint64_t)o->bimanual_cmd;"
+    (cons "  if (__atomic_load_n(&g_cubical_ready, __ATOMIC_ACQUIRE)) {"
+    (cons "    uint64_t arg = (uint64_t)(o->tonnetz_triad % 24u), res = 0ULL;"
+    (cons "    if (cubical_call_w(`vp-tonnetz-P`, &arg, 1, &res) == 0) {"
+    (cons "      kw = res;"
+    (cons "      __atomic_fetch_add(&g_cubical_evals, 1ULL, __ATOMIC_RELAXED);"
+    (cons "    }"
+    (cons "  }"
+    (cons "  o->kernel_word_out = kw;"
+    (cons "  o->cubical_evals = __atomic_load_n(&g_cubical_evals, __ATOMIC_RELAXED);"
+    (cons "  o->link_up = __atomic_load_n(&g_link_up, __ATOMIC_ACQUIRE);"
+    (cons "  o->hxsv_seq = __atomic_load_n(&g_hxsv_seq, __ATOMIC_RELAXED);"
+    (cons "  o->h200_sms = __atomic_load_n(&g_h200_sms, __ATOMIC_RELAXED);"
+    (cons "  o->spread_bps = __atomic_load_n(&g_spread_bps, __ATOMIC_RELAXED);"
+    (cons "  if (o->bimanual_cmd != 0u && o->bimanual_cmd != prev_b) emit_hxsv_udp(5u, o->bimanual_cmd, o->founder_act, o->tonnetz_triad);"
+    (cons "}"
+    (cons nil
+    (cons "static const float kPanL[6] = { 1.0f, 0.96f, 0.80f, 0.60f, 0.28f, 0.0f };"
+    nil))))))))))))))))))))))

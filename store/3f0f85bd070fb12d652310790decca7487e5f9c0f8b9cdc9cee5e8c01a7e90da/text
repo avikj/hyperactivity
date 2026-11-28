@@ -1,0 +1,15 @@
+-- Pick highest-gain candidate `(tmpl , gain)` across `pool`
+hf-best-cand : Lst Code → Lst (Code × (Word × Word)) → Opt (Code × Word) → Opt (Code × Word)
+hf-best-cand pool lnil best = best
+hf-best-cand pool (lcons e rest) best =
+  let tmpl = fst e
+      m = fst (snd e)
+      s = snd (snd e)
+      k = pool-disjoint-count tmpl pool
+      g = hf-net-gain k m s
+  in if %weq g #0 then hf-best-cand pool rest best
+     else case best return (λ _ → Opt (Code × Word)) of
+            none → hf-best-cand pool rest (some (tmpl , g))
+            some b →
+              if %wlt (snd b) g then hf-best-cand pool rest (some (tmpl , g))
+              else hf-best-cand pool rest best

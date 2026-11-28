@@ -1,0 +1,26 @@
+hypernet-mesh-c-p10 : List Word
+hypernet-mesh-c-p10 =
+  os-lines-q
+    (cons "    setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &one, sizeof(one));"
+    (cons "    fcntl(fd, F_SETFL, O_NONBLOCK);"
+    (cons "    struct sockaddr_in sa; memset(&sa, 0, sizeof(sa));"
+    (cons "    sa.sin_family = AF_INET; sa.sin_addr.s_addr = htonl(INADDR_ANY); sa.sin_port = htons(port);"
+    (cons "    if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) != 0) { close(fd); return -1; }"
+    (cons "    return fd;"
+    (cons "}"
+    (cons nil
+    (cons "static int run_selftest(const char *repo) {"
+    (cons "    int s1 = open_mesh_sock(47791), s2 = open_mesh_sock(47792);"
+    (cons "    if (s1 < 0 || s2 < 0) { if (s1 >= 0) close(s1); if (s2 >= 0) close(s2); return 1; }"
+    (cons "    uint32_t cores = 1, rhi = 0, rlo = 0; char model[64], root16[17];"
+    (cons "    uint32_t dc = detect_device_class(&cores, model);"
+    (cons "    read_root_prefix(repo, &rhi, &rlo, root16);"
+    (cons nil
+    (cons "    uint8_t b1[32], forged[32];"
+    (cons "    hxsv_pack(b1, 1u, 1u, (1u << 16) | cores, rhi, rlo, 4200u); /* Simulates Mac Studio peer */"
+    (cons "    memcpy(forged, b1, 32); forged[19] ^= 0xffu;"
+    (cons nil
+    (cons "    struct sockaddr_in d2; memset(&d2, 0, sizeof(d2));"
+    (cons "    d2.sin_family = AF_INET; d2.sin_port = htons(47792); inet_pton(AF_INET, `127.0.0.1`, &d2.sin_addr);"
+    (cons "    sendto(s1, b1, 32, 0, (struct sockaddr *)&d2, sizeof(d2));"
+    nil))))))))))))))))))))))

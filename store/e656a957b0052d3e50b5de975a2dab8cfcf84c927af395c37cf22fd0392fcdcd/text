@@ -1,0 +1,9 @@
+hf-cands-at : Nat → Code → Lst (Code × (Word × Word)) → Lst (Code × (Word × Word))
+hf-cands-at zero _ acc = acc
+hf-cands-at (suc n) c acc =
+  let acc1 = case code-abstract c return (λ _ → Lst (Code × (Word × Word))) of
+               some q →
+                 if hf-has-cand (fst q) acc then acc
+                 else lcons (fst q , (fst (snd q) , code-node-size c)) acc
+               none → acc
+  in hf-cands-l (hf-cands-at n) (code-kids c) acc1

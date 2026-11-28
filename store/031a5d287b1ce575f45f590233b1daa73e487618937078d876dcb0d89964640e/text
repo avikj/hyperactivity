@@ -1,0 +1,11 @@
+-- Flatten ANY FlowExpr into a 1D natural-language token sequence with ZERO PARENTHESES!
+-- Inserts readable natural-language connectives (`ft-word`, valence = id!) where helpful.
+fl-flatten : FlowExpr → List FlowTok
+fl-flatten (fe-lit n)     = cons (ft-lit n) nil
+fl-flatten (fe-var v)     = cons (ft-var v) nil
+fl-flatten (fe-dbl a)     = cons ft-dbl (fl-flatten a)
+fl-flatten (fe-sq a)      = cons ft-sq (fl-flatten a)
+fl-flatten (fe-add a b)   = cons ft-add (list-append (fl-flatten a) (cons ft-word (fl-flatten b)))
+fl-flatten (fe-mul a b)   = cons ft-mul (list-append (fl-flatten a) (cons ft-word (fl-flatten b)))
+fl-flatten (fe-sub a b)   = cons ft-sub (list-append (fl-flatten a) (cons ft-word (fl-flatten b)))
+fl-flatten (fe-ifz c t e) = cons ft-ifz (list-append (fl-flatten c) (cons ft-word (list-append (fl-flatten t) (cons ft-word (fl-flatten e)))))

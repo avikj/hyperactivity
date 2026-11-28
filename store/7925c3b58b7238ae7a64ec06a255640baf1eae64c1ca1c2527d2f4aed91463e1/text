@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p12 : List Word
+hyperos-arm64-kernel-c-p12 =
+  os-lines-q
+    (cons "    for (int i = 16; i < 64; i++) {"
+    (cons "        uint32_t s0 = ror32(w[i-15],7) ^ ror32(w[i-15],18) ^ (w[i-15] >> 3);"
+    (cons "        uint32_t s1 = ror32(w[i-2],17) ^ ror32(w[i-2],19) ^ (w[i-2] >> 10);"
+    (cons "        w[i] = w[i-16] + s0 + w[i-7] + s1;"
+    (cons "    }"
+    (cons "    uint32_t a=h[0],b=h[1],c=h[2],d=h[3],e=h[4],f=h[5],g=h[6],hh=h[7];"
+    (cons "    for (int i = 0; i < 64; i++) {"
+    (cons "        uint32_t S1 = ror32(e,6) ^ ror32(e,11) ^ ror32(e,25);"
+    (cons "        uint32_t ch = (e & f) ^ ((~e) & g);"
+    (cons "        uint32_t t1 = hh + S1 + ch + K256[i] + w[i];"
+    (cons "        uint32_t S0 = ror32(a,2) ^ ror32(a,13) ^ ror32(a,22);"
+    (cons "        uint32_t maj = (a & b) ^ (a & c) ^ (b & c);"
+    (cons "        uint32_t t2 = S0 + maj;"
+    (cons "        hh=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;"
+    (cons "    }"
+    (cons "    h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e; h[5]+=f; h[6]+=g; h[7]+=hh;"
+    (cons "    for (int i = 0; i < 8; i++) {"
+    (cons "        out[i*4+0] = (uint8_t)(h[i]>>24); out[i*4+1] = (uint8_t)(h[i]>>16);"
+    (cons "        out[i*4+2] = (uint8_t)(h[i]>>8);  out[i*4+3] = (uint8_t)h[i];"
+    (cons "    }"
+    (cons "}"
+    (cons nil
+    nil))))))))))))))))))))))

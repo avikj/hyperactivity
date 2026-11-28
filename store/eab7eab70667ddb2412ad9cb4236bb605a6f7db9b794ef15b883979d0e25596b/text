@@ -1,0 +1,24 @@
+hyperos-arm64-boot-asm-p3 : List Word
+hyperos-arm64-boot-asm-p3 =
+  os-lines-q
+    (cons "    bl      hyperos_arm64_main"
+    (cons nil
+    (cons "    /* Returned from C kernel: invoke PSCI SYSTEM_OFF (w0 returned: 1 = SMC, 0 = HVC) */"
+    (cons "    cmp     w0, #1"
+    (cons "    ldr     w0, =0x84000008             /* PSCI_0_2_FN_SYSTEM_OFF */"
+    (cons "    b.eq    4f"
+    (cons "    hvc     #0"
+    (cons "    b       5f"
+    (cons "4:"
+    (cons "    smc     #0"
+    (cons "5:"
+    (cons "    wfe"
+    (cons "    b       5b"
+    (cons nil
+    (cons ".balign 2048"
+    (cons "_el1_vectors:"
+    (cons "    .rept 16"
+    (cons "    b       5b"
+    (cons "    .balign 128"
+    (cons "    .endr"
+    nil))))))))))))))))))))

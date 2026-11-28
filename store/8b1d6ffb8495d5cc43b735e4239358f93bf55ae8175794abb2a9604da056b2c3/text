@@ -1,0 +1,42 @@
+dg-render-node : List DgRaw → List (List Word × Word) → List (List Word × List Word) → DgRaw → Proc W (List Word)
+dg-render-node all lvs nmap e =
+  let k    = fst e
+      kd   = fst (snd e)
+      raw  = fst (snd (snd e))
+      deps = snd (snd (snd e))
+      nm   = dg-lookup-kv k nmap
+      disp = the (List Word) (if h-null nm then list-append "pool:" (h-take (toNat #12) k) else nm)
+      lv   = dg-lv-of k lvs
+      fan  = dg-fanout k all
+      rl   = dg-role-of nm kd
+  in bind (if h-null nm then ret {lzero} {W} (the (Sum Unit (List Word)) (inl unit)) else h-read (list-append ".cubical-store/index/written/" (h-hex nm))) (λ rw →
+     let wh = h-take (toNat #64) (h-before (cons #10 nil) (s-or nil rw)) in
+     bind (if s-hex64 wh then h-read (list-append "store/" (list-append wh "/text")) else ret {lzero} {W} (the (Sum Unit (List Word)) (inl unit))) (λ rwt →
+     bind (h-read (list-append "store/" (list-append k "/equiv"))) (λ reqv →
+     let wtxt  = s-or nil rwt
+         eqb   = the (List Word) (case reqv of
+                   inl _ → nil
+                   inr et → h-concat (cons "<span class='dg-eqv'>ua&equiv; " (cons (s-esc (h-before (cons #10 nil) et)) (cons "</span>" nil))))
+         reuse = the (List Word) (if wlt #1 fan
+                 then h-concat (cons "<span class='dg-fan'>DAG shared &times;" (cons (h-decimal fan) (cons "</span>" nil)))
+                 else nil)
+         codeB = the (List Word) (if h-not (h-null wtxt)
+                 then h-concat (cons "<pre class='dg-code'>" (cons (s-esc (h-take (toNat #960) wtxt)) (cons "</pre><details class='dg-raw'><summary>Nameless Pool Object (store/" (cons (h-take (toNat #12) k) (cons ")</summary><pre>" (cons (s-esc (h-take (toNat #640) raw)) (cons "</pre></details>" nil)))))))
+                 else h-concat (cons "<pre class='dg-code'>" (cons (s-esc (h-take (toNat #760) raw)) (cons "</pre>" nil))))
+         chips = the (List Word) (if h-null deps then "<span class='dg-leaf'>Layer 0 foundation (0 pool dependencies)</span>"
+                 else h-concat (list-map (dg-dep-chip nmap) deps))
+         vbtn  = the (List Word) (if h-null nm then nil
+                 else h-concat (cons "<button type='button' class='dg-vbtn' data-nm='" (cons (s-esc nm) (cons "' onclick='dgVerify(this)'>Verify in Kernel</button>" nil))))
+     in ret {lzero} {W} (h-concat (
+          cons "<article class='dg-node' data-lv='" (cons (h-decimal lv) (
+          cons "'><div class='dg-nh'><div class='dg-nt'><span class='dg-lv'>L" (cons (h-decimal lv) (
+          cons "</span><span class='dg-kd'>" (cons (s-esc kd) (
+          cons "</span><strong>" (cons (s-esc disp) (
+          cons "</strong>" (cons reuse (cons eqb (
+          cons "</div><div class='dg-nk'><a href='/dag?target=" (cons k (
+          cons "' title='Content-addressed SHA-256 key'>sha256:" (cons (h-take (toNat #14) k) (
+          cons "</a>" (cons vbtn (
+          cons "</div></div><div class='dg-role'><span class='dg-int'>" (cons (s-esc (fst rl)) (
+          cons "</span><span class='dg-wb'> [Whig eponym: " (cons (s-esc (snd rl)) (
+          cons "]</span></div>" (cons codeB (
+          cons "<div class='dg-deps'>" (cons chips (cons "</div><div class='dg-vres'></div></article>" nil))))))))))))))))))))))))))))))

@@ -1,0 +1,26 @@
+hyperos-arm64-mkimg-c-p6 : List Word
+hyperos-arm64-mkimg-c-p6 =
+  os-lines-q
+    (cons "          for (int g = 0; g < ngsym; g++) {"
+    (cons "            if (strcmp(gsyms[g].name, nm) == 0 || (gsyms[g].name[0] == '_' && strcmp(gsyms[g].name + 1, nm) == 0) ||"
+    (cons "                (nm[0] == '_' && strcmp(gsyms[g].name, nm + 1) == 0)) { S = gsyms[g].addr; found = 1; break; }"
+    (cons "          }"
+    (cons "        }"
+    (cons "        if (!found) { fprintf(stderr, `unresolved: %s\n`, nm); return 3; }"
+    (cons "        int64_t P = (int64_t)(tsec->off + r_off), V = (int64_t)S + r_add;"
+    (cons "        uint8_t *loc = tsec->data + r_off;"
+    (cons "        uint32_t insn = rd32(loc);"
+    (cons "        if (rtype == 282u || rtype == 283u) {"
+    (cons "          wr32(loc, (insn & 0xfc000000u) | (((uint32_t)((V - P) >> 2)) & 0x03ffffffu));"
+    (cons "        } else if (rtype == 275u) {"
+    (cons "          int64_t pg = ((V & ~0xfffLL) - (P & ~0xfffLL)) >> 12;"
+    (cons "          wr32(loc, (insn & 0x9f00001fu) | (((uint32_t)pg & 3u) << 29) | ((((uint32_t)pg >> 2) & 0x7ffffu) << 5));"
+    (cons "        } else if (rtype == 274u) {"
+    (cons "          int64_t d = V - P;"
+    (cons "          wr32(loc, (insn & 0x9f00001fu) | (((uint32_t)d & 3u) << 29) | ((((uint32_t)d >> 2) & 0x7ffffu) << 5));"
+    (cons "        } else if (rtype == 277u) {"
+    (cons "          wr32(loc, (insn & 0xffc003ffu) | (((uint32_t)V & 0xfffu) << 10));"
+    (cons "        } else if (rtype == 278u || rtype == 284u || rtype == 285u || rtype == 286u) {"
+    (cons "          unsigned shf = (rtype == 278u) ? 0u : (rtype == 284u ? 1u : (rtype == 285u ? 2u : 3u));"
+    (cons "          wr32(loc, (insn & 0xffc003ffu) | ((((uint32_t)V & 0xfffu) >> shf) << 10));"
+    nil))))))))))))))))))))))

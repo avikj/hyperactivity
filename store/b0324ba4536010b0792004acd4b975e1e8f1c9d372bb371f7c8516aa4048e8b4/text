@@ -1,0 +1,46 @@
+-- Parenthesis-free total O(N) valence parser (bounded structural fuel on token count)
+fl-parse-go : Nat → List FlowTok → Sum Unit (FlowExpr × List FlowTok)
+fl-parse-go zero _ = inl unit
+fl-parse-go (suc k) nil = inl unit
+fl-parse-go (suc k) (cons ft-word rest) = fl-parse-go k rest
+fl-parse-go (suc k) (cons (ft-lit n) rest) = inr (fe-lit n , rest)
+fl-parse-go (suc k) (cons (ft-var v) rest) = inr (fe-var v , rest)
+fl-parse-go (suc k) (cons ft-dbl rest) =
+  case fl-parse-go k rest of
+    inl _ → inl unit
+    inr p1 → inr (fe-dbl (fst p1) , snd p1)
+fl-parse-go (suc k) (cons ft-sq rest) =
+  case fl-parse-go k rest of
+    inl _ → inl unit
+    inr p1 → inr (fe-sq (fst p1) , snd p1)
+fl-parse-go (suc k) (cons ft-add rest) =
+  case fl-parse-go k rest of
+    inl _ → inl unit
+    inr p1 →
+      case fl-parse-go k (snd p1) of
+        inl _ → inl unit
+        inr p2 → inr (fe-add (fst p1) (fst p2) , snd p2)
+fl-parse-go (suc k) (cons ft-mul rest) =
+  case fl-parse-go k rest of
+    inl _ → inl unit
+    inr p1 →
+      case fl-parse-go k (snd p1) of
+        inl _ → inl unit
+        inr p2 → inr (fe-mul (fst p1) (fst p2) , snd p2)
+fl-parse-go (suc k) (cons ft-sub rest) =
+  case fl-parse-go k rest of
+    inl _ → inl unit
+    inr p1 →
+      case fl-parse-go k (snd p1) of
+        inl _ → inl unit
+        inr p2 → inr (fe-sub (fst p1) (fst p2) , snd p2)
+fl-parse-go (suc k) (cons ft-ifz rest) =
+  case fl-parse-go k rest of
+    inl _ → inl unit
+    inr p1 →
+      case fl-parse-go k (snd p1) of
+        inl _ → inl unit
+        inr p2 →
+          case fl-parse-go k (snd p2) of
+            inl _ → inl unit
+            inr p3 → inr (fe-ifz (fst p1) (fst p2) (fst p3) , snd p3)

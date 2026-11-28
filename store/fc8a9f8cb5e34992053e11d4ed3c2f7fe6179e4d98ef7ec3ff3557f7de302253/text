@@ -1,0 +1,14 @@
+dg-read-obj : List Word → Proc W (List Word × List Word)
+dg-read-obj k =
+  bind (h-read (list-append "store/" (list-append k "/decl"))) (λ d →
+  case d of
+    inr t → ret {lzero} {W} ("data" , t)
+    inl _ →
+      bind (h-read (list-append "store/" (list-append k "/prim"))) (λ pr →
+      case pr of
+        inr t → ret {lzero} {W} ("prim" , t)
+        inl _ →
+          bind (h-read (list-append "store/" (list-append k "/forms"))) (λ fm →
+          case fm of
+            inr t → ret {lzero} {W} ("def" , t)
+            inl _ → ret {lzero} {W} ("pool" , nil))))

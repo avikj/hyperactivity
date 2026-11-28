@@ -1,0 +1,19 @@
+vpf-c-impl-q12 : List Word
+vpf-c-impl-q12 =
+  vpf-lines-q
+    (cons "static const float kPanR[6] = { 0.0f, 0.28f, 0.60f, 0.80f, 0.96f, 1.0f };"
+    (cons "static const float kSemiHz[12] = { 261.63f,277.18f,293.66f,311.13f,329.63f,329.63f+19.6f,369.99f,392.00f,415.30f,440.00f,466.16f,493.88f };"
+    (cons "void hx_vp_render_binaural_48k(uint32_t triad, uint32_t az, uint32_t* phase_io, float* out_l, float* out_r, uint32_t nframes) {"
+    (cons "  uint32_t root = (triad >> 1u) % 12u, minor = triad & 1u;"
+    (cons "  uint32_t third = (root + (minor ? 3u : 4u)) % 12u, fifth = (root + 7u) % 12u;"
+    (cons "  float f0 = kSemiHz[root], f1 = kSemiHz[third], f2 = kSemiHz[fifth];"
+    (cons "  float gl = kPanL[az % 6u], gr = kPanR[az % 6u];"
+    (cons "  uint32_t ph = *phase_io;"
+    (cons "  for (uint32_t i = 0u; i < nframes; i++, ph++) {"
+    (cons "    float t = (float)ph * (1.0f / 48000.0f);"
+    (cons "    float sig = 0.08f * (sinf(6.2831853f * f0 * t) + 0.7f * sinf(6.2831853f * f1 * t) + 0.5f * sinf(6.2831853f * f2 * t));"
+    (cons "    out_l[i] = sig * gl; out_r[i] = sig * gr;"
+    (cons "  }"
+    (cons "  *phase_io = ph;"
+    (cons "}"
+    nil)))))))))))))))

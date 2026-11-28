@@ -1,4 +1,8 @@
+ifeq ($(shell uname -s),Darwin)
+CC      ?= clang
+else
 CC      ?= gcc
+endif
 ARCH    := $(shell uname -m)
 ifeq ($(filter arm64 aarch64,$(ARCH)),)
 NATIVE  ?= $(shell $(CC) -march=native -x c -c /dev/null -o /dev/null 2>/dev/null && echo -march=native)
@@ -19,6 +23,16 @@ all: build/cubical
 build/cubical: $(SRC) $(HDR)
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SRC) -lpthread -lm -ldl
+
+hx: build/hx
+
+build/hx: build/cubical
+	@mkdir -p build
+	@printf '#run (scmd (w-file-write-named "build/hx.c" hx-c) (λ _ → sdone unit))\n' > build/.emit_hx.hypercubical
+	./build/cubical lib/hx.hypercubical build/.emit_hx.hypercubical
+	@rm -f build/.emit_hx.hypercubical
+	$(CC) -std=c11 -O3 $(NATIVE) $(LDFLAGS) -o $@ build/hx.c -lpthread -lm
+	@rm -f build/hx.c
 
 build/cubical-asan: $(SRC) $(HDR)
 	@mkdir -p build
@@ -68,4 +82,4 @@ workflow: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical workflow/hyperactivity.hypercubical
 # every file checked is `hyperactive every` (lib/hyperactive.hypercubical)
 
-.PHONY: all library brunerie workflow
+.PHONY: all hx library brunerie workflow

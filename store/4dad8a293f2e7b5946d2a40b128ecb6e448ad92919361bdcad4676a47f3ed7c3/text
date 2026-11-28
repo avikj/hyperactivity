@@ -1,0 +1,14 @@
+vph-thm-chorded-gesture-lattice :
+  let cGrab   = vph-hand-chord #0 vp-thumb vp-close vp-far   vp-far   vp-far   -- 0x1: Cut/Grab
+      cInsp   = vph-hand-chord #0 vp-thumb vp-far   vp-close vp-far   vp-far   -- 0x2: Inspect Fiber
+      cTonn   = vph-hand-chord #0 vp-thumb vp-far   vp-far   vp-close vp-far   -- 0x4: Tonnetz Mod
+      cThis   = vph-hand-chord #0 vp-thumb vp-far   vp-far   vp-far   vp-close -- 0x8: Summon THIS
+      cHold   = vph-hand-chord cGrab vp-thumb vp-mid vp-far  vp-far   vp-far   -- Deadband hold = 0x1!
+      bZoom   = vph-bimanual-cmd cGrab cGrab                                   -- 0x11: Bimanual Zoom!
+  in andB (%weq cGrab #1)
+     (andB (%weq cInsp #2)
+     (andB (%weq cTonn #4)
+     (andB (%weq cThis #8)
+     (andB (%weq cHold #1)
+           (%weq bZoom #17))))) ≡ true
+vph-thm-chorded-gesture-lattice = refl

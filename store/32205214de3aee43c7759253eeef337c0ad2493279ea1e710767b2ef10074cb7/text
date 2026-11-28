@@ -1,0 +1,26 @@
+hyperos-deploy-sh-p1 : List Word
+hyperos-deploy-sh-p1 =
+  os-lines-q
+    (cons "  aarch64-linux-gnu-gcc -c -ffreestanding -fno-asynchronous-unwind-tables -fPIC -mgeneral-regs-only -o `$OUT/boot_arm64.o` `$OUT/hyperos_boot_arm64.S`"
+    (cons "  aarch64-linux-gnu-gcc -c -std=c11 -O2 -ffreestanding -fno-builtin -fno-stack-protector -fno-asynchronous-unwind-tables -fPIC -mgeneral-regs-only -o `$OUT/kern_arm64.o` `$OUT/hyperos_kernel_arm64.c`"
+    (cons "  aarch64-linux-gnu-ld -T `$OUT/hyperos_arm64.ld` -nostdlib -o `$OUT/hyperos-arm64.elf` `$OUT/boot_arm64.o` `$OUT/kern_arm64.o`"
+    (cons "  aarch64-linux-gnu-objcopy -O binary `$OUT/hyperos-arm64.elf` `$OUT/hyperos-arm64.img`"
+    (cons "  BUILT_ARM64=1"
+    (cons "elif command -v clang >/dev/null 2>&1 && clang -target aarch64-none-elf -c -ffreestanding -fno-asynchronous-unwind-tables -fPIC -mgeneral-regs-only -o `$OUT/boot_arm64.o` `$OUT/hyperos_boot_arm64.S` 2>/dev/null; then"
+    (cons "  clang -target aarch64-none-elf -c -std=c11 -O2 -ffreestanding -fno-builtin -fno-stack-protector -fno-asynchronous-unwind-tables -fPIC -mgeneral-regs-only -o `$OUT/kern_arm64.o` `$OUT/hyperos_kernel_arm64.c`"
+    (cons "  if command -v ld.lld >/dev/null 2>&1 && command -v llvm-objcopy >/dev/null 2>&1; then"
+    (cons "    ld.lld -T `$OUT/hyperos_arm64.ld` -nostdlib -o `$OUT/hyperos-arm64.elf` `$OUT/boot_arm64.o` `$OUT/kern_arm64.o`"
+    (cons "    llvm-objcopy -O binary `$OUT/hyperos-arm64.elf` `$OUT/hyperos-arm64.img`"
+    (cons "  else"
+    (cons "    `$OUT/hx-arm64-mkimg` `$OUT/hyperos-arm64.img` `$OUT/boot_arm64.o` `$OUT/kern_arm64.o`"
+    (cons "  fi"
+    (cons "  BUILT_ARM64=1"
+    (cons "fi"
+    (cons nil
+    (cons "if [ `$BUILT_ARM64` = `1` ]; then"
+    (cons "  SZ=`$(wc -c < `$OUT/hyperos-arm64.img` | tr -d ' ')`"
+    (cons "  echo `[HYPEROS ARM64 IMAGE] Built $OUT/hyperos-arm64.img ($SZ bytes, magic=0x644d5241 ARM\\x64)`"
+    (cons "  if command -v qemu-system-aarch64 >/dev/null 2>&1; then"
+    (cons "    qemu-system-aarch64 -M virt -cpu max -m 256M -nographic \"
+    (cons "      -device virtio-gpu-device -device virtio-keyboard-device -device virtio-mouse-device -device virtio-net-device \"
+    nil))))))))))))))))))))))

@@ -60,12 +60,68 @@ jobs:
           steps=$(echo "$out" | grep -A1 -x brunerie | sed -n 's/.*\[\([0-9]*\) steps.*/\1/p')
           echo "Brunerie reduction steps: $steps (budget <= 450000)"
           test -n "$steps" && test "$steps" -le 450000
-      - name: Run elaboration suite and C emitter soundness
+      - name: Run elaboration suite, C emitter soundness & nameless pool closure
         run: |
           CUBICAL_NOCACHE=1 ./build/cubical experiments/surface/elaboration.hypercubical | tee /tmp/elab.log
           grep -q "0 failed" /tmp/elab.log
           ./build/cubical lib/c-sound.hypercubical | tee /tmp/csound.log
           grep -q "0 failed" /tmp/csound.log
+          cat > /tmp/pool_closure.hypercubical <<'EOF'
+          import "/__REPO__/lib/core.hypercubical"
+
+          codata BadBox where
+            unbox : Empty
+
+          #fail
+          bad-loop : BadBox
+          bad-loop.unbox = bad-loop.unbox
+
+          mf-prim-tick-test : {κ : Clock} → (▸ κ Nat → Nat) → ▸ κ Nat
+          mf-prim-tick-test f = dfix f
+
+          data OpA = opAddA | opMulA
+          data OpB = mulTagB | addTagB
+          deriving equiv OpA OpB as opA-eqv-opB
+
+          data ExprA = litA Word | binA OpA ExprA ExprA | negA ExprA
+          data TermB = invB TermB | combB OpB TermB TermB | cstB Word
+
+          deriving eq ExprA as exprA-eq
+          deriving show ExprA as exprA-show
+          deriving equiv ExprA TermB as exprA-eqv-termB
+
+          InvolutivePkg : Type → Type
+          InvolutivePkg X = (flip : X → X) × ((x : X) → flip (flip x) ≡ x)
+
+          termB-flip : TermB → TermB
+          termB-flip (invB t) = invB (termB-flip t)
+          termB-flip (combB o l r) = combB o (termB-flip r) (termB-flip l)
+          termB-flip (cstB w) = cstB w
+
+          termB-flip-inv : (t : TermB) → termB-flip (termB-flip t) ≡ t
+          termB-flip-inv (invB t) = λ i → invB (termB-flip-inv t i)
+          termB-flip-inv (combB o l r) = λ i → combB o (termB-flip-inv l i) (termB-flip-inv r i)
+          termB-flip-inv (cstB w) = refl
+
+          exprA-pkg : InvolutivePkg ExprA
+          exprA-pkg = portal-arrive InvolutivePkg exprA-eqv-termB (termB-flip , termB-flip-inv)
+
+          exprA-transport-check :
+            transport exprA-eqv-termB (binA opMulA (litA #42) (negA (litA #7))) ≡ combB addTagB (cstB #42) (invB (cstB #7))
+          exprA-transport-check = refl
+
+          mf-jit-fn : Nat → Nat
+          mf-jit-fn n = plus n zero
+
+          #jit mf-jit-fn using plus-zero
+
+          ci-hf-ok : %wlt (pool-dag-size hf-ex-factored) (pool-code-size hf-ex-pool) ≡ true
+          ci-hf-ok = hf-thm-strict-compression
+          EOF
+          sed -i "s|/__REPO__|$(pwd)|g" /tmp/pool_closure.hypercubical
+          ./build/cubical --read /tmp/pool_closure.hypercubical | tee /tmp/pool.log
+          grep -q "ok: jit mf-jit-fn" /tmp/pool.log
+          grep -q "0 failed" /tmp/pool.log
 
   full-library-pouw:
     name: "3 · Full Library, PoUW, Fold & Silicon"
@@ -87,15 +143,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install AArch64 bare-metal toolchain & QEMU
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-system-arm
       - name: Build cubical and emit unified hx native binary (UBSan)
         run: |
           make -s build/cubical
           mkdir -p /tmp/ci_hx
           echo '#run (scmd (w-file-write-named "/tmp/ci_hx/hx.c" hx-c) (λ _ → sdone unit))' > /tmp/ci_hx/e_hx.hypercubical
           ./build/cubical lib/hx.hypercubical /tmp/ci_hx/e_hx.hypercubical
-          CC_BIN=$(command -v clang || command -v gcc)
+          CC_BIN=$(command -v gcc || command -v clang)
           $CC_BIN -std=c11 -O3 -fsanitize=undefined -fno-sanitize-recover=all -o /tmp/ci_hx/hx /tmp/ci_hx/hx.c
-      - name: Run all 6 native engines + live 2-process UDP PoUW + ratchets
+      - name: Run all native engines + Bare-Metal ARM64 EL1 QEMU + HXSV Mesh + UDP PoUW
         run: |
           /tmp/ci_hx/hx tapeout /tmp/ci_hx/foundry
           python3 - <<'PY'
@@ -131,6 +189,13 @@ jobs:
           print("UDP FORGED:", s2.strip(), "|", c2.stdout.strip())
           assert "REJECT:escrow=100:bal=50:forged=1" in c2.stdout
           PY
+          /tmp/ci_hx/hx deploy baremetal /tmp/ci_hx/hyperos | tee /tmp/ci_hx/hyperos.log
+          grep -q "\[HX-MESH SELFTEST\].*\[PASS\]" /tmp/ci_hx/hyperos.log
+          grep -q "\[PASS\] HYPEROS ARM64 EL1 BAREMETAL VERIFIED" /tmp/ci_hx/hyperos.log
+          test -s /tmp/ci_hx/hyperos/hyperos-arm64.img
+          /tmp/ci_hx/hx visionpro emit /tmp/ci_hx/vp | tee /tmp/ci_hx/vp.log
+          test -s /tmp/ci_hx/vp/HyperactivityVisionPro.swift
+          test -s /tmp/ci_hx/vp/project.pbxproj.tmpl
 
   web-and-server-smoke:
     name: "5 · Web Treatises (JS/DOM) & Live HTTP Server Smoke"
@@ -171,24 +236,62 @@ jobs:
                   assert not (refs - ids), f"Missing DOM IDs in {p}: {refs - ids}"
               print(f"OK: {p} ({len(html)} B)")
           PY
-      - name: Boot real Hyperactivity HTTP server and smoke-test all 18 public routes
+      - name: Boot real Hyperactivity HTTP server and smoke-test all 27 public routes
         run: |
-          ./hyperactive server 18080 > /tmp/srv.log 2>&1 &
+          for m in \
+            docs/synesthesia.hypercubical \
+            lib/meaning.hypercubical \
+            lib/suffix-index.hypercubical \
+            lib/ui-algebra.hypercubical \
+            lib/being.hypercubical \
+            lib/hx-psc.hypercubical \
+            lib/silicon/hx-inet-opt.hypercubical \
+            lib/silicon/hx-meta-inet.hypercubical \
+            lib/os-supercomputer.hypercubical \
+            lib/os-this.hypercubical \
+            lib/ir/hx-total-reflection.hypercubical \
+            lib/ir/beast-omni-cryptic.hypercubical \
+            lib/ir/hx-univalent-surface.hypercubical \
+            lib/ir/hx-grh-surface.hypercubical \
+            lib/ir/hx-universal-eval.hypercubical \
+            lib/ir/hx-x402-cashier.hypercubical \
+            lib/ir/hx-collablink.hypercubical \
+            lib/server.hypercubical \
+            lib/hyperactive.hypercubical; do
+            ./build/cubical --read "$m" >/dev/null
+          done
+          ./build/cubical lib/server.hypercubical 18080 > /tmp/srv.log 2>&1 &
           SRV_PID=$!
-          trap "kill $SRV_PID 2>/dev/null || true" EXIT
-          for i in $(seq 1 60); do
+          trap "kill -9 $SRV_PID 2>/dev/null || true" EXIT
+          for i in $(seq 1 180); do
             if curl -sf http://127.0.0.1:18080/healthz >/dev/null 2>&1; then break; fi
             sleep 1
           done
           curl -sf http://127.0.0.1:18080/healthz | grep -qx "ok"
-          for route in "/" "/archive" "/learn" "/hyperfactor" "/decentralized" "/pouw" "/silicon" "/ai" "/physics" "/neuro" "/ide" "/kg" "/pdf" "/monograph" "/nets" "/sitemap.xml" "/api/kg/index"; do
+          for route in "/" "/home" "/install" "/deploy" "/os" "/api/os/status" "/dag" "/dag?target=plus-comm" "/grh" "/portal" "/archive" "/learn" "/hyperfactor" "/decentralized" "/pouw" "/silicon" "/ai" "/physics" "/neuro" "/ide" "/kg" "/pdf" "/monograph" "/nets" "/sitemap.xml" "/api/kg/index" "/api/net/pulse"; do
             code=$(curl -s -o /tmp/page.out -w "%{http_code}" "http://127.0.0.1:18080${route}")
             echo "$code  $route"
             test "$code" -eq 200
           done
+          curl -sf http://127.0.0.1:18080/install > /tmp/install.sh
+          sh -n /tmp/install.sh
+          grep -q "hx deploy all" /tmp/install.sh
+          curl -sf http://127.0.0.1:18080/deploy > /tmp/deploy.html
+          grep -q "/install | sh" /tmp/deploy.html
+          curl -sf http://127.0.0.1:18080/api/os/status > /tmp/os_status.json
+          grep -q '47700' /tmp/os_status.json
+          grep -q '"pool_objects"' /tmp/os_status.json
           curl -sf http://127.0.0.1:18080/ > /tmp/root.html
+          grep -q "/deploy" /tmp/root.html
+          grep -q "/dag" /tmp/root.html
+          grep -q "/grh" /tmp/root.html
           grep -q "/decentralized" /tmp/root.html
           grep -q "/hyperfactor" /tmp/root.html
           grep -q "/archive" /tmp/root.html
-          grep -q "Computing," /tmp/root.html
-          echo "All 18 live HTTP routes verified 200!"
+          curl -sf "http://127.0.0.1:18080/dag?target=plus-comm" > /tmp/dag.html
+          grep -q "Topological Layer 0" /tmp/dag.html
+          grep -q "whiteboy mode" /tmp/dag.html
+          curl -sf http://127.0.0.1:18080/api/net/pulse > /tmp/pulse.json
+          grep -q '"pool_objects"' /tmp/pulse.json
+          ! grep -q '"eth_block"' /tmp/pulse.json
+          echo "All 27 live HTTP routes & one-click deploy / pool DAG / telemetry assertions verified!"

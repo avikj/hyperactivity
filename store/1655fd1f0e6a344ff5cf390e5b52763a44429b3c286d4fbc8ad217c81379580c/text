@@ -1,0 +1,7 @@
+sl-run-check : Nat → Word → SynLoopState → Bool
+sl-run-check zero _ s =
+  andB (sl-cbf-safe #1000000 (sl-bci s)) (%wlt (sl-aud s) #24)
+sl-run-check (suc k) b s =
+  let s2  = sl-step #31337 b s
+      ok1 = andB (sl-cbf-safe #1000000 (sl-bci s2)) (%wlt (sl-aud s2) #24)
+  in andB ok1 (sl-run-check k (%wadd b #37) s2)

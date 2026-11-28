@@ -1,0 +1,26 @@
+hypernet-mesh-c-p11 : List Word
+hypernet-mesh-c-p11 =
+  os-lines-q
+    (cons "    sendto(s1, forged, 32, 0, (struct sockaddr *)&d2, sizeof(d2));"
+    (cons "    usleep(15000);"
+    (cons nil
+    (cons "    uint8_t rx[64]; struct sockaddr_in src; socklen_t sl = sizeof(src);"
+    (cons "    for (int i = 0; i < 4; i++) {"
+    (cons "        ssize_t n = recvfrom(s2, rx, sizeof(rx), 0, (struct sockaddr *)&src, &sl);"
+    (cons "        if (n < 32) break;"
+    (cons "        if (hxsv_ok(rx)) {"
+    (cons "            g_rx_valid++;"
+    (cons "            record_peer(&src, rx);"
+    (cons "            uint8_t pong[32];"
+    (cons "            hxsv_pack(pong, 6u, 2u, (2u << 16) | cores, rhi, rlo, 8400u); /* Mac mini reply */"
+    (cons "            sendto(s2, pong, 32, 0, (struct sockaddr *)&src, sl);"
+    (cons "        } else {"
+    (cons "            g_rx_forged++;"
+    (cons "        }"
+    (cons "    }"
+    (cons "    usleep(15000);"
+    (cons "    sl = sizeof(src);"
+    (cons "    if (recvfrom(s1, rx, sizeof(rx), 0, (struct sockaddr *)&src, &sl) >= 32 && hxsv_ok(rx)) {"
+    (cons "        g_rx_valid++;"
+    (cons "        record_peer(&src, rx);"
+    nil))))))))))))))))))))))

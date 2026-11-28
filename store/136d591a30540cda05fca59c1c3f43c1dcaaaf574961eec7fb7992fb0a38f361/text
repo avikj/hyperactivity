@@ -1,0 +1,14 @@
+hy-scan-store-links : List (List Word) → Proc W ((List (List Word)) × (List (List Word)))
+hy-scan-store-links nil = ret (nil , nil)
+hy-scan-store-links (cons k r) =
+  if h-not (hy-is-hex64 k) then hy-scan-store-links r
+  else bind (h-read (list-append "store/" (list-append k "/equiv"))) (λ eqv →
+       bind (h-read (list-append "store/" (list-append k "/motifs"))) (λ mot →
+       bind (hy-scan-store-links r) (λ rest →
+       let eqs = case eqv of
+                   inl _ → fst rest
+                   inr t → cons (list-append "  " (list-append (h-take (toNat #12) k) (list-append "  ua≡  " (h-before (cons #10 nil) t)))) (fst rest)
+           mts = case mot of
+                   inl _ → snd rest
+                   inr m → cons (list-append "  " (list-append (h-take (toNat #12) k) (list-append "  motif≡  " (h-before (cons #10 nil) m)))) (snd rest)
+       in ret {lzero} {W} (eqs , mts))))

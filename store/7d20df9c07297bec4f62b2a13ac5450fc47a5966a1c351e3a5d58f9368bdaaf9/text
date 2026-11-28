@@ -1,0 +1,13 @@
+ho-after-self : List (List Word) → Sum Unit (List (List Word))
+ho-after-self nil = inl unit
+ho-after-self (cons a rest) =
+  if h-eq a "--with" then
+    case rest of
+      nil → inl unit
+      cons _ rest2 →
+        case rest2 of
+          nil → inl unit
+          cons _ rest3 → ho-after-self rest3
+  else if h-prefix "--" a then ho-after-self rest
+  else if ho-infix "hyperos.hypercubical" a then inr rest
+  else ho-after-self rest

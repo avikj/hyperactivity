@@ -1,0 +1,8 @@
+hy-store-count : Proc W Word
+hy-store-count =
+  with-bytes {Word} #6 (λ p → bind (h-poke p "store") (λ _ →
+  bind (sys-call #257 #18446744073709551516 p #65536 #0 #0 #0) (λ fd →
+  if wlt fd #9223372036854775808 then
+    with-bytes {Word} #65536 (λ buf → bind (hy-dents-bytes fd buf #0 (toNat #4096)) (λ tot →
+    bind (sys-call #3 fd #0 #0 #0 #0 #0) (λ _ → ret {lzero} {W} (if wlt #72 tot then wquot (wsub tot #72) #88 else #0))))
+  else ret {lzero} {W} #0)))

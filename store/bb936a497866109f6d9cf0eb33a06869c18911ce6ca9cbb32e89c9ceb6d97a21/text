@@ -1,0 +1,16 @@
+vpi-sov-pkt32 : Word → Word → Word → Word → Word → List Word
+vpi-sov-pkt32 kseq tgt a b c =
+  let sec = #288230376151711743
+      m0  = vpi-sov-mix64 (%wxor sec #1213748054) kseq
+      m1  = vpi-sov-mix64 m0 tgt
+      m2  = vpi-sov-mix64 m1 a
+      m3  = vpi-sov-mix64 m2 b
+      mac = vpi-sov-mix64 m3 c
+  in vpf-put32 #1213748054
+     (vpf-put32 kseq
+     (vpf-put32 tgt
+     (vpf-put32 a
+     (vpf-put32 b
+     (vpf-put32 c
+     (vpf-put32 (%wshr mac #32)
+     (vpf-put32 (%wand mac #4294967295) nil)))))))

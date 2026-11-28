@@ -1,0 +1,26 @@
+hypernet-mesh-c-p9 : List Word
+hypernet-mesh-c-p9 =
+  os-lines-q
+    (cons "        for (char *tok = strtok(buf, `,`); tok; tok = strtok(NULL, `,`)) {"
+    (cons "            char host[64] = {0}; unsigned hp = port;"
+    (cons "            char *col = strchr(tok, ':');"
+    (cons "            if (col) { *col = 0; hp = (unsigned)atoi(col + 1); }"
+    (cons "            snprintf(host, sizeof(host), `%s`, tok);"
+    (cons "            struct sockaddr_in dst; memset(&dst, 0, sizeof(dst));"
+    (cons "            dst.sin_family = AF_INET; dst.sin_port = htons((uint16_t)hp);"
+    (cons "            if (inet_pton(AF_INET, host, &dst.sin_addr) == 1)"
+    (cons "                sendto(fd, pkt, 32, 0, (struct sockaddr *)&dst, sizeof(dst));"
+    (cons "        }"
+    (cons "    }"
+    (cons "    g_tx_beacons++;"
+    (cons "}"
+    (cons nil
+    (cons "static int open_mesh_sock(uint16_t port) {"
+    (cons "    int fd = socket(AF_INET, SOCK_DGRAM, 0);"
+    (cons "    if (fd < 0) return -1;"
+    (cons "    int one = 1;"
+    (cons "    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));"
+    (cons "#ifdef SO_REUSEPORT"
+    (cons "    setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, sizeof(one));"
+    (cons "#endif"
+    nil))))))))))))))))))))))

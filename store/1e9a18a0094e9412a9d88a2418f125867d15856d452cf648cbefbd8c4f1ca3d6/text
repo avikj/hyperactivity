@@ -1,0 +1,12 @@
+dg-names-scan : Nat → List (List Word) → List (List Word) → List (List Word × List Word) → List (List Word × List Word)
+dg-names-scan zero _ _ acc = acc
+dg-names-scan (suc _) _ nil acc = acc
+dg-names-scan (suc f) wantKs (cons ln r) acc =
+  if h-not (wlt (fromNat (list-length acc)) (fromNat (list-length wantKs))) then acc
+  else
+    let nm   = h-before " " ln
+        rest = h-after " " ln
+        ky   = h-before " " rest
+    in if andB (s-hex64 ky) (andB (h-has ky wantKs) (h-not (dg-has-kv ky acc)))
+       then dg-names-scan f wantKs r (cons (ky , nm) acc)
+       else dg-names-scan f wantKs r acc

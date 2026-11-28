@@ -1,0 +1,21 @@
+-- ---------------------------------------------------------------- Darwin ARM64 process driver & 64-bit Mach-O
+-- Darwin XNU ARM64 `_start`:
+--   1. mmap(0, 1 GiB, PROT_READ|PROT_WRITE=3, MAP_PRIVATE|MAP_ANON=0x1002, -1, 0) via x16=197, svc #0x80
+--   2. Builds 32-byte 16B-aligned JitCtx on stack, invokes compiled ARM64 process blob
+--   3. Calls exit(0) (or exit(3) on arena/word overflow) via x16=1, svc #0x80
+a64-start : Lst Word
+a64-start =
+  let mmap-call = xcat6 (a64-movz #0 #0 #0) (a64-movz #1 #16384 #1) (a64-movz #2 #3 #0)
+                        (a64-movz #3 #4098 #0) (a64-insn #2457862148)
+                        (xcat3 (a64-movz #5 #0 #0) (a64-movz #16 #197 #0) a64-svc-darwin)
+      ctx-setup = xcat6 (a64-insn #3506471935)
+                        (l-app (a64-movz #9 #0 #0) (a64-str-idx #9 #31 #0))
+                        (a64-str-idx #0 #31 #1)
+                        (xcat3 (a64-movz #9 #16384 #1) (a64-add #9 #0 #9) (a64-str-idx #9 #31 #2))
+                        (xcat3 (a64-insn #2432697322) (a64-movz #9 #112 #1) (l-app (a64-sub #10 #10 #9) (a64-str-idx #10 #31 #3)))
+                        (xcat3 (a64-insn #2432697314) (a64-movz #0 #0 #0) (a64-movz #1 #0 #0))
+      exit-seq  = xcat5 (a64-ldr-idx #9 #31 #0) (a64-movz #0 #0 #0) (a64-movz #10 #3 #0)
+                        (l-app (a64-cmp #9 #0) (a64-csel #0 #10 #0 a64-cc-ne))
+                        (l-app (a64-movz #16 #1 #0) a64-svc-darwin)
+      call-blob = a64-insn (a64-or #2483027968 (%wsucc (a64-shr (l-count exit-seq) #2)))
+  in xcat4 mmap-call ctx-setup call-blob exit-seq

@@ -1,0 +1,26 @@
+vpf-ota-deploy-sh-q3 : List Word
+vpf-ota-deploy-sh-q3 =
+  vpf-lines-q
+    (cons "    pass"
+    (cons "PY"
+    (cons ")`"
+    (cons "  VP_CORE_ID=`$(printf `%s` `$VP_IDS` | awk '{print $1}')`"
+    (cons "  VP_HW_UDID=`$(printf `%s` `$VP_IDS` | awk '{print $2}')`"
+    (cons nil
+    (cons "  echo `[3/4] Compiling native visionOS 2.0+ Spatial Hypervisor + Magic Keyboard/Mouse + HXSV App...`"
+    (cons "  APP_TO_INSTALL=`$OUT/HyperactivityVisionPro.app`"
+    (cons "  if [ -n `$TEAM_ID` ] && [ -n `$VP_HW_UDID` ]; then"
+    (cons "    xcodebuild -project `$OUT/HyperactivityVisionPro.xcodeproj` -scheme HyperactivityVisionPro \"
+    (cons "      -configuration Release -destination `id=$VP_HW_UDID` \"
+    (cons "      -derivedDataPath `$OUT/DerivedData` \"
+    (cons "      -allowProvisioningUpdates -allowProvisioningDeviceRegistration build && \"
+    (cons "      APP_TO_INSTALL=`$OUT/DerivedData/Build/Products/Release-xros/HyperactivityVisionPro.app` || true"
+    (cons "  fi"
+    (cons "  if [ ! -f `$APP_TO_INSTALL/HyperactivityVisionPro` ]; then"
+    (cons "    mkdir -p `$OUT/tmp` `$OUT/modcache`"
+    (cons "    TMPDIR=`$OUT/tmp` xcrun -sdk xros swiftc -O -parse-as-library -swift-version 5 -target arm64-apple-xros2.0 \"
+    (cons "      -module-cache-path `$OUT/modcache` -import-objc-header `$OUT/hx_vp_bridge.h` \"
+    (cons "      `$OUT/HyperactivityVisionPro.swift` `$OUT/libvp_xros.a` \"
+    (cons "      -framework SwiftUI -framework CompositorServices -framework ARKit -framework Metal -framework AVFAudio -framework GameController \"
+    (cons "      -lc++ -o `$OUT/HyperactivityVisionPro.app/HyperactivityVisionPro`"
+    nil))))))))))))))))))))))

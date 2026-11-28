@@ -1,0 +1,26 @@
+hypernet-mesh-c-p2 : List Word
+hypernet-mesh-c-p2 =
+  os-lines-q
+    (cons "}"
+    (cons "static void hxsv_pack(uint8_t pkt[32], uint8_t kind, uint32_t seq, uint32_t dev_cores, uint32_t root_hi, uint32_t root_lo, uint32_t steps) {"
+    (cons "    wr_be32(pkt + 0,  0x48585356u);"
+    (cons "    wr_be32(pkt + 4,  ((uint32_t)kind << 24) | (seq & 0x00ffffffu));"
+    (cons "    wr_be32(pkt + 8,  dev_cores);"
+    (cons "    wr_be32(pkt + 12, root_hi);"
+    (cons "    wr_be32(pkt + 16, root_lo);"
+    (cons "    wr_be32(pkt + 20, steps);"
+    (cons "    uint64_t mac = hxsv_mac(pkt);"
+    (cons "    wr_be32(pkt + 24, (uint32_t)(mac >> 32));"
+    (cons "    wr_be32(pkt + 28, (uint32_t)mac);"
+    (cons "}"
+    (cons "static int hxsv_ok(const uint8_t pkt[32]) {"
+    (cons "    if (rd_be32(pkt) != 0x48585356u) return 0;"
+    (cons "    uint64_t mac = hxsv_mac(pkt);"
+    (cons "    return rd_be32(pkt + 24) == (uint32_t)(mac >> 32) && rd_be32(pkt + 28) == (uint32_t)mac;"
+    (cons "}"
+    (cons nil
+    (cons "/* Device classes: 1=MAC_STUDIO, 2=MAC_MINI, 3=APPLE_MAC, 4=VISION_PRO, 5=HYPEROS_EL1, 6=LINUX_NODE */"
+    (cons "static uint32_t detect_device_class(uint32_t *cores_out, char model_out[64]) {"
+    (cons "    long nc = sysconf(_SC_NPROCESSORS_ONLN);"
+    (cons "    *cores_out = (nc > 0 && nc < 65535) ? (uint32_t)nc : 1u;"
+    nil))))))))))))))))))))))

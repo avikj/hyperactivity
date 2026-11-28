@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p17 : List Word
+hyperos-arm64-kernel-c-p17 =
+  os-lines-q
+    (cons "        mmio_w32(base + 0x024, 1);"
+    (cons "        mmio_w32(base + 0x020, f1 & 1u); /* VIRTIO_F_VERSION_1 */"
+    (cons "        mmio_w32(base + 0x070, 1 | 2 | 8); /* FEATURES_OK */"
+    (cons "        mmio_w32(base + 0x030, qidx);"
+    (cons "        if (mmio_r32(base + 0x034) < qsz) return 0;"
+    (cons "        mmio_w32(base + 0x038, qsz);"
+    (cons "        uintptr_t da = (uintptr_t)vq->desc, aa = (uintptr_t)vq->avail, ua = (uintptr_t)vq->used;"
+    (cons "        mmio_w32(base + 0x080, (uint32_t)da); mmio_w32(base + 0x084, (uint32_t)(da >> 32));"
+    (cons "        mmio_w32(base + 0x090, (uint32_t)aa); mmio_w32(base + 0x094, (uint32_t)(aa >> 32));"
+    (cons "        mmio_w32(base + 0x0a0, (uint32_t)ua); mmio_w32(base + 0x0a4, (uint32_t)(ua >> 32));"
+    (cons "        mmio_w32(base + 0x044, 1); /* QueueReady */"
+    (cons "        mmio_w32(base + 0x070, 1 | 2 | 8 | 4); /* DRIVER_OK */"
+    (cons "    }"
+    (cons "    return 1;"
+    (cons "}"
+    (cons nil
+    (cons "static void vio_input_arm(VioQueue *vq, VirtioInputEv evs[32]) {"
+    (cons "    for (uint16_t i = 0; i < 16; i++) {"
+    (cons "        vq->desc[i].addr  = (uint64_t)(uintptr_t)&evs[i];"
+    (cons "        vq->desc[i].len   = sizeof(VirtioInputEv);"
+    (cons "        vq->desc[i].flags = 2; /* VIRTQ_DESC_F_WRITE */"
+    (cons "        vq->desc[i].next  = 0;"
+    nil))))))))))))))))))))))

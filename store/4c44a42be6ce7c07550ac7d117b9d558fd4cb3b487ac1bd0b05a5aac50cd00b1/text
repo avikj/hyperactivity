@@ -1,0 +1,11 @@
+d-build-iso4 :
+  (Word → Word → Opt (Code × (Code × (Code × Code)))) →
+  Word → Word → Lst (Lst (Word × Word)) → Lst (Lst (Word × Word)) → Lst Word →
+  Code × (Code × (Code × Code))
+d-build-iso4 recf d1 d2 sh1 sh2 perm =
+  let inv = d-invert-perm perm (d-len sh1)
+      fwd = d-map-code (λ s1 s2 → d-or (d-omap (λ q → fst q) (recf s1 s2)) d-id-fn) d1 d2 sh1 sh2 perm
+      bwd = d-map-code (λ s2 s1 → d-or (d-omap (λ q → fst (snd q)) (recf s1 s2)) d-id-fn) d2 d1 sh2 sh1 inv
+      sec = d-roundtrip-code (λ s2 s1 → d-or (d-omap (λ q → fst (snd (snd q))) (recf s1 s2)) d-refl-fn) d2 sh2 sh1 inv fwd bwd
+      retp = d-roundtrip-code (λ s1 s2 → d-or (d-omap (λ q → snd (snd (snd q))) (recf s1 s2)) d-refl-fn) d1 sh1 sh2 perm bwd fwd
+  in (fwd , (bwd , (sec , retp)))

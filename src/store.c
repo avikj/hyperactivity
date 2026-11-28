@@ -101,7 +101,7 @@ static void canon_sym(SBuf *o, const char *s);
  * name when read back (2026-11-12: x-case-chain failed warm, "rec of a name that is not a recursive
  * field of its branch", the pattern's %f5221 renumbered and the let's written raw) */
 static void kser_name(SBuf *o, const char *s) {
-    if (kfresh_on && s[0] == '%' && n_isfresh(s) && global_lookup(s) < 0) {
+    if (kfresh_on && s[0] == '%' && !keyword(s) && n_isfresh(s) && global_lookup(s) < 0) {
         int i; for (i = 0; i < nkfresh && strcmp(kfresh[i], s); i++) ;
         if (i == nkfresh) { GROW(kfresh, capkfresh, (size_t)nkfresh + 1); kfresh[nkfresh++] = s; }
         sb_fmt(o, "%%kf%d", i); return;

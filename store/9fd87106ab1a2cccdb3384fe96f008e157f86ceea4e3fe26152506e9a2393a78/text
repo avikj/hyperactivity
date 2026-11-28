@@ -1,0 +1,28 @@
+fl-metal-host-p1 : List Word → List Word
+fl-metal-host-p1 r =
+  fl-ln "// Generated from lib/ir/flow-lang.hypercubical (Apple Metal GPU ValMon Parallel Scan Host)"
+  (fl-ln "#import <Foundation/Foundation.h>"
+  (fl-ln "#import <Metal/Metal.h>"
+  (fl-ln "#include <stdio.h>"
+  (fl-ln "#include <stdint.h>"
+  (fl-ln "#include <sys/time.h>"
+  (fl-ln "typedef struct { uint32_t need, give; } ValMon;"
+  (fl-ln "static inline ValMon vm_comp(ValMon a, ValMon b) {"
+  (fl-ln "  if (a.give <= b.need) return (ValMon){ a.need + (b.need - a.give), b.give };"
+  (fl-ln "  return (ValMon){ a.need, (a.give - b.need) + b.give };"
+  (fl-ln "}"
+  (fl-ln "static double now_s(void){ struct timeval tv; gettimeofday(&tv,NULL); return tv.tv_sec + tv.tv_usec*1e-6; }"
+  (fl-ln "int main(int argc, char** argv) {"
+  (fl-ln "  @autoreleasepool {"
+  (fl-ln (list-append "    const char* mpath = (argc > 1) ? argv[1] : " (list-append (fl-str "/tmp/hy_out/hx_flow_scan.metal") ";"))
+  (fl-ln "    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();"
+  (fl-ln (list-append "    if (!dev) { puts(" (list-append (fl-str "No Metal device") "); return 1; }"))
+  (fl-ln "    NSError* err = nil;"
+  (fl-ln "    NSString* src = [NSString stringWithContentsOfFile:[NSString stringWithUTF8String:mpath] encoding:NSUTF8StringEncoding error:&err];"
+  (fl-ln (list-append "    if (!src) { puts(" (list-append (fl-str "Read metal failed") "); return 1; }"))
+  (fl-ln "    MTLCompileOptions* opts = [MTLCompileOptions new];"
+  (fl-ln "    id<MTLLibrary> lib = [dev newLibraryWithSource:src options:opts error:&err];"
+  (fl-ln "    if (!lib) { puts([[err localizedDescription] UTF8String]); return 1; }"
+  (fl-ln (list-append "    id<MTLFunction> fn = [lib newFunctionWithName:@" (list-append (fl-str "flow_parallel_valence_scan") "];"))
+  (fl-ln "    id<MTLComputePipelineState> pso = [dev newComputePipelineStateWithFunction:fn error:&err];"
+  (fl-ln "    id<MTLCommandQueue> q = [dev newCommandQueue];" r)))))))))))))))))))))))))

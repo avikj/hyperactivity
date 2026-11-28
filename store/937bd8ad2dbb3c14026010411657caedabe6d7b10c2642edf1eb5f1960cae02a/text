@@ -1,0 +1,26 @@
+hyperos-arm64-mkimg-c-p5 : List Word
+hyperos-arm64-mkimg-c-p5 =
+  os-lines-q
+    (cons "    if (!sym_sh) continue;"
+    (cons "    const uint8_t *strsh = sh_ptr(&objs[oi], (int)rd32(sym_sh + 40));"
+    (cons "    const char *strtab = (const char *)(objs[oi].buf + rd64(strsh + 24));"
+    (cons "    uint64_t sym_off = rd64(sym_sh + 24), sym_ent = rd64(sym_sh + 56) ? rd64(sym_sh + 56) : 24ULL;"
+    (cons "    for (int si = 0; si < (int)objs[oi].shnum; si++) {"
+    (cons "      const uint8_t *sh = sh_ptr(&objs[oi], si);"
+    (cons "      if (rd32(sh + 4) != 4u) continue;"
+    (cons "      int tsi = (int)rd32(sh + 44);"
+    (cons "      if (tsi < 0 || tsi >= 128 || sec_map[oi][tsi] < 0) continue;"
+    (cons "      Sec *tsec = &secs[sec_map[oi][tsi]];"
+    (cons "      uint64_t roff_b = rd64(sh + 24), rsz = rd64(sh + 32), rent = rd64(sh + 56) ? rd64(sh + 56) : 24ULL;"
+    (cons "      for (uint64_t k = 0; k < rsz; k += rent) {"
+    (cons "        const uint8_t *rel = objs[oi].buf + roff_b + k;"
+    (cons "        uint64_t r_off = rd64(rel), r_info = rd64(rel + 8); int64_t r_add = rds64(rel + 16);"
+    (cons "        uint32_t sym_i = (uint32_t)(r_info >> 32), rtype = (uint32_t)(r_info & 0xffffffffu);"
+    (cons "        const uint8_t *sym = objs[oi].buf + sym_off + (uint64_t)sym_i * sym_ent;"
+    (cons "        const char *nm = strtab + rd32(sym);"
+    (cons "        uint16_t shndx = rd16(sym + 6); uint64_t sval = rd64(sym + 8);"
+    (cons "        uint64_t S = 0; int found = 0;"
+    (cons "        if (shndx != 0 && shndx < 128 && sec_map[oi][shndx] >= 0) {"
+    (cons "          S = secs[sec_map[oi][shndx]].off + sval; found = 1;"
+    (cons "        } else {"
+    nil))))))))))))))))))))))

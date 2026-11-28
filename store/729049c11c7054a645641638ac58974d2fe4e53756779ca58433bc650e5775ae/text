@@ -1,0 +1,26 @@
+hyperos-m1n1-sh-p0 : List Word
+hyperos-m1n1-sh-p0 =
+  os-lines-q
+    (cons "#!/bin/sh"
+    (cons "# boot_m1n1_apple_silicon.sh — Emitted by Hyperactivity (lib/os/hyperos.hypercubical)"
+    (cons "# Bare-Metal Apple Silicon (Mac mini / Mac Studio M1..M5) Asahi m1n1 Chainloader & 1TR Payload Builder"
+    (cons "set -eu"
+    (cons "DIR=`$(CDPATH= cd -- `$(dirname -- `$0`)` && pwd)`"
+    (cons "IMG=`$DIR/hyperos-arm64.img`"
+    (cons "if [ ! -f `$IMG` ]; then"
+    (cons "  echo `error: $IMG not found (run: hx hyperos $DIR)` >&2"
+    (cons "  exit 1"
+    (cons "fi"
+    (cons "if [ -n `${M1N1_DEVICE:-}` ]; then"
+    (cons "  echo `[M1N1 USB TETHER] Chainloading $IMG directly onto Apple Silicon target $M1N1_DEVICE...`"
+    (cons "  exec python3 -m m1n1.run `$IMG`"
+    (cons "fi"
+    (cons "if [ -f `${M1N1_STAGE1:-/boot/m1n1/m1n1.bin}` ] && [ -n `${M1N1_DTB:-}` ]; then"
+    (cons "  cat `${M1N1_STAGE1:-/boot/m1n1/m1n1.bin}` `$M1N1_DTB` `$IMG` > `$DIR/hyperos-apple-silicon-boot.bin`"
+    (cons "  echo `[M1N1 PAYLOAD] Wrote $DIR/hyperos-apple-silicon-boot.bin (ready for 1TR kmutil configure-boot -c)`"
+    (cons "else"
+    (cons "  echo `[HYPEROS ARM64 IMAGE READY] $IMG (magic=ARM\\x64, PIE EL2->EL1, DCP simple-framebuffer + UART)`"
+    (cons "  echo `  - Apple Virtualization.framework (EL1): $DIR/hx-vm $IMG`"
+    (cons "  echo `  - Asahi m1n1 live USB tether          : M1N1_DEVICE=/dev/cu.usbmodem* $0`"
+    (cons "  echo `  - QEMU HVF / TCG                      : qemu-system-aarch64 -M virt -cpu max -nographic -kernel $IMG`"
+    nil))))))))))))))))))))))

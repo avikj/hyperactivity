@@ -1,0 +1,26 @@
+hyperos-arm64-mkimg-c-p3 : List Word
+hyperos-arm64-mkimg-c-p3 =
+  os-lines-q
+    (cons "      }"
+    (cons "    }"
+    (cons "  }"
+    (cons "  if (!has_bss) { cur = (cur + 4095ULL) & ~4095ULL; bss_start = cur; }"
+    (cons "  uint64_t bss_end = cur;"
+    (cons "  GSym gsyms[512]; int ngsym = 0;"
+    (cons "  for (int oi = 0; oi < nobj; oi++) {"
+    (cons "    for (int si = 0; si < (int)objs[oi].shnum; si++) {"
+    (cons "      const uint8_t *sh = sh_ptr(&objs[oi], si);"
+    (cons "      if (rd32(sh + 4) != 2u) continue;"
+    (cons "      const uint8_t *strsh = sh_ptr(&objs[oi], (int)rd32(sh + 40));"
+    (cons "      const char *strtab = (const char *)(objs[oi].buf + rd64(strsh + 24));"
+    (cons "      uint64_t soff = rd64(sh + 24), ssz = rd64(sh + 32), entsz = rd64(sh + 56);"
+    (cons "      if (!entsz) entsz = 24ULL;"
+    (cons "      for (uint64_t k = 0; k < ssz; k += entsz) {"
+    (cons "        const uint8_t *sym = objs[oi].buf + soff + k;"
+    (cons "        const char *nm = strtab + rd32(sym);"
+    (cons "        uint8_t info = sym[4]; uint16_t shndx = rd16(sym + 6); uint64_t sval = rd64(sym + 8);"
+    (cons "        if ((info >> 4) == 0 || !nm[0]) continue;"
+    (cons "        uint64_t addr = 0; int ok = 0;"
+    (cons "        if (shndx != 0 && shndx < 128 && sec_map[oi][shndx] >= 0) {"
+    (cons "          addr = secs[sec_map[oi][shndx]].off + sval; ok = 1;"
+    nil))))))))))))))))))))))

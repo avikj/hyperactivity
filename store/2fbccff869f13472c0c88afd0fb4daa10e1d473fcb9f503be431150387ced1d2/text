@@ -1,0 +1,26 @@
+vpf-c-impl-q5 : List Word
+vpf-c-impl-q5 =
+  vpf-lines-q
+    (cons "  if (g_tx_sock < 0) return;"
+    (cons "  uint32_t sq = __atomic_add_fetch(&g_hxsv_seq, 1u, __ATOMIC_RELAXED);"
+    (cons "  uint8_t pkt[32];"
+    (cons "  /* class 4 = VISION_PRO (8 cores) */"
+    (cons "  vp_hxsv_pack(pkt, kind, sq, (4u << 16) | 8u, bcmd, act, triad);"
+    (cons "  struct sockaddr_in dst; memset(&dst, 0, sizeof dst);"
+    (cons "  dst.sin_family = AF_INET; dst.sin_port = htons(g_udp_port);"
+    (cons "  inet_pton(AF_INET, `255.255.255.255`, &dst.sin_addr);"
+    (cons "  (void)sendto(g_tx_sock, pkt, 32, 0, (struct sockaddr*)&dst, sizeof dst);"
+    (cons "  if (g_mac_host[0]) {"
+    (cons "    if (inet_pton(AF_INET, g_mac_host, &dst.sin_addr) == 1)"
+    (cons "      (void)sendto(g_tx_sock, pkt, 32, 0, (struct sockaddr*)&dst, sizeof dst);"
+    (cons "  }"
+    (cons "}"
+    (cons nil
+    (cons "static void* founder_link_thread(void* arg) {"
+    (cons "  (void)arg;"
+    (cons "  int us = socket(AF_INET, SOCK_DGRAM, 0);"
+    (cons "  if (us >= 0) {"
+    (cons "    int one = 1;"
+    (cons "    setsockopt(us, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);"
+    (cons "#ifdef SO_REUSEPORT"
+    nil))))))))))))))))))))))

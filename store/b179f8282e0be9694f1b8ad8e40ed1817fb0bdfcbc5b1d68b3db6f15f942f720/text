@@ -1,0 +1,9 @@
+d-roundtrip-branches : (Word → Word → Code) → Word → Lst (Lst (Word × Word)) → Lst (Lst (Word × Word)) → Lst Word → Word → Lst Code
+d-roundtrip-branches pf d1 lnil sh2 perm c1 = lnil
+d-roundtrip-branches pf d1 (lcons ks1 r1) sh2 perm c1 =
+  let c2 = d-nth-w perm c1
+      ks2 = d-nth-sh sh2 c2
+      nf = d-len ks1
+      nr = count-rec ks1
+  in lcons (clams (%wadd nf nr) (cplam (ccon d1 c1 (d-path-fields pf ks1 ks2 nf nr #0 #0) lnil)))
+           (d-roundtrip-branches pf d1 r1 sh2 perm (%wsucc c1))

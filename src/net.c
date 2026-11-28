@@ -3565,11 +3565,18 @@ static const char *HY_METAL_SRC =
 static bool hy_metal_init(void) {
     if (hy_metal_state != 0) return hy_metal_state == 1;
     const char *env = getenv("CUBICAL_METAL");
+#ifdef __APPLE__
+    if (env && !strcmp(env, "0")) { hy_metal_state = -1; return false; }
+#else
     if (!env || !*env || !strcmp(env, "0")) { hy_metal_state = -1; return false; }
+#endif
     void *objc = dlopen("/usr/lib/libobjc.A.dylib", RTLD_LAZY | RTLD_GLOBAL);
     void *fnd  = dlopen("/System/Library/Frameworks/Foundation.framework/Foundation", RTLD_LAZY | RTLD_GLOBAL);
     void *mtl  = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY | RTLD_GLOBAL);
-    if (!objc || !fnd || !mtl) { hy_metal_state = -1; return false; }
+    void *rt   = dlopen(NULL, RTLD_LAZY);
+    if (!objc) objc = rt;
+    if (!mtl)  mtl  = rt;
+    if (!objc || (!fnd && !rt) || !mtl) { hy_metal_state = -1; return false; }
     *(void **)(&hy_objc_cls) = dlsym(objc, "objc_getClass");
     *(void **)(&hy_sel_reg)  = dlsym(objc, "sel_registerName");
     *(void **)(&hy_objc_msg) = dlsym(objc, "objc_msgSend");
@@ -3651,7 +3658,7 @@ static uint64_t hy_gpu_code(const Cell *o, const Cell *v, int *pt_out, bool *is_
 static long hy_metal_batch(long max_steps) {
     if (!hy_metal_init()) return 0;
     size_t qlen = net_solo ? Rlen : (Q ? Q[myq].bottom - __atomic_load_n(&Q[myq].top, __ATOMIC_ACQUIRE) : 0);
-    if (qlen < 256) return 0;
+    if (qlen < 64) return 0;
     size_t cap = HY_GPU_CAP;
     if (max_steps > 0 && (size_t)max_steps < cap) cap = (size_t)max_steps;
     typedef struct { Redex r; Cell *ac; int pt; bool bl; } GpuItem;
@@ -3672,7 +3679,7 @@ static long hy_metal_batch(long max_steps) {
             rewrite(r); steps_done++;
         }
     }
-    if (gn >= 64) {
+    if (gn >= 32) {
         size_t groups = (gn + 63u) / 64u, padded = groups * 64u;
         for (size_t k = gn; k < padded && k < HY_GPU_CAP; k++) hy_gpu_slots[k].op = 0;
         void *pool = hy_arp_push ? hy_arp_push() : NULL;

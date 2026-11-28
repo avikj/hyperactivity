@@ -1,0 +1,23 @@
+sl-step : Word → Word → SynLoopState → SynLoopState
+sl-step key tokByte s =
+  -- 1. Technical Natural Language Valence Monoid step (flow-lang `ValMon` + `fl-comp`)
+  let tcat  = %wand tokByte #3
+      vstep = vm (toNat tcat) (toNat #1)
+      lang2 = fl-comp (sl-lang s) vstep
+  -- 2. Vision Jet/Stokes chroma projection from language + previous neural state
+      lum   = %wand (%wadd tokByte (nb-eb (sl-bci s))) #255
+      gx    = %wand (%wxor tokByte (sl-aud s)) #255
+      chr   = %wand (sl-vm-sum lang2) #255
+      vis2  = %wor (%wshl lum #16) (%wor (%wshl gx #8) chr)
+  -- 3. Sound Neo-Riemannian Tonnetz unitary step driven by vision + language parity
+      op    = %wand (%wadd tokByte chr) #3
+      aud2  = if %weq op #0 then sl-tonnetz-P (sl-aud s)
+              else if %weq op #1 then sl-tonnetz-L (sl-aud s)
+              else sl-tonnetz-R (sl-aud s)
+  -- 4. Starlink-class optical telemetry pack -> channel -> unpack (lossless bijection!)
+      raw   = %wor (%wshl aud2 #24) vis2
+      wire  = sl-feistel-enc key raw
+      recv  = sl-link-deliver true (sl-link s) (sl-feistel-dec key wire)
+  -- 5. Neuralink-class CBF-safe 2-learner closed-loop update driven by decoded optical frame
+      bci2  = sl-bci-step #1000000 (%wand recv #255) (sl-bci s)
+  in SynLoopState { sl-lang = lang2 ; sl-vis = vis2 ; sl-aud = aud2 ; sl-bci = bci2 ; sl-link = recv }

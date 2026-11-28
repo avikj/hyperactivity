@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p6 : List Word
+hyperos-arm64-kernel-c-p6 =
+  os-lines-q
+    (cons "            uint32_t plen = be32(st + p);"
+    (cons "            uint32_t noff = be32(st + p + 4);"
+    (cons "            const uint8_t *val = st + p + 8;"
+    (cons "            p = (uint32_t)((p + 8u + plen + 3u) & ~3u);"
+    (cons "            const char *pname = strs + noff;"
+    (cons "            if (k_streq(pname, `bootargs`) && plen > 0) {"
+    (cons "                if (k_memhas((const char *)val, plen, `hyperos.oneshot=1`)) hw->oneshot = 1;"
+    (cons "            } else if (k_streq(pname, `compatible`) && plen > 0) {"
+    (cons "                if (k_memhas((const char *)val, plen, `simple-framebuffer`)) node_kind = 2;"
+    (cons "                else if (k_memhas((const char *)val, plen, `arm,pl011`)) node_kind = 3;"
+    (cons "                else if (k_memhas((const char *)val, plen, `apple,uart`) || k_memhas((const char *)val, plen, `s5l-uart`)) node_kind = 4;"
+    (cons "                else if (k_memhas((const char *)val, plen, `virtio,mmio`)) node_kind = 5;"
+    (cons "                else if (k_memhas((const char *)val, plen, `arm,psci`)) node_kind = 6;"
+    (cons "            } else if (k_streq(pname, `method`) && node_kind == 6 && plen >= 3) {"
+    (cons "                if (k_memhas((const char *)val, plen, `smc`)) hw->psci_smc = 1;"
+    (cons "            } else if (k_streq(pname, `reg`) && plen >= 8) {"
+    (cons "                cur_reg = (plen >= 16) ? (uintptr_t)be64(val) : (uintptr_t)be32(val);"
+    (cons "            } else if (k_streq(pname, `width`) && plen >= 4) {"
+    (cons "                cur_w = be32(val);"
+    (cons "            } else if (k_streq(pname, `height`) && plen >= 4) {"
+    (cons "                cur_h = be32(val);"
+    (cons "            } else if (k_streq(pname, `stride`) && plen >= 4) {"
+    nil))))))))))))))))))))))

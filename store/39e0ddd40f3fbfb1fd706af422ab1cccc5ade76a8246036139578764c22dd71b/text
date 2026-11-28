@@ -1,0 +1,10 @@
+hy-sexp-motifs : Nat → List Word → List (List Word)
+hy-sexp-motifs zero _ = nil
+hy-sexp-motifs (suc _) nil = nil
+hy-sexp-motifs (suc k) (cons c r) =
+  let rest = hy-sexp-motifs k r
+  in if weq c #40 then
+       let sx = hy-take-sexp (toNat #512) #1 (cons #40 nil) r
+       in if andB (hy-at-least-n (toNat #28) sx) (h-not (orB (h-prefix "(lam " sx) (h-prefix "(Pi " sx)))
+          then cons sx rest else rest
+     else rest

@@ -1,0 +1,5 @@
+d-match-ctors : (Word → Word → Bool) → Lst (Lst (Word × Word)) → Lst (Lst (Word × Word)) → Lst Word → Opt (Lst Word)
+d-match-ctors sub lnil sh2 used = some lnil
+d-match-ctors sub (lcons ks1 r1) sh2 used =
+  d-obind (d-find-ctor sub ks1 sh2 used #0)
+    (λ c2 → d-omap (λ rest → lcons c2 rest) (d-match-ctors sub r1 sh2 (lcons c2 used)))

@@ -1,0 +1,51 @@
+-- Continuous pool admission hook:
+-- 1. On `data` (`store/<k>/decl`), indexes nameless constructor-sorted signature; if another `data`
+--    type shares the exact structure, automatically synthesizes & kernel-checks `deriving equiv` (`ua`)!
+-- 2. On `def` (`store/<k>/forms`), indexes canonical nameless subterm motifs across the pool.
+hy-admit-pool : List Word → List Word → List Word → Sum Unit (List Word) → Proc W (List Word)
+hy-admit-pool st m name (inl _) = ret nil
+hy-admit-pool st m name (inr kraw) =
+  let key = h-take (toNat #64) (h-before (cons #10 nil) kraw)
+  in if h-not (weq (fromNat (list-length key)) #64) then ret {lzero} {W} nil
+     else bind (h-read (list-append "store/" (list-append key "/decl"))) (λ md →
+       case md of
+         inr dtxt →
+           if h-not (h-prefix "(decl data " dtxt) then ret {lzero} {W} nil
+           else
+             let sig = hy-decl-sig dtxt
+                 sh = hy-fnv16 sig
+                 ip = list-append st (list-append "/iso/" sh)
+             in bind (h-mkdir (list-append st "/iso")) (λ _ →
+                bind (h-read ip) (λ prev →
+                case prev of
+                  inl _ →
+                    bind (h-write ip (list-append key (cons #32 (h-line name)))) (λ _ → ret {lzero} {W} nil)
+                  inr ptxt →
+                    let ln = h-before (cons #10 nil) ptxt
+                        k0 = h-before " " ln
+                        nm0 = h-after " " ln
+                    in if orB (h-eq k0 key) (orB (h-eq nm0 name) (h-null nm0)) then ret {lzero} {W} nil
+                       else
+                         let eqvNm = list-append name (list-append "·equiv·" nm0)
+                             declT = h-line (list-append "deriving equiv " (list-append name (list-append " " (list-append nm0 (list-append " as " eqvNm)))))
+                         in bind (hy-cand #2) (λ c0 → bind (hy-cand #3) (λ tf →
+                            let cf = list-append c0 ".hypercubical"
+                                full = list-append "import " (cons #34 (list-append "../lib/core.hypercubical" (cons #34 (cons #10 (cons #10 declT)))))
+                            in bind (h-write cf full) (λ _ → bind (h-write tf declT) (λ _ →
+                               bind (h-capture (cons m (cons "--read" (cons cf (cons "--keep" (cons eqvNm (cons tf nil))))))) (λ r →
+                               bind (h-unlink cf) (λ _ → bind (h-unlink tf) (λ _ →
+                               if hy-freed (h-lines (snd r)) then
+                                 bind (hy-get st (list-append "bound/" (h-hex eqvNm))) (λ uk →
+                                 let uak = h-take (toNat #64) (hy-or nil uk)
+                                 in bind (h-write (list-append "store/" (list-append key "/equiv")) (h-line (list-append nm0 (cons #32 (list-append k0 (cons #32 uak)))))) (λ _ →
+                                    bind (hy-append (list-append st "/equiv-log") (h-line (list-append "  " (list-append name (list-append " (" (list-append (h-take (toNat #12) key) (list-append ")  ua≡  " (list-append nm0 (list-append " (" (list-append (h-take (toNat #12) uak) ")")))))))))) (λ _ →
+                                    ret {lzero} {W} (list-append ", ua≡" (list-append nm0 (list-append " " (h-take (toNat #12) uak)))))))
+                               else ret {lzero} {W} nil)))))))))
+         inl _ →
+           bind (h-read (list-append "store/" (list-append key "/forms"))) (λ mf →
+           case mf of
+             inl _ → ret {lzero} {W} nil
+             inr ftxt →
+               let tm = hy-strip-bname (h-after (cons #10 nil) ftxt)
+                   ms = h-dedupe (h-take-n (toNat #24) (hy-sexp-motifs (toNat #2048) (h-tail tm)))
+               in bind (h-mkdir (list-append st "/motifs")) (λ _ → hy-index-motifs st key ms)))

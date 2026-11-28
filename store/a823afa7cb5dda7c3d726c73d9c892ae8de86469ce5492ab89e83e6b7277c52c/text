@@ -1,0 +1,15 @@
+hy-index-motifs : List Word → List Word → List (List Word) → Proc W (List Word)
+hy-index-motifs st key nil = ret nil
+hy-index-motifs st key (cons sx rest) =
+  let mh = hy-fnv16 sx
+      mp = list-append st (list-append "/motifs/" mh)
+  in bind (h-read mp) (λ prev →
+     case prev of
+       inl _ →
+         bind (h-write mp (h-line key)) (λ _ → hy-index-motifs st key rest)
+       inr ptxt →
+         let k0 = h-take (toNat #64) (h-before (cons #10 nil) ptxt)
+         in if h-eq k0 key then hy-index-motifs st key rest
+            else bind (h-write (list-append "store/" (list-append key "/motifs")) (h-line (list-append mh (cons #32 k0)))) (λ _ →
+                 bind (hy-log-line (list-append st "/motif-log") (h-line (list-append "  " (list-append (h-take (toNat #12) key) (list-append "  motif≡  " (list-append mh (cons #32 (h-take (toNat #12) k0)))))))) (λ _ →
+                 ret {lzero} {W} (list-append ", shared motif " (list-append (h-take (toNat #12) mh) (list-append "≡" (h-take (toNat #12) k0)))))))

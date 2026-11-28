@@ -1,0 +1,7 @@
+derive-ua : Word → Word → Opt Code
+derive-ua d1 d2 =
+  if %weq d1 d2 then some (cplam (cdata d1 lnil))
+  else d-omap (λ q →
+    capp (capp (capp (capp (capp (capp (code d-mk-ua) (cdata d1 lnil)) (cdata d2 lnil))
+      (fst q)) (fst (snd q))) (fst (snd (snd q)))) (snd (snd (snd q))))
+    (derive-iso4-at der-depth d1 d2)

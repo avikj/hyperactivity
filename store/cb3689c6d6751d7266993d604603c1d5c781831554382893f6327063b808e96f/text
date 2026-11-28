@@ -1,0 +1,23 @@
+s-net-pulse : List Word → Proc W (List Word)
+s-net-pulse st =
+  bind (h-read (list-append st "/net-pulse.json")) (λ rpushed →
+  let pushed = s-or nil rpushed in
+  if andB (h-not (h-null pushed)) (h-prefix "{" pushed)
+  then ret {lzero} {W} (s-response "application/json" pushed)
+  else bind (h-read "store/ROOT/root") (λ rrt →
+       bind s-store-count (λ cnt →
+       bind (h-list (list-append st "/iso")) (λ isos →
+       bind (h-list (list-append st "/motifs")) (λ mots →
+       bind (h-read (list-append st "/dht/peers")) (λ rprs →
+       let rt   = h-trim (h-before (cons #10 nil) (s-or nil rrt))
+           nObj = h-decimal cnt
+           nIso = h-decimal (fromNat (list-length isos))
+           nMot = h-decimal (fromNat (list-length mots))
+           nPrs = h-decimal (fromNat (list-length (h-lines (s-or nil rprs))))
+           flds = cons (s-dht-kv "root" (s-cj-str rt))
+                  (cons (s-dht-kv "pool_objects" nObj)
+                  (cons (s-dht-kv "iso_classes" nIso)
+                  (cons (s-dht-kv "shared_motifs" nMot)
+                  (cons (s-dht-kv "dht_peers" nPrs) nil))))
+           js   = h-concat (cons "{" (cons (s-commas flds) (cons "}" nil)))
+       in ret {lzero} {W} (s-response "application/json" js)))))))

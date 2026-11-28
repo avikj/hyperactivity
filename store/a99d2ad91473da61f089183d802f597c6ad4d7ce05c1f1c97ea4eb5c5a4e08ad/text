@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p5 : List Word
+hyperos-arm64-kernel-c-p5 =
+  os-lines-q
+    (cons "    uint32_t p = 0;"
+    (cons "    while (p + 4 <= sz_struct) {"
+    (cons "        uint32_t tok = be32(st + p); p += 4;"
+    (cons "        if (tok == 1u) { /* FDT_BEGIN_NODE */"
+    (cons "            const char *nm = (const char *)(st + p);"
+    (cons "            size_t nl = k_strlen(nm);"
+    (cons "            p = (uint32_t)((p + nl + 4u) & ~3u);"
+    (cons "            node_kind = k_streq(nm, `chosen`) ? 1 : (k_contains(nm, `psci`) ? 6 : 0);"
+    (cons "            cur_reg = 0; cur_w = cur_h = cur_stride = 0;"
+    (cons "        } else if (tok == 2u) { /* FDT_END_NODE */"
+    (cons "            if (node_kind == 2 && cur_reg && cur_w && cur_h) {"
+    (cons "                hw->fb_pa = cur_reg; hw->fb_w = cur_w; hw->fb_h = cur_h;"
+    (cons "                hw->fb_stride = cur_stride ? cur_stride : (cur_w * 4u);"
+    (cons "            } else if (node_kind == 3 && cur_reg) {"
+    (cons "                g_uart_base = cur_reg; g_uart_apple = 0;"
+    (cons "            } else if (node_kind == 4 && cur_reg) {"
+    (cons "                g_uart_base = cur_reg; g_uart_apple = 1;"
+    (cons "            } else if (node_kind == 5 && cur_reg && hw->n_vio < 32) {"
+    (cons "                hw->vio_bases[hw->n_vio++] = cur_reg;"
+    (cons "            }"
+    (cons "            node_kind = 0;"
+    (cons "        } else if (tok == 3u) { /* FDT_PROP */"
+    nil))))))))))))))))))))))

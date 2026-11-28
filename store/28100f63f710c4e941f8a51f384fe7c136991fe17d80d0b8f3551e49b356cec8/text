@@ -1,0 +1,39 @@
+s-dag-answer : List Word → List Word → Proc W (List Word)
+s-dag-answer st qs =
+  let rawTgt = s-unescape (s-param "target" qs) in
+  bind (dg-resolve-target st rawTgt) (λ res →
+  let lbl   = fst res
+      rk    = fst (snd res)
+      exact = snd (snd res)
+  in bind (dg-crawl-stk (toNat #256) (cons (inl rk) nil) nil) (λ nodes →
+     let ks    = list-map (λ e → fst e) nodes
+         lvs   = dg-layers-of nodes nil
+         maxLv = dg-max-lv lvs
+         edges = dg-total-edges nodes
+     in bind (h-read (list-append st "/names")) (λ rn1 →
+        bind (if h-eq st ".cubical-store" then ret {lzero} {W} (inl unit) else h-read ".cubical-store/names") (λ rn2 →
+        let rawNames = if h-null (s-or nil rn2) then s-or nil rn1 else list-append (s-or nil rn1) (cons #10 (s-or nil rn2))
+            nmap0    = dg-names-scan (toNat #12000) ks (h-lines rawNames) (if s-hex64 rawTgt then nil else cons (rk , lbl) nil)
+        in bind (dg-render-layers-up (toNat #40) #0 maxLv nodes lvs nmap0) (λ secHtml →
+           let note = if exact then nil else h-concat (cons "<p style='color:#ff0a94;font:600 13px ui-monospace,monospace'>Target <code>" (cons (s-esc rawTgt) (cons "</code> not in current bound cache; displaying foundational <code>ua&beta;</code> DAG.</p>" nil)))
+               doc  = h-concat (
+                 cons "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Topological Proof DAG · Hyperactive Labs</title>" (
+                 cons dg-style-and-js (
+                 cons "</head><body><!--HX:NAV--><main class='dg-main'><div class='dg-top'><div class='dg-kicker'>Content-Addressed Pool &middot; Bottom-Up Topological Pedagogy</div><h1 class='dg-h1'>" (
+                 cons (s-esc lbl) (
+                 cons "</h1><p class='dg-sub'>Every mathematical object in <code>store/</code> is addressed solely by the SHA-256 of its nameless canonical structure. Compression induces a natural topological sort: read bottom-up from Layer 0 primitives to the target theorem with zero forward references and explicit DAG lemma sharing.</p>" (
+                 cons note (
+                 cons "<div class='dg-bar'><form method='get' action='/dag'><input class='dg-in' name='target' value='" (
+                 cons (s-esc lbl) (
+                 cons "' placeholder='Pool definition name or 64-hex SHA-256 key...'><button class='dg-btn' type='submit'>Trace DAG</button></form><button type='button' class='dg-btn' id='dgWbBtn' onclick='dgFlipWb()'>whiteboy mode: off</button><a class='dg-btn' href='/grh'>Critical-Axis Proof (/grh)</a></div><div class='dg-picks'><span>Targets:</span><a href='/dag?target=ua%CE%B2'>ua&beta;</a><a href='/dag?target=plus-comm'>plus-comm</a><a href='/dag?target=Word%E2%89%A1Nat'>Word&equiv;Nat</a><a href='/dag?target=portal-arrive'>portal-arrive</a><a href='/dag?target=derive-ua'>derive-ua</a><a href='/dag?target=pool-hyperfactor'>pool-hyperfactor</a><a href='/dag?target=grh-thm-superopt-sound'>grh-thm-superopt-sound</a></div><div class='dg-stats'><div class='dg-stat'><b>" (
+                 cons (h-decimal (fromNat (list-length nodes))) (
+                 cons "</b>Pool Nodes in Cone</div><div class='dg-stat'><b>" (
+                 cons (h-decimal (wadd maxLv #1)) (
+                 cons "</b>Topological Layers</div><div class='dg-stat'><b>" (
+                 cons (h-decimal edges) (
+                 cons "</b>Content-Key Edges</div><div class='dg-stat'><b>" (
+                 cons (h-take (toNat #12) rk) (
+                 cons "</b>Root SHA-256 Prefix</div></div></div>" (
+                 cons secHtml (
+                 cons "</main></body></html>" nil)))))))))))))))))))
+           in ret {lzero} {W} (s-response s-html (s-chrome-html "Topological Proof DAG · Hyperactive Labs" doc)))))))

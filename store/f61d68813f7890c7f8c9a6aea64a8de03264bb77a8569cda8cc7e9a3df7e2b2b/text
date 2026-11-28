@@ -1,0 +1,37 @@
+sl-c-p2 : List Word
+sl-c-p2 =
+  sl-ln "int main(int argc, char** argv) {"
+  (sl-ln (list-append "  const char* cpath = (argc > 1) ? argv[1] : " (list-append (sl-str "/tmp/hy_out/tech_corpus.bin") ";"))
+  (sl-ln "  const uint32_t NBYTES = 1048576u;"
+  (sl-ln "  uint8_t* buf = (uint8_t*)malloc(NBYTES);"
+  (sl-ln (list-append "  FILE* fp = fopen(cpath, " (list-append (sl-str "rb") ");"))
+  (sl-ln "  size_t seed_len = 0;"
+  (sl-ln "  if (fp) { seed_len = fread(buf, 1, NBYTES, fp); fclose(fp); }"
+  (sl-ln "  if (seed_len == 0) { for (uint32_t i = 0; i < 4096u; i++) buf[i] = (uint8_t)(32u + (i % 95u)); seed_len = 4096u; }"
+  (sl-ln "  for (size_t off = seed_len; off < NBYTES; off++) buf[off] = (uint8_t)(buf[off - seed_len] ^ ((off >> 16u) & 7u));"
+  (sl-ln "  uint32_t need = 0u, give = 0u, aud = 0u, eb = 400u, ec = 300u;"
+  (sl-ln "  uint32_t lok = 1u, aok = 1u, cok = 1u, max_r2 = 0u, thist = 0u;"
+  (sl-ln "  const uint32_t KEY = 31337u, R2 = 1000000u;"
+  (sl-ln "  double t0 = now_s();"
+  (sl-ln "  for (uint32_t i = 0u; i < NBYTES; i++) {"
+  (sl-ln "    uint32_t b = buf[i];"
+  (sl-ln "    uint32_t vn = (b == 40u || b == 41u || b == 58u) ? 2u : ((b >= 48u && b <= 57u) ? 0u : ((b >= 65u && b <= 122u) ? 1u : 0u));"
+  (sl-ln "    if (give <= vn) { need += (vn - give); give = 1u; } else { give = (give - vn) + 1u; }"
+  (sl-ln "    uint32_t lum = (b + eb) & 255u, gx = (b ^ aud) & 255u, chr = (need + give) & 255u;"
+  (sl-ln "    uint32_t vis = (lum << 16u) | (gx << 8u) | chr;"
+  (sl-ln "    uint32_t op = (b + chr) % 3u, aud2 = tonnetz_step(aud, op);"
+  (sl-ln "    if (tonnetz_step(aud2, op) != aud || aud2 >= 24u) aok = 0u;"
+  (sl-ln "    aud = aud2; thist |= (1u << aud);"
+  (sl-ln "    uint32_t raw = (aud << 24u) | vis, recv = feistel_dec(KEY, feistel_enc(KEY, raw));"
+  (sl-ln "    if (recv != raw) lok = 0u;"
+  (sl-ln "    uint32_t u = recv & 255u, eb2 = (3u * eb + ec + u) / 5u, ec2 = (eb + 3u * ec) / 5u;"
+  (sl-ln "    uint32_t r2 = eb2 * eb2 + ec2 * ec2;"
+  (sl-ln "    if (r2 <= R2) { eb = eb2; ec = ec2; } else { eb >>= 1u; ec >>= 1u; r2 = eb*eb + ec*ec; }"
+  (sl-ln "    if (r2 > R2) cok = 0u; if (r2 > max_r2) max_r2 = r2;"
+  (sl-ln "  }"
+  (sl-ln "  double dt = now_s() - t0;"
+  (sl-ln "  uint32_t triads = (uint32_t)__builtin_popcount(thist & 0xFFFFFFu);"
+  (sl-ln "  int ok = (lok == 1u && aok == 1u && cok == 1u && triads == 24u);"
+  (sl-ln (list-append "  printf(" (list-append sl-q (list-append "[HX-SYNLOOP-C11-UBSAN] tech_seed=%zuB | stream=%uB | triads=%u/24 | max_cbf_r2=%u/1000000 | link_ok=%u aud_ok=%u cbf_ok=%u | ok=%d | %.3f ms" (list-append sl-esc-n (list-append sl-q ", seed_len, NBYTES, triads, max_r2, lok, aok, cok, ok, dt*1e3);")))))
+  (sl-ln "  free(buf); return ok ? 0 : 1;"
+  (sl-ln "}" nil))))))))))))))))))))))))))))))))))

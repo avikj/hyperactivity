@@ -1,0 +1,75 @@
+-- THEOREM 3: UNIVERSAL ASSOCIATIVITY OF PARALLEL VALENCE PARSING OVER ALL ValMon (0 POSTULATES!)
+-- Proves parallel GPU prefix-scan parsing of ANY 1D parenthesis-free stream equals sequential parsing!
+fl-thm-mon-assoc : (a b c : ValMon) → fl-comp (fl-comp a b) c ≡ fl-comp a (fl-comp b c)
+fl-thm-mon-assoc (vm n1 g1) (vm n2 g2) (vm n3 g3) =
+  case fl-cmp g1 n2 of
+    inl p1 →
+      let d1  = fst p1
+          eq1 = fst (snd p1)
+          h1  = snd (snd p1)
+      in case fl-cmp g2 n3 of
+        inl p2 →
+          let d2  = fst p2
+              eq2 = fst (snd p2)
+              h2  = snd (snd p2)
+              lhs1 = fl-comp-eq-le n1 g1 n2 g2 d1 eq1 h1
+              lhs2 = fl-comp-eq-le (fl-add n1 d1) g2 n3 g3 d2 eq2 h2
+              rhs1 = fl-comp-eq-le n2 g2 n3 g3 d2 eq2 h2
+              eR : fl-add n2 d2 ≡ fl-add g1 (fl-add d1 d2)
+              eR = fl-trans (fl-cong (λ z → fl-add z d2) eq1) (fl-add-assoc g1 d1 d2)
+              hR : fl-le g1 (fl-add n2 d2) ≡ true
+              hR = fl-trans (fl-cong (fl-le g1) eR) (fl-le-add-self g1 (fl-add d1 d2))
+              rhs2 = fl-comp-eq-le n1 g1 (fl-add n2 d2) g3 (fl-add d1 d2) eR hR
+          in fl-trans (fl-cong (λ z → fl-comp z (vm n3 g3)) lhs1)
+               (fl-trans lhs2
+                 (fl-trans (fl-cong (λ k → vm k g3) (fl-add-assoc n1 d1 d2))
+                   (fl-trans (fl-sym rhs2)
+                     (fl-sym (fl-cong (fl-comp (vm n1 g1)) rhs1)))))
+        inr p2 →
+          let d2  = fst p2
+              eq2 = fst (snd p2)
+              h2  = snd (snd p2)
+              lhs1 = fl-comp-eq-le n1 g1 n2 g2 d1 eq1 h1
+              lhs2 = fl-comp-eq-gt (fl-add n1 d1) g2 n3 g3 d2 eq2 h2
+              rhs1 = fl-comp-eq-gt n2 g2 n3 g3 d2 eq2 h2
+              rhs2 = fl-comp-eq-le n1 g1 n2 (fl-add (suc d2) g3) d1 eq1 h1
+          in fl-trans (fl-cong (λ z → fl-comp z (vm n3 g3)) lhs1)
+               (fl-trans lhs2
+                 (fl-trans (fl-sym rhs2)
+                   (fl-sym (fl-cong (fl-comp (vm n1 g1)) rhs1))))
+    inr p1 →
+      let d1  = fst p1
+          eq1 = fst (snd p1)
+          h1  = snd (snd p1)
+      in case fl-cmp g2 n3 of
+        inl p2 →
+          let d2  = fst p2
+              eq2 = fst (snd p2)
+              h2  = snd (snd p2)
+              lhs1 = fl-comp-eq-gt n1 g1 n2 g2 d1 eq1 h1
+              rhs1 = fl-comp-eq-le n2 g2 n3 g3 d2 eq2 h2
+          in fl-trans (fl-cong (λ z → fl-comp z (vm n3 g3)) lhs1)
+               (fl-trans (fl-cong (fl-comp (vm n1 (fl-add (suc d1) g2))) (fl-cong (λ z → vm z g3) eq2))
+                 (fl-trans (fl-assoc-gt-le n1 n2 g2 d1 d2 g3)
+                   (fl-trans (fl-cong (λ z → fl-comp (vm n1 z) (vm (fl-add n2 d2) g3)) (fl-sym eq1))
+                     (fl-sym (fl-cong (fl-comp (vm n1 g1)) rhs1)))))
+        inr p2 →
+          let d2  = fst p2
+              eq2 = fst (snd p2)
+              h2  = snd (snd p2)
+              lhs1 = fl-comp-eq-gt n1 g1 n2 g2 d1 eq1 h1
+              eL : fl-add (suc d1) g2 ≡ fl-add n3 (suc (fl-add d1 (suc d2)))
+              eL = fl-trans (fl-cong (fl-add (suc d1)) eq2)
+                    (fl-trans (fl-sym (fl-add-assoc (suc d1) n3 (suc d2)))
+                      (fl-trans (fl-cong (λ z → fl-add z (suc d2)) (fl-add-comm (suc d1) n3))
+                                (fl-add-assoc n3 (suc d1) (suc d2))))
+              hL : fl-le (fl-add (suc d1) g2) n3 ≡ false
+              hL = fl-trans (fl-cong (λ z → fl-le z n3) eL) (fl-gt-self-top n3 (fl-add d1 (suc d2)))
+              lhs2 = fl-comp-eq-gt n1 (fl-add (suc d1) g2) n3 g3 (fl-add d1 (suc d2)) eL hL
+              rhs1 = fl-comp-eq-gt n2 g2 n3 g3 d2 eq2 h2
+              rhs2 = fl-comp-eq-gt n1 g1 n2 (fl-add (suc d2) g3) d1 eq1 h1
+          in fl-trans (fl-cong (λ z → fl-comp z (vm n3 g3)) lhs1)
+               (fl-trans lhs2
+                 (fl-trans (fl-cong (vm n1) (fl-add-assoc (suc d1) (suc d2) g3))
+                   (fl-trans (fl-sym rhs2)
+                     (fl-sym (fl-cong (fl-comp (vm n1 g1)) rhs1)))))

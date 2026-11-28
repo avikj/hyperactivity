@@ -1,0 +1,9 @@
+dg-render-layer : List DgRaw → List (List Word × Word) → List (List Word × List Word) → Word → List DgRaw → Proc W (List Word)
+dg-render-layer _ _ _ _ nil = ret nil
+dg-render-layer all lvs nmap wantLv (cons e r) =
+  let lv = dg-lv-of (fst e) lvs in
+  if weq lv wantLv
+  then bind (dg-render-node all lvs nmap e) (λ h1 →
+       bind (dg-render-layer all lvs nmap wantLv r) (λ h2 →
+       ret {lzero} {W} (list-append h1 h2)))
+  else dg-render-layer all lvs nmap wantLv r

@@ -1,0 +1,11 @@
+hf-fvs-at : Nat → Word → Code → Lst Word → Lst Word
+hf-fvs-at zero b _ acc = acc
+hf-fvs-at (suc n) b (cvar k) acc = if %wlt k b then acc else hf-add-fv (%wsub k b) acc
+hf-fvs-at (suc n) b (clam x) acc = hf-fvs-at n (%wsucc b) x acc
+hf-fvs-at (suc n) b (cdlam x) acc = hf-fvs-at n (%wsucc b) x acc
+hf-fvs-at (suc n) b (cplam x) acc = hf-fvs-at n (%wsucc b) x acc
+hf-fvs-at (suc n) b (cforall x) acc = hf-fvs-at n (%wsucc b) x acc
+hf-fvs-at (suc n) b (clet v x) acc = hf-fvs-at n (%wsucc b) x (hf-fvs-at n b v acc)
+hf-fvs-at (suc n) b (cpi m A B) acc = hf-fvs-at n (%wsucc b) B (hf-fvs-at n b A acc)
+hf-fvs-at (suc n) b (csigma A B) acc = hf-fvs-at n (%wsucc b) B (hf-fvs-at n b A acc)
+hf-fvs-at (suc n) b c acc = hf-fvs-l (hf-fvs-at n) b (code-kids c) acc

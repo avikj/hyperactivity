@@ -1,0 +1,16 @@
+vpf-pack-hud : Word → FounderHud → List Word
+vpf-pack-hud key h =
+  let sq = vpf-mask32 (fh-seq h)
+      vm = vpf-mask32 (fh-vault-m h)
+      sm = vpf-mask32 (fh-h200-sm h)
+      bp = vpf-mask32 (fh-bps h)
+      m1 = vpf-mac32 key sq vm sm bp
+      m2 = vpf-mix32 m1 #1337
+  in vpf-put32 vpf-hxsv-magic
+     (vpf-put32 sq
+     (vpf-put32 vm
+     (vpf-put32 sm
+     (vpf-put32 bp
+     (vpf-put32 #1
+     (vpf-put32 m1
+     (vpf-put32 m2 nil)))))))

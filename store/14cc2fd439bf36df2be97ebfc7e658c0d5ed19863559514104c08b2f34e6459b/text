@@ -1,0 +1,26 @@
+hyperos-arm64-boot-asm-p2 : List Word
+hyperos-arm64-boot-asm-p2 =
+  os-lines-q
+    (cons "    msr     daifset, #0xf               /* Mask IRQ/FIQ/SError/Debug in EL1 */"
+    (cons "    mov     x1, #(3 << 20)              /* CPACR_EL1.FPEN = 0b11 */"
+    (cons "    msr     cpacr_el1, x1"
+    (cons "    adrp    x1, _el1_vectors"
+    (cons "    add     x1, x1, :lo12:_el1_vectors"
+    (cons "    msr     vbar_el1, x1"
+    (cons "    isb"
+    (cons nil
+    (cons "    /* Zero .bss PC-relatively (works at 0x40200000 QEMU, 0x70000000 VZ, 0x800000000 Apple Silicon) */"
+    (cons "    adrp    x1, __bss_start"
+    (cons "    add     x1, x1, :lo12:__bss_start"
+    (cons "    adrp    x2, __bss_end"
+    (cons "    add     x2, x2, :lo12:__bss_end"
+    (cons "2:"
+    (cons "    cmp     x1, x2"
+    (cons "    b.hs    3f"
+    (cons "    str     xzr, [x1], #8"
+    (cons "    b       2b"
+    (cons "3:"
+    (cons "    adrp    x1, __stack_top"
+    (cons "    add     sp, x1, :lo12:__stack_top"
+    (cons "    mov     x0, x19                     /* Pass dtb_pa to C EL1 kernel */"
+    nil))))))))))))))))))))))

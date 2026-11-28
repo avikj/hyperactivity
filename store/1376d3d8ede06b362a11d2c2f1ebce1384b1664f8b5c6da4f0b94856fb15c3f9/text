@@ -1,0 +1,17 @@
+dg-crawl-stk : Nat → List (Sum (List Word) DgRaw) → List DgRaw → Proc W (List DgRaw)
+dg-crawl-stk zero _ acc = ret acc
+dg-crawl-stk (suc _) nil acc = ret acc
+dg-crawl-stk (suc f) (cons (inr node) stk) acc =
+  if dg-has-raw (fst node) acc then dg-crawl-stk f stk acc
+  else dg-crawl-stk f stk (list-append acc (cons node nil))
+dg-crawl-stk (suc f) (cons (inl k) stk) acc =
+  if orB (dg-has-raw k acc) (wlt #35 (fromNat (list-length acc)))
+  then dg-crawl-stk f stk acc
+  else bind (dg-read-obj k) (λ kr →
+       let kd   = fst kr
+           raw  = snd kr
+           deps = h-take-n (toNat #12) (dg-without-self k (dg-mentions raw))
+           dops = list-map (λ d → the (Sum (List Word) DgRaw) (inl d)) deps
+           fin  = the (Sum (List Word) DgRaw) (inr (k , (kd , (raw , deps))))
+       in if h-null raw then dg-crawl-stk f stk acc
+          else dg-crawl-stk f (list-append dops (cons fin stk)) acc)

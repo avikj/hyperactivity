@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p2 : List Word
+hyperos-arm64-kernel-c-p2 =
+  os-lines-q
+    (cons "    return 0;"
+    (cons "}"
+    (cons nil
+    (cons "/* ---- UART Console (PL011 0x09000000 default + Apple Silicon s5l-uart auto-switch) ---- */"
+    (cons "static uintptr_t g_uart_base = 0x09000000UL;"
+    (cons "static int g_uart_apple = 0;"
+    (cons nil
+    (cons "static void uart_putc(char c) {"
+    (cons "    if (!g_uart_base) return;"
+    (cons "    if (c == '\n') uart_putc('\r');"
+    (cons "    if (g_uart_apple) {"
+    (cons "        while (mmio_r32(g_uart_base + 0x10) & (1u << 24)) {}"
+    (cons "        mmio_w32(g_uart_base + 0x20, (uint32_t)(uint8_t)c);"
+    (cons "    } else {"
+    (cons "        while (mmio_r32(g_uart_base + 0x18) & (1u << 5)) {}"
+    (cons "        mmio_w32(g_uart_base + 0x00, (uint32_t)(uint8_t)c);"
+    (cons "    }"
+    (cons "}"
+    (cons "static int uart_getc_nb(void) {"
+    (cons "    if (!g_uart_base) return -1;"
+    (cons "    if (g_uart_apple) {"
+    (cons "        if ((mmio_r32(g_uart_base + 0x10) & 0x1f00u) == 0) return -1;"
+    nil))))))))))))))))))))))

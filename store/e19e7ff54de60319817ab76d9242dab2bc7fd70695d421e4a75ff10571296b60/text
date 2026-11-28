@@ -1,0 +1,11 @@
+-- Structural AST equality for refl bijection certificates
+fl-eq-expr : FlowExpr → FlowExpr → Bool
+fl-eq-expr (fe-lit a) (fe-lit b) = %weq a b
+fl-eq-expr (fe-var a) (fe-var b) = %weq a b
+fl-eq-expr (fe-dbl a) (fe-dbl b) = fl-eq-expr a b
+fl-eq-expr (fe-sq a)  (fe-sq b)  = fl-eq-expr a b
+fl-eq-expr (fe-add a1 a2) (fe-add b1 b2) = andB (fl-eq-expr a1 b1) (fl-eq-expr a2 b2)
+fl-eq-expr (fe-mul a1 a2) (fe-mul b1 b2) = andB (fl-eq-expr a1 b1) (fl-eq-expr a2 b2)
+fl-eq-expr (fe-sub a1 a2) (fe-sub b1 b2) = andB (fl-eq-expr a1 b1) (fl-eq-expr a2 b2)
+fl-eq-expr (fe-ifz c1 t1 e1) (fe-ifz c2 t2 e2) = andB (fl-eq-expr c1 c2) (andB (fl-eq-expr t1 t2) (fl-eq-expr e1 e2))
+fl-eq-expr _ _ = false

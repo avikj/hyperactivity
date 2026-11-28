@@ -1,0 +1,26 @@
+hypernet-mesh-c-p8 : List Word
+hypernet-mesh-c-p8 =
+  os-lines-q
+    (cons nil
+    (cons "static void broadcast_all_ifaces(int fd, uint16_t port, const uint8_t pkt[32]) {"
+    (cons "    struct ifaddrs *ifa = NULL;"
+    (cons "    if (getifaddrs(&ifa) == 0) {"
+    (cons "        for (struct ifaddrs *p = ifa; p; p = p->ifa_next) {"
+    (cons "            if (!p->ifa_addr || p->ifa_addr->sa_family != AF_INET) continue;"
+    (cons "            if (!(p->ifa_flags & IFF_UP)) continue;"
+    (cons "            struct sockaddr_in dst; memset(&dst, 0, sizeof(dst));"
+    (cons "            dst.sin_family = AF_INET; dst.sin_port = htons(port);"
+    (cons "            if ((p->ifa_flags & IFF_BROADCAST) && p->ifa_broadaddr && p->ifa_broadaddr->sa_family == AF_INET) {"
+    (cons "                dst.sin_addr = ((struct sockaddr_in *)p->ifa_broadaddr)->sin_addr;"
+    (cons "                sendto(fd, pkt, 32, 0, (struct sockaddr *)&dst, sizeof(dst));"
+    (cons "            } else if (strncmp(p->ifa_name, `bridge`, 6) == 0 || strncmp(p->ifa_name, `en`, 2) == 0) {"
+    (cons "                inet_pton(AF_INET, `169.254.255.255`, &dst.sin_addr);"
+    (cons "                sendto(fd, pkt, 32, 0, (struct sockaddr *)&dst, sizeof(dst));"
+    (cons "            }"
+    (cons "        }"
+    (cons "        freeifaddrs(ifa);"
+    (cons "    }"
+    (cons "    const char *peers_env = getenv(`HYPERNET_PEERS`);"
+    (cons "    if (peers_env && *peers_env) {"
+    (cons "        char buf[512]; snprintf(buf, sizeof(buf), `%s`, peers_env);"
+    nil))))))))))))))))))))))

@@ -1,0 +1,21 @@
+-- Returns (fwd , (bwd , (sec , ret))) for structurally isomorphic d1 and d2
+derive-iso4-at : Nat → Word → Word → Opt (Code × (Code × (Code × Code)))
+derive-iso4-at zero d1 d2 =
+  if %weq d1 d2 then some (d-id-fn , (d-id-fn , (d-refl-fn , d-refl-fn))) else none
+derive-iso4-at (suc n) d1 d2 =
+  if %weq d1 d2 then some (d-id-fn , (d-id-fn , (d-refl-fn , d-refl-fn)))
+  else d-obind (all-shapes d1) (λ sh1 →
+       d-obind (all-shapes d2) (λ sh2 →
+       if %weq (d-len sh1) (d-len sh2)
+       then d-obind (d-match-ctors (shapes-iso-at n) sh1 sh2 lnil) (λ perm →
+            let inv = d-invert-perm perm (d-len sh1)
+                fwdf = λ s1 s2 → d-or (d-omap fst (derive-iso4-at n s1 s2)) d-id-fn
+                bwdf = λ s2 s1 → d-or (d-omap (λ q → fst (snd q)) (derive-iso4-at n s1 s2)) d-id-fn
+                secf = λ s2 s1 → d-or (d-omap (λ q → fst (snd (snd q))) (derive-iso4-at n s1 s2)) d-refl-fn
+                retf = λ s1 s2 → d-or (d-omap (λ q → snd (snd (snd q))) (derive-iso4-at n s1 s2)) d-refl-fn
+                fwd = d-map-code fwdf d1 d2 sh1 sh2 perm
+                bwd = d-map-code bwdf d2 d1 sh2 sh1 inv
+                sec = d-roundtrip-code secf d2 sh2 sh1 inv fwd bwd
+                retp = d-roundtrip-code retf d1 sh1 sh2 perm bwd fwd
+            in some (fwd , (bwd , (sec , retp))))
+       else none))

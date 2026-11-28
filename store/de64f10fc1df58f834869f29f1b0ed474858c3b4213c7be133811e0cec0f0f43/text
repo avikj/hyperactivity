@@ -1,0 +1,26 @@
+hyperos-arm64-mkimg-c-p2 : List Word
+hyperos-arm64-mkimg-c-p2 =
+  os-lines-q
+    (cons "  uint64_t cur = 0, bss_start = 0; int has_bss = 0;"
+    (cons "  for (int pass = 0; pass < 3; pass++) {"
+    (cons "    for (int oi = 0; oi < nobj; oi++) {"
+    (cons "      for (int si = 0; si < (int)objs[oi].shnum; si++) {"
+    (cons "        const uint8_t *sh = sh_ptr(&objs[oi], si);"
+    (cons "        uint32_t stype = rd32(sh + 4);"
+    (cons "        uint64_t sflags = rd64(sh + 8), soff = rd64(sh + 24), ssz = rd64(sh + 32), saln = rd64(sh + 48);"
+    (cons "        const char *nm = sh_name(&objs[oi], si);"
+    (cons "        if (!(sflags & 2ULL) || strncmp(nm, `.eh_frame`, 9) == 0 || strncmp(nm, `.note`, 5) == 0) continue;"
+    (cons "        int is_boot = (strcmp(nm, `.head.text`) == 0 || strcmp(nm, `.text.boot`) == 0);"
+    (cons "        int is_bss = (stype == 8u);"
+    (cons "        if ((pass == 0 && is_boot) || (pass == 1 && !is_boot && !is_bss) || (pass == 2 && is_bss)) {"
+    (cons "          if (saln < 1ULL) saln = 1ULL;"
+    (cons "          cur = (cur + saln - 1ULL) & ~(saln - 1ULL);"
+    (cons "          if (is_bss && !has_bss) { cur = (cur + 4095ULL) & ~4095ULL; bss_start = cur; has_bss = 1; }"
+    (cons "          sec_map[oi][si] = nsec;"
+    (cons "          secs[nsec].oi = oi; secs[nsec].si = si; secs[nsec].type = stype;"
+    (cons "          secs[nsec].off = cur; secs[nsec].size = ssz;"
+    (cons "          secs[nsec].data = (uint8_t *)calloc(1, (size_t)(ssz ? ssz : 1));"
+    (cons "          if (!is_bss && ssz) memcpy(secs[nsec].data, objs[oi].buf + soff, (size_t)ssz);"
+    (cons "          nsec++; cur += ssz;"
+    (cons "        }"
+    nil))))))))))))))))))))))

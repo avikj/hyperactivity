@@ -1,0 +1,22 @@
+s-os-status : List Word → Proc W (List Word)
+s-os-status st =
+  bind (h-read "store/ROOT/root") (λ rrt →
+  bind s-store-count (λ cnt →
+  bind (h-read (list-append st "/hypernet_peers.json")) (λ rp1 →
+  bind (h-read ".cubical-store/hypernet_peers.json") (λ rp2 →
+  bind (h-file-time "/tmp/hy_out/hyperos/hyperos-arm64.img") (λ tBm →
+  bind (h-file-time "/tmp/hy_out/visionpro/HyperactivityVisionPro.swift") (λ tVp →
+  let rt    = h-trim (h-before (cons #10 nil) (s-or nil rrt))
+      pRaw0 = s-or nil rp1
+      pRaw  = the (List Word) (if andB (h-not (h-null pRaw0)) (h-prefix "{" pRaw0) then pRaw0 else s-or nil rp2)
+      meshJ = the (List Word) (if andB (h-not (h-null pRaw)) (h-prefix "{" pRaw)
+              then pRaw
+              else h-concat (cons "{" (cons (s-dht-kv "node" (s-cj-str "ready")) (cons "," (cons (s-dht-kv "udp_port" "47700") (cons "," (cons (s-dht-kv "peers" "[]") (cons "}" nil))))))))
+      flds  = cons (s-dht-kv "ok" "true")
+              (cons (s-dht-kv "root" (s-cj-str rt))
+              (cons (s-dht-kv "pool_objects" (h-decimal cnt))
+              (cons (s-dht-kv "baremetal_arm64_ready" (if wlt #0 tBm then "true" else "false"))
+              (cons (s-dht-kv "visionpro_bundle_ready" (if wlt #0 tVp then "true" else "false"))
+              (cons (s-dht-kv "mesh" meshJ) nil)))))
+      js    = h-concat (cons "{" (cons (s-commas flds) (cons "}" nil)))
+  in ret {lzero} {W} (s-response "application/json" js)))))))

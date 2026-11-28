@@ -1,0 +1,10 @@
+-- Exact algebraic Code-size net gain:
+-- Replacing K disjoint sites of body size S with 1 template (m + S) and K call spines K*(1 + 2m)
+-- saves `(K - 1)*S - (m + K*(1 + 2m))` Code nodes when positive, #0 otherwise.
+hf-net-gain : Word → Word → Word → Word
+hf-net-gain k m s =
+  if %wlt k #2 then #0
+  else
+    let saved = %wmul (%wsub k #1) s
+        cost = %wadd m (%wmul k (%wadd #1 (%wmul #2 m)))
+    in if %wlt cost saved then %wsub saved cost else #0

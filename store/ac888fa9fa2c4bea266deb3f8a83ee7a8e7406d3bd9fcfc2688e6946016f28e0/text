@@ -1,0 +1,26 @@
+hyperos-arm64-boot-asm-p0 : List Word
+hyperos-arm64-boot-asm-p0 =
+  os-lines-q
+    (cons "/* hyperos_boot_arm64.S — Emitted by Hyperactivity (lib/os/hyperos.hypercubical)"
+    (cons " * Position-Independent Bare-Metal AArch64 EL2->EL1 Trampoline + Linux/m1n1/VZ Image Header (0x644d5241)"
+    (cons " * Boots unaltered on:"
+    (cons " *   1. Bare-Metal Mac mini & Mac Studio (Apple Silicon M1..M5) via Asahi m1n1 chainload"
+    (cons " *   2. macOS Apple Virtualization.framework (VZLinuxBootLoader) native hardware EL1 hypervisor"
+    (cons " *   3. QEMU AArch64 ('qemu-system-aarch64 -M virt -cpu max -kernel hyperos-arm64.img')"
+    (cons " */"
+    (cons ".section .head.text, `ax`"
+    (cons ".global _start"
+    (cons "_start:"
+    (cons "    b       _real_start                 /* 0x00: code0 executable branch */"
+    (cons "    .long   0                           /* 0x04: code1 */"
+    (cons "    .quad   0                           /* 0x08: text_offset = 0 */"
+    (cons "    .quad   _image_end - _start         /* 0x10: image_size (includes .bss + stack) */"
+    (cons "    .quad   0x08                        /* 0x18: flags (LE, any page size 4K/16K, anywhere in RAM) */"
+    (cons "    .quad   0                           /* 0x20: res2 */"
+    (cons "    .quad   0                           /* 0x28: res3 */"
+    (cons "    .quad   0                           /* 0x30: res4 */"
+    (cons "    .long   0x644d5241                  /* 0x38: magic `ARM\x64` */"
+    (cons "    .long   0                           /* 0x3c: res5 (no PE header) */"
+    (cons nil
+    (cons ".section .text.boot, `ax`"
+    nil))))))))))))))))))))))

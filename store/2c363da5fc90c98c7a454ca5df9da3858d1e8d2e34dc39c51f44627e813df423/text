@@ -1,0 +1,26 @@
+hyperos-arm64-kernel-c-p13 : List Word
+hyperos-arm64-kernel-c-p13 =
+  os-lines-q
+    (cons "static void chacha20_qr_c(uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d) {"
+    (cons "    *a += *b; *d = rol32(*d ^ *a, 16);"
+    (cons "    *c += *d; *b = rol32(*b ^ *c, 12);"
+    (cons "    *a += *b; *d = rol32(*d ^ *a, 8);"
+    (cons "    *c += *d; *b = rol32(*b ^ *c, 7);"
+    (cons "}"
+    (cons nil
+    (cons "/* ---- Canonical HXSV 64-Byte ARX-Sip MAC (Matches Mac Studio, Mac mini & Vision Pro) ---- */"
+    (cons "static uint64_t hxsv_mix64(uint64_t h, uint32_t x) {"
+    (cons "    uint64_t s1 = h ^ ((uint64_t)x * 2654435761ULL);"
+    (cons "    uint64_t s2 = s1 ^ (s1 >> 17);"
+    (cons "    uint64_t lo = ((s2 & 0xffffffffULL) * 2246822519ULL) & 0xffffffffULL;"
+    (cons "    uint64_t hi = ((s1 >> 13) ^ ((uint64_t)(x & 0xffffu) * 3266489917ULL)) & 0xffffffffULL;"
+    (cons "    return (hi << 32) | lo;"
+    (cons "}"
+    (cons "static uint64_t hxsv_mac32(const uint8_t pkt[32]) {"
+    (cons "    uint64_t m = 288230376151711743ULL ^ 0x48585356ULL;"
+    (cons "    for (int i = 1; i <= 5; i++) m = hxsv_mix64(m, be32(pkt + i * 4));"
+    (cons "    return m;"
+    (cons "}"
+    (cons "static void hxsv_seal32(uint8_t pkt[32], uint32_t kseq, uint32_t tgt, uint32_t a, uint32_t b, uint32_t c) {"
+    (cons "    uint32_t ws[6] = { 0x48585356u, kseq, tgt, a, b, c };"
+    nil))))))))))))))))))))))
