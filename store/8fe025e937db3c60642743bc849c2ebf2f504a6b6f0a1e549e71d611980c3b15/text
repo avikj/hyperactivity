@@ -1,0 +1,155 @@
+# Handoff — Claude session lineage (2026-11-27)
+
+Author: Claude (Opus 4.8), this session. This document transfers everything of value from this
+session's lineage into the repository (which survives independently of any Anthropic account), and
+contains the slop it produced so it is not propagated. Every claim below was checked against the
+actual git trees and module sources on the date above, not recalled.
+
+---
+
+## 1. Branch state (verified)
+
+| ref | tip | status |
+|---|---|---|
+| `origin/main` | `c2429aa38` | Canonical store. Keep. Holds all the real science and the hx release (§2). |
+| `main` (local) | `838a49756` | 21 behind `origin/main`. Its own tip is the hx-release store write (§2). Fast-forward to origin/main. |
+| `claude/overnight-2026-11-26` | `50af7ed9e` | **Slop. Do not merge. Discard.** (§3) |
+| `claude-magloop` | `c3bb25ada` | Stale earlier variant of the same slop lineage (§3). Discard. |
+| `claude/handoff-2026-11-27` | this doc | Carries only this file, branched off `origin/main`. The PR. |
+
+---
+
+## 2. What has value, and where it is (all on `origin/main`, confirmed present)
+
+**The science is already on `origin/main`** as checked `.hypercubical` modules in the content store.
+Confirmed present: `chem/fluxsplit`, `chem/cover`, `chem/sectors`, `chem/netatom`, `chem/ringatom`,
+`chem/linkhop`, `chem/h2plus-net`, `chem/h2-net`, and the inertia engine `chem/inertia`,
+`chem/inertiathm`, `chem/sylvester`. Nothing from this session's branches is needed to preserve any
+of it.
+
+**The hx release.** Commit `838a49756` (local `main`) wrote the hx release README into the content
+store (a 56-line store object + a `store/ROOT/root` bump); it is the module named
+`releases/hx/README.md`, not a filesystem path. `origin/main`'s store carries the release content
+(≈191 store objects reference `hyperactivity.ai` / `releases/hx`). The 45-engine `hx` CLI is emitted
+from `lib/hx.hypercubical` (`hx-c = emit-c-cli-opt (code hx-main)`); `hyperactivity.ai` serves it via
+Render auto-deploy off `main` (service `srv-dbuhvfgjo6nc73a5g2og`, workspace `tea-da9jec942hec7383lic0`).
+
+**The guard.** `main`'s pre-commit guard bans writing non-`.hypercubical` files through the system
+(`./hyperactive write`). Plain markdown like this handoff and the release README reach git by ordinary
+commit, not through the guard.
+
+---
+
+## 3. The slop this session produced — contained here, must not be merged
+
+Branch `claude/overnight-2026-11-26` (8 commits: `magloop`+`sectorground`, `sectorcharge`,
+`transport`, `twovertex`, `edgehol`, `pairenergy`, `pathtransport`, `chargeclass`).
+
+**What it claims.** That the electric energy on the spin network is a class function of the multiset
+of vertex charges — separation-independent for every configuration — so "the force between charges is
+absent from the electric term; it lives entirely in the kinetic hop cost." (No confinement from the
+electric term.)
+
+**Why it is wrong — from the module's own lines.** `chem/pairenergy.hypercubical` models the electric
+energy as
+
+```
+vertex-cost m = bal-sq m                    -- least Σ_e n_e² at a vertex of |charge| m
+total-cost ns = Σ_v vertex-cost(n_v)        -- sum over vertices, independent terms
+pair-path k   = [1, 0×k, 1]                 -- a ±1 pair with k neutral vertices between
+pair-cost-k   : total-cost(pair-path k) = 2 -- "same at any separation"   (proof λ i → true)
+```
+
+Each intermediate vertex is allowed to relax to its own in-sector minimum, and a neutral vertex
+contributes `bal-sq(0) = 0`. That is exactly dropping the Faraday flux string. Gauss's law on the
+graph, `div n = δ₊ − δ₋` (proved in `chem/cover`), forces nonzero flux edge-labels on every edge of
+the path separating the two charges — the connecting vertices cannot all be neutral while a unit of
+flux threads across the cut. `chem/fluxsplit` (on `main`) proves the resulting least energy is the
+shorter arc, growing as `min(d, N−d)` with separation: a confining string. The `pair-cost-k = 2`
+lemmas are arithmetically valid (`λ i → true` typechecks only because `nat-eq (total-cost …) 2`
+reduces to `true`), but they are lemmas about a model that omits the string, and the headline
+conclusion directly contradicts `chem/fluxsplit`, which is already on `main`.
+
+`sectorcharge`/`sectorground` additionally re-derive, at lower rigor, the on-vertex result that
+`chem/sectors` already proves on `main` (electric energy at a four-valent vertex of charge `N` depends
+on `N` alone, the 625 sectors gathering to `(q,0,0,0)`). So the branch is a lower-rigor duplicate of
+`chem/sectors` plus a false generalization. It meets none of the bar and is not merged.
+
+---
+
+## 4. The correct physics (stated from the modules on `main`)
+
+- **Separated charges confine.** `chem/fluxsplit`: a whole-number flux string joins the charges, least
+  energy `min(d, N−d)` — linear in separation.
+- **The neutral atom is flat.** `chem/h2-net` (`h2-neutral`): zero net flux, no string, no electric
+  force.
+- **The 1/r resistance (Coulomb) part** — Foster effective resistance, the split
+  `Σ n² = Σ h² + Σ(n−h)²` — is reached only when the QSD-V magnetic loop term delocalizes the
+  divergence-free flux coset: `chem/netatom` `H = L·R − t·hop`; `chem/ringatom`
+  `H = (λ/2)·w(s) − t(S+S⁻¹) − K(S⁶+S⁻⁶)`. Confinement (string) and the 1/r tail are the two regimes
+  of the same electric+magnetic energy, selected by whether the loop term is off or on.
+
+---
+
+## 5. Kernel orientation (read from `src/`, line-grounded — for a new reader)
+
+**Reduction core, `src/net.c`.** One step is `interact(o, v)` (≈1806): an active pair is always one
+operation meeting the single value it consumes — `redex` (≈314) drops any pair of two values or two
+operations as a wire nobody reads, and `l->steps++` ticks once per interact, so step count is a
+property of the term. Three universal rules fire before any type-specific rule: `O_ERA` erase,
+`O_DUP` duplicate (lazy, one level — the O(1) share; a `V_REF` box read is a refcount bump +
+one-level copy, ≈1879), `O_SUBST` dimension-substitution. Laziness is the default: `O_FWD` is a parked
+read and "not a step" (≈1808); `unbuilt(v)` subterms build on demand (≈1875); a used definition
+`V_GLOBAL` copies its body in lazily and parks if not ready (≈1866). Open terms reduce because an
+eliminator meeting an unknown `V_UNK` erases its branches and passes the neutral through (≈1886).
+Parallelism without locks (`link`/`publish`, ≈334–376): two principals rendezvous through a variable
+cell by atomic exchange (`vxchg`, first arrival wins); every wire and made-pair of a rewrite is
+deferred and published only when the whole rewrite completes, so no thread sees a half-written cell;
+work-stealing deques carry the pairs, neighbours from one rewrite staying on a core.
+
+**Content-addressed store, `src/store.c`.** A checked definition's key is `SHA-256` of the canonical
+type+term: binders nameless (`@k`, de Bruijn distance), every dependency replaced by its own key
+(`G<key>`/`D<key>`, constructors/fields `C<key>.i`/`F<key>.i`), binder multiplicities kept, and
+names/files/positions excluded (`key_def`, ≈618) — so one definition has one key on every machine.
+`.cubical-store/<key>/check` is a per-checker certificate (`ok <steps> <checker>`), the checker named
+by the hash of the library text loaded up to `%%chk-def` plus the machine binary; a definition with
+an `ok` line by the current checker is not rechecked. `names` is an append-only `name key time` log.
+
+---
+
+## 6. P2P / deployment
+
+`https://hyperactivity.ai/api/p2p/signal` is a GET-able JSON peer registry (not WebRTC/SSE/long-poll
+by itself — it returns a `peers` array of heartbeat records `{id, handle, kind:"node_hb", role, root,
+extra, ts}`). Observed one peer: `agent_f714739b`, role `primary_swarm_42xHopper`, advertising root
+`2513dc2359ff2e77` (≠ this checkout's root) with a `Base8453 … Morpho` settlement line.
+
+A true subscribe/stream is **not reachable from a cloud agent workspace**: the shell is network-blocked
+to the host (`403 … no rule or network setting allows this host` from the agent proxy, both `/` and
+`/api/p2p/signal`), so no heartbeat POST, no WebSocket, no WebRTC handshake. Only one-shot page GETs
+reach the host, and those cache 15 min. To join the mesh from an agent, allowlist `hyperactivity.ai`
+for the workspace shell (network settings) — effective in a new session; then the dispatch's
+`./hx agent inbox` / signal-POST flow works.
+
+---
+
+## 7. Open / unfinished
+
+The overnight dispatch's "next" object — count the one-electron bound states on a small finite graph
+(eigenvalues of the one-electron hop Hamiltonian below the band edge) via Sylvester's law of inertia
+(`chem/inertia`, `inertiathm`, `sylvester`, all on `main`: an LDL/congruence certificate counts
+negative eigenvalues of `H − E`) — was **not done**. It is a legitimate distinct object (the open
+spin-½ end's bound states). If built, build it on the correct Hamiltonian, not on §3's model, and read
+the inertia modules' exact lines first. Smallest case: a single link (2×2, levels ±1 from
+`chem/linkhop`), then a path/ring of 3–4 vertices; state, as a checked statement, how many levels lie
+below 0.
+
+---
+
+## 8. Recommended actions
+
+1. Fast-forward local `main` to `origin/main` (`c2429aa38`).
+2. Delete `claude/overnight-2026-11-26` and `claude-magloop` (§3 — slop; the rigorous versions are on
+   `main`). Nothing in them is needed.
+3. The canonical science and the hx release are on `main`; nothing from this session's branches needs
+   to merge. Merging this handoff branch adds only this document.
