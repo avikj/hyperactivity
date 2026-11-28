@@ -1,0 +1,15 @@
+-- Exact Same-Sample Causal Anti-Phase Cancellation over Q:
+-- When secondary-path transducer drive u = -F_ext cancels external acoustic wavefront
+-- F_ext at the ear-drum boundary, total cavity excitation (F_ext + u) = 0 in 1 sample
+-- (0 FFT block latency: <20.8 us @ 48kHz, <5.2 us @ 192kHz).
+-- Variables (0..3): p0, k, q0, fExt.
+anc-exact-cancel-poly : (A : Type) → (A → A → A) → (A → A → A) → (BQ → A) → List A → A × A
+anc-exact-cancel-poly A ad mu q vs =
+  (λ g sub _ →
+    let p0 = g 0; k = g 1; q0 = g 2; fExt = g 3
+        uAnti = sub (q (fn-q 0 1)) fExt
+        netF  = ad (mu k q0) (ad fExt uAnti)
+        p1    = sub p0 netF
+        pRef  = sub p0 (mu k q0)
+    in (p1 , pRef))
+  (λ n → al-nth A (q (fn-q 0 1)) n vs) (al-gsub A ad mu q) (al-gsq A mu)

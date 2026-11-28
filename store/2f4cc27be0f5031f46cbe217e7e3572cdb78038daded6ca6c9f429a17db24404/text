@@ -1,0 +1,8 @@
+anc-step : Word → Word → Word → Word → AncState → AncState
+anc-step pExt gain k damp (anc-st q p _) =
+  let uAnti = rp-neg32 (rp-mul16 gain pExt)
+      resid = rp-add32 pExt uAnti
+      fTot  = rp-add32 (rp-mul16 k q) resid
+      pNext = rp-mul16 damp (rp-sub32 p fTot)
+      qNext = rp-add32 q pNext
+  in anc-st qNext pNext resid

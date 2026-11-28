@@ -1,0 +1,10 @@
+stem4-step : Word → Word → Word → Word → Stem4State → Stem4State × Stem4Out
+stem4-step x gB gM gH (stem4-st bL bM bH) =
+  let x32  = rp-w32 x
+      nL   = rp-add32 bL (rp-mul16 gB (rp-sub32 x32 bL))
+      rem1 = rp-sub32 x32 nL
+      nM   = rp-add32 bM (rp-mul16 gM (rp-sub32 rem1 bM))
+      rem2 = rp-sub32 rem1 nM
+      nH   = rp-add32 bH (rp-mul16 gH (rp-sub32 rem2 bH))
+      sAir = rp-sub32 (rp-sub32 (rp-sub32 x32 nL) nM) nH
+  in (stem4-st nL nM nH , stem4-out nL nM nH sAir)

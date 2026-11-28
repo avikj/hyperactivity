@@ -1,0 +1,6 @@
+stem4-verify-stream : Stem4State → List Word → Bool
+stem4-verify-stream _ nil = true
+stem4-verify-stream st (cons x xs) =
+  let res = stem4-step x #1200 #6400 #22000 st
+      ok  = %weq (stem4-recompose (snd res)) (rp-w32 x)
+  in andB ok (stem4-verify-stream (fst res) xs)
