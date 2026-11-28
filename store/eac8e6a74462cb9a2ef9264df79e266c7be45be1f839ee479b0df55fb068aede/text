@@ -1,0 +1,43 @@
+grh-js-p2 : List Word
+grh-js-p2 =
+  grh-ln "}" (
+  grh-ln "function scheduleNode(targetNd){" (
+  grh-ln "  ensureWorker();" (
+  grh-ln "  var idx=ORDER.indexOf(targetNd),plan=[];" (
+  grh-ln "  for(var i=0;i<idx;i++){var k=ORDER[i];if(!checked[k])plan.push({nd:k});}" (
+  grh-ln "  plan.push({nd:targetNd});" (
+  grh-ln "  var vd=document.getElementById('vd-'+targetNd);" (
+  grh-ln "  if(vd)vd.textContent=wkReady?'queued...':'booting lib/core in cubical.wasm...';" (
+  grh-ln "  wkQueue=plan;if(wkReady)pumpQueue();" (
+  grh-ln "}" (
+  grh-ln "document.querySelectorAll('[data-run]').forEach(function(b){" (
+  grh-ln "  b.onclick=function(){var nd=b.getAttribute('data-run'),det=b.closest('details');if(det)det.open=true;scheduleNode(nd);};" (
+  grh-ln "});" (
+  grh-ln "ORDER.forEach(function(k){" (
+  grh-ln "  var ed=document.getElementById('ed-'+k);" (
+  grh-ln "  if(ed)ed.addEventListener('input',function(){checked[k]=false;var vd=document.getElementById('vd-'+k);if(vd){vd.className='node-verdict';vd.textContent='edited · click Check Node '+k;}});" (
+  grh-ln "});" (
+  grh-ln "document.getElementById('btnVerifyAll').onclick=function(){" (
+  grh-ln "  this.textContent='Checking 01 -> 12 in cubical.wasm...';" (
+  grh-ln "  ensureWorker();" (
+  grh-ln "  wkQueue=ORDER.filter(function(k){return!checked[k];}).map(function(k){return{nd:k};});" (
+  grh-ln "  if(!wkQueue.length)wkQueue=ORDER.map(function(k){return{nd:k};});" (
+  grh-ln "  if(wkReady)pumpQueue();" (
+  grh-ln "};" (
+  grh-ln "" (
+  grh-ln "/* 4. Verbatim Repository Module Source Drawer */" (
+  grh-ln "var dr=document.getElementById('modDrawer'),drT=document.getElementById('drTitle'),drB=document.getElementById('drBody'),modCache={};" (
+  grh-ln "function openMod(path){" (
+  grh-ln "  drT.textContent=path;dr.classList.add('open');" (
+  grh-ln "  if(modCache[path]){drB.textContent=modCache[path];return;}" (
+  grh-ln "  drB.textContent='Fetching '+path+' from content-addressed store...';" (
+  grh-ln "  fetch('/api/kg/module?path='+encodeURIComponent(path)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(t){" (
+  grh-ln "    var numbered=t.split(NL).map(function(ln,i){return String(i+1).padStart(4,' ')+' | '+ln;}).join(NL);" (
+  grh-ln "    modCache[path]=numbered;drB.textContent=numbered;" (
+  grh-ln "  }).catch(function(e){drB.textContent='Failed to load '+path+': '+e.message;});" (
+  grh-ln "}" (
+  grh-ln "document.querySelectorAll('[data-mod]').forEach(function(b){b.onclick=function(e){e.stopPropagation();openMod(b.getAttribute('data-mod'));};});" (
+  grh-ln "document.getElementById('drClose').onclick=function(){dr.classList.remove('open');};" (
+  grh-ln "dr.addEventListener('click',function(e){if(e.target===dr)dr.classList.remove('open');});" (
+  grh-ln "window.addEventListener('keydown',function(e){if(e.key==='Escape')dr.classList.remove('open');});" (
+  grh-ln "})();</script>" nil))))))))))))))))))))))))))))))))))))))))

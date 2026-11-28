@@ -1,0 +1,57 @@
+grh-js-p1 : List Word
+grh-js-p1 =
+  grh-ln "    '    var wr=await fetch(m.orig+'+DQ+'/cubical.wasm'+DQ+');if(!wr.ok)throw new Error('+DQ+'cubical.wasm HTTP '+DQ+'+wr.status);'," (
+  grh-ln "    '    var wb=new Uint8Array(await wr.arrayBuffer());'," (
+  grh-ln "    '    var wasi={environ_sizes_get:function(c,s){var dv=new DataView(mem.buffer);dv.setUint32(c,0,true);dv.setUint32(s,0,true);return 0;},environ_get:function(){return 0;},clock_time_get:function(a,b,o){new DataView(mem.buffer).setBigUint64(o,BigInt(Math.round(performance.now()*1e6)),true);return 0;},fd_write:function(fd,iov,len,nw){var dv=new DataView(mem.buffer),u8=new Uint8Array(mem.buffer),tot=0;for(var i=0;i<len;i++){var p=dv.getUint32(iov+i*8,true),l=dv.getUint32(iov+i*8+4,true),s=dec.decode(u8.subarray(p,p+l));if(fd===1)outB+=s;else errB+=s;tot+=l;}dv.setUint32(nw,tot,true);return 0;},fd_close:function(){return 0;},fd_fdstat_get:function(){return 8;},fd_filestat_get:function(){return 8;},fd_prestat_get:function(){return 8;},fd_prestat_dir_name:function(){return 8;},fd_read:function(){return 8;},fd_readdir:function(){return 8;},fd_seek:function(){return 8;},path_create_directory:function(){return 8;},path_filestat_get:function(){return 8;},path_open:function(){return 8;},path_remove_directory:function(){return 8;},path_rename:function(){return 8;},path_unlink_file:function(){return 8;},poll_oneoff:function(){return 8;},proc_exit:function(c){throw new Error('+DQ+'exit '+DQ+'+c);},sched_yield:function(){return 0;}};'," (
+  grh-ln "    '    var inst=(await WebAssembly.instantiate(wb,{wasi_snapshot_preview1:wasi})).instance;ex=inst.exports;mem=ex.memory;'," (
+  grh-ln "    '    var coreList='+JSON.stringify(CORE)+';'," (
+  grh-ln "    '    for(var i=0;i<coreList.length;i++){var rel=coreList[i],tr=await fetch(m.orig+'+DQ+'/source/text?path='+DQ+'+hexPath(rel));if(!tr.ok)throw new Error('+DQ+'core fetch failed: '+DQ+'+rel);var txt=await tr.text();var cubRel=rel.slice(0,-13)+'+DQ+'.cub'+DQ+';var cubTxt=txt.split('+DQ+'.hypercubical'+DQ+').join('+DQ+'.cub'+DQ+');cstr(cubRel,function(rp){return cstr(cubTxt,function(tp){return ex.wasm_put_file(rp,tp);});});}'," (
+  grh-ln "    '    outB='+DQ+DQ+';errB='+DQ+DQ+';var rc=cstr('+DQ+'lib/core.cub'+DQ+',function(p){return ex.wasm_load_module(p);});if(rc!==0)throw new Error('+DQ+'core boot failed: '+DQ+'+outB+errB);'," (
+  grh-ln "    '    self.postMessage({t:'+DQ+'ready'+DQ+'});'," (
+  grh-ln "    '  }else if(m.t==='+DQ+'eval'+DQ+'){'," (
+  grh-ln "    '    outB='+DQ+DQ+';errB='+DQ+DQ+';var t0=performance.now(),s0=ex.wasm_steps();'," (
+  grh-ln "    '    var rc2=cstr(m.code+NL,function(p){return ex.wasm_eval(p);});'," (
+  grh-ln "    '    var dt=(performance.now()-t0).toFixed(1),ds=Math.max(0,ex.wasm_steps()-s0),msg=(outB+(errB?NL+errB:'+DQ+DQ+')).trim();'," (
+  grh-ln "    '    var ok=(rc2>=0)&&msg.indexOf('+DQ+'FAIL:'+DQ+')<0&&msg.indexOf('+DQ+'error:'+DQ+')<0;'," (
+  grh-ln "    '    self.postMessage({t:'+DQ+'res'+DQ+',nd:m.nd,ok:ok,steps:ds,ms:dt,out:msg});'," (
+  grh-ln "    '  }'," (
+  grh-ln "    '}catch(e){self.postMessage({t:'+DQ+'err'+DQ+',nd:m.nd||null,err:String(e&&e.message?e.message:e)});}};'" (
+  grh-ln "  ].join(NL);" (
+  grh-ln "  wk=new Worker(URL.createObjectURL(new Blob([wsrc],{type:'application/javascript'})));" (
+  grh-ln "  wk.onmessage=function(ev){" (
+  grh-ln "    var d=ev.data||{};" (
+  grh-ln "    if(d.t==='ready'){wkReady=true;pumpQueue();}" (
+  grh-ln "    else if(d.t==='res'){" (
+  grh-ln "      var vd=document.getElementById('vd-'+d.nd),outEl=document.getElementById('out-'+d.nd),rl=document.getElementById('rl-'+d.nd),ar=document.getElementById('n'+d.nd);" (
+  grh-ln "      if(d.ok){" (
+  grh-ln "        checked[d.nd]=true;loadedOnce[d.nd]=true;" (
+  grh-ln "        if(vd){vd.className='node-verdict ok';vd.textContent='checked · 0 failed ('+d.steps.toLocaleString()+' steps, '+d.ms+' ms)';}" (
+  grh-ln "        if(outEl)outEl.textContent='cubical.wasm: 0 failed · '+d.steps.toLocaleString()+' interaction-net steps ('+d.ms+' ms)';" (
+  grh-ln "        if(rl)rl.classList.add('ok');if(ar)ar.classList.add('ok-hi');" (
+  grh-ln "        pumpQueue();" (
+  grh-ln "      }else{" (
+  grh-ln "        checked[d.nd]=false;wkQueue=[];" (
+  grh-ln "        if(vd){vd.className='node-verdict err';vd.textContent='type error';}" (
+  grh-ln "        if(outEl)outEl.textContent=d.out||'Verification failed';" (
+  grh-ln "        document.getElementById('btnVerifyAll').textContent='Verify All 12 Nodes (cubical.wasm)';" (
+  grh-ln "      }" (
+  grh-ln "    }else if(d.t==='err'){" (
+  grh-ln "      wkQueue=[];" (
+  grh-ln "      if(d.nd){var o2=document.getElementById('out-'+d.nd);if(o2)o2.textContent=d.err;}" (
+  grh-ln "      document.getElementById('btnVerifyAll').textContent='Verify All 12 Nodes (cubical.wasm)';" (
+  grh-ln "    }" (
+  grh-ln "  };" (
+  grh-ln "  wk.postMessage({t:'boot',orig:location.origin});" (
+  grh-ln "}" (
+  grh-ln "function pumpQueue(){" (
+  grh-ln "  if(!wkReady)return;" (
+  grh-ln "  if(!wkQueue.length){" (
+  grh-ln "    var allOk=ORDER.every(function(k){return!!checked[k];});" (
+  grh-ln "    if(allOk)document.getElementById('btnVerifyAll').textContent='All 12 Nodes Checked · 0 Failed';" (
+  grh-ln "    return;" (
+  grh-ln "  }" (
+  grh-ln "  var item=wkQueue.shift(),nd=item.nd,ed=document.getElementById('ed-'+nd),vd=document.getElementById('vd-'+nd);" (
+  grh-ln "  if(vd){vd.className='node-verdict';vd.textContent='checking in cubical.wasm...';}" (
+  grh-ln "  var prefix='';" (
+  grh-ln "  if(loadedOnce[nd]&&DAG[nd]&&DAG[nd].defs){prefix=DAG[nd].defs.map(function(nm){return '#retract '+nm;}).join(NL)+NL;}" (
+  grh-ln "  wk.postMessage({t:'eval',nd:nd,code:prefix+ed.value});" nil))))))))))))))))))))))))))))))))))))))))))))))))))))))

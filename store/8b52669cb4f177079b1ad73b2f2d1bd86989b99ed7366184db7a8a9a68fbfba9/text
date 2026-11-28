@@ -1,0 +1,18 @@
+-- 4D. WebAssembly 1.0 Cold-Verifier Harness (mechanically emitted, zero hand-written JS):
+boc-wasm-harness-js : List Word
+boc-wasm-harness-js =
+  boc-ln "import fs from 'node:fs';"
+  (boc-ln "const bytes = fs.readFileSync('/tmp/hy_out/boc_blackbox.wasm');"
+  (boc-ln "const { instance } = await WebAssembly.instantiate(bytes);"
+  (boc-ln "const { hx_exec, hx_verify, hx_link, hx_golay } = instance.exports;"
+  (boc-ln "const cand = hx_exec(0x12345678, 7, 2, 0x6D5A9E37);"
+  (boc-ln "const tag = hx_verify(2, cand, 0xCAFEBABE, 65536);"
+  (boc-ln "const ok1 = hx_verify(2, cand, 0xCAFEBABE, tag);"
+  (boc-ln "const bad1 = hx_verify(2, cand, 0xCAFEBABE, tag ^ 1);"
+  (boc-ln "const bad0 = hx_verify(2, cand, 0, tag);"
+  (boc-ln "const lnkGood = hx_link(12, 240, 0, 2);"
+  (boc-ln "const lnkSlow = hx_link(400, 20, 0, 8);"
+  (boc-ln "const lnkNonFlat = hx_link(5, 500, 1, 1);"
+  (boc-ln "const gol = hx_golay(0x7FF);"
+  (boc-ln "if (ok1 !== 1 || bad1 !== 0 || bad0 !== 0 || lnkNonFlat !== 0 || !(lnkGood > lnkSlow) || !(gol >= 0 && gol < 2048)) process.exit(1);"
+  (boc-ln "console.log('[HX-BEAST-OMNI-WASM] ' + bytes.length + 'B WebAssembly 1.0 verified | cand=' + (cand>>>0).toString(16) + ' tag=' + tag + ' link=' + lnkGood + '>' + lnkSlow + ' nonflat=' + lnkNonFlat + ' golay=' + gol);" nil))))))))))))))

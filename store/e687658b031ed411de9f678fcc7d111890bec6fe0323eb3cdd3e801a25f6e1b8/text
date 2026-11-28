@@ -1,0 +1,36 @@
+boc-host-src : List Word → List Word
+boc-host-src mpath =
+  boc-ln "#import <Foundation/Foundation.h>"
+  (boc-ln "#import <Metal/Metal.h>"
+  (boc-ln "#include <stdio.h>"
+  (boc-ln "#include <stdint.h>"
+  (boc-ln "#include <sys/time.h>"
+  (boc-ln "typedef struct { uint32_t ph, lh, ch, cok; } BocOut;"
+  (boc-ln "static double now_s(void){ struct timeval tv; gettimeofday(&tv,NULL); return tv.tv_sec + tv.tv_usec*1e-6; }"
+  (boc-ln "int main(void){"
+  (boc-ln "  @autoreleasepool {"
+  (boc-ln "    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();"
+  (boc-ln "    if (!dev) return 1;"
+  (boc-ln "    NSError* err = nil;"
+  (boc-ln (list-append "    NSString* src = [NSString stringWithContentsOfFile:@" (list-append (boc-qstr mpath) " encoding:NSUTF8StringEncoding error:&err];"))
+  (boc-ln "    MTLCompileOptions* opts = [MTLCompileOptions new]; opts.mathMode = MTLMathModeSafe;"
+  (boc-ln "    id<MTLLibrary> lib = [dev newLibraryWithSource:src options:opts error:&err];"
+  (boc-ln "    if (!lib) { puts([[err localizedDescription] UTF8String]); return 1; }"
+  (boc-ln (list-append "    id<MTLComputePipelineState> pso = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@" (list-append (boc-qstr "boc_periodic_latch_beast") "] error:&err];"))
+  (boc-ln "    id<MTLCommandQueue> q = [dev newCommandQueue];"
+  (boc-ln "    const uint32_t THREADS = 65536u, BATCHES = 1024u; // 67,108,864 (64M) unified evaluations!"
+  (boc-ln "    id<MTLBuffer> bOut = [dev newBufferWithLength:THREADS*sizeof(BocOut) options:MTLResourceStorageModeShared];"
+  (boc-ln "    double best = 1e9;"
+  (boc-ln "    for (int it = 0; it < 5; it++) {"
+  (boc-ln "      id<MTLCommandBuffer> cb = [q commandBuffer]; id<MTLComputeCommandEncoder> en = [cb computeCommandEncoder];"
+  (boc-ln "      [en setComputePipelineState:pso]; [en setBuffer:bOut offset:0 atIndex:0]; [en setBytes:&BATCHES length:4 atIndex:1];"
+  (boc-ln "      [en dispatchThreads:MTLSizeMake(THREADS,1,1) threadsPerThreadgroup:MTLSizeMake(256,1,1)]; [en endEncoding];"
+  (boc-ln "      double t0 = now_s(); [cb commit]; [cb waitUntilCompleted]; double dt = now_s() - t0; if (it > 0 && dt < best) best = dt;"
+  (boc-ln "    }"
+  (boc-ln "    BocOut* r = (BocOut*)[bOut contents]; uint64_t tp=0, tl=0, tc=0; uint32_t cok=1u;"
+  (boc-ln "    for (uint32_t i=0;i<THREADS;i++){ tp+=r[i].ph; tl+=r[i].lh; tc+=r[i].ch; if(!r[i].cok) cok=0u; }"
+  (boc-ln "    double gops = (67108864.0 * 3.0) / (best * 1e9);"
+  (boc-ln (list-append "    printf(" (list-append boc-q (list-append "[HX-BEAST-OMNI-METAL %s] 67,108,864 Periodic+Latch+Cone universes in %.3f ms (%.2f G-evals/s) | periodic_stable=%llu | latch_selective=%llu | cone_hits=%llu | crypt_ok=%u" (list-append boc-esc-n (list-append boc-q ", [[dev name] UTF8String], best*1e3, gops, (unsigned long long)tp, (unsigned long long)tl, (unsigned long long)tc, cok);")))))
+  (boc-ln "    return (cok == 1u && tp > 0ULL && tl > 0ULL) ? 0 : 1;"
+  (boc-ln "  }"
+  (boc-ln "}" nil)))))))))))))))))))))))))))))))))

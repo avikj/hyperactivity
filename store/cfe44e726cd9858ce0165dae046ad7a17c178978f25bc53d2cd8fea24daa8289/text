@@ -1,0 +1,7 @@
+-- Forward optional multi-turn `history` context into Gemini prompt + support `steer` or `question`
+this-extract-hist-snippet : List Word → List Word
+this-extract-hist-snippet body =
+  let pat = h-concat (cons this-q (cons "history" (cons this-q (cons ":[" nil)))) in
+  if h-infix pat body then
+    h-take (toNat #2048) (h-before "]" (h-after pat body))
+  else nil

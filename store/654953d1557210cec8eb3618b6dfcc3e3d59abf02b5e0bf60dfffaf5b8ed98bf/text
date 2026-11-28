@@ -1,0 +1,10 @@
+-- Func 3: hx_golay(vec=0) -> i32  (locals: 1=s)
+-- Combinational Golay-23 (`0xAE3 = #2787`) 11-bit syndrome router (0B SRAM!)
+boc-wasm-f3 : List Word
+boc-wasm-f3 =
+  let locHdr = the (List Word) (cons #1 (cons #1 (cons #127 nil)))
+      shE    = pw-bin #116 (pw-bin #113 (pw-get #0) (pw-c #2047)) (pw-c #1)
+      setS   = list-append shE (pw-set #1)
+      folded = boc-sel (pw-bin #115 (pw-get #1) (pw-c #2787)) (pw-get #1) (pw-bin #75 (pw-get #1) (pw-c #2047))
+      outE   = pw-bin #113 folded (pw-c #2047)
+  in pw-cat (cons locHdr (cons setS (cons outE (cons (pw-op #11) nil))))

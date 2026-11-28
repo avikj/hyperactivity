@@ -1,0 +1,18 @@
+-- incremental site refresh: derives all treatise refreshes directly from s-treatises
+s-refresh-site : List Word → List Word → Proc W Bool
+s-refresh-site st m =
+  bind (s-tr-refresh st s-treatises) (λ oktr →
+  bind (s-isolated (bind (s-paper st m) (λ p → ret {lzero} {W} unit))) (λ okp →
+  bind (s-ensure-mod st "bin" "docs/hyperactivity.pdf.hex" s-paper-pdf) (λ okpdf →
+  bind (s-ensure-mod st "json" "docs/kg-index.json" s-kg-index) (λ okkgi →
+  bind (s-ensure-mod st "doc" "docs/kernel.html" s-kernel) (λ okk →
+  bind (s-ensure-mod st "doc" "lib/ir/hx-grh-surface.hypercubical" (ret {lzero} {W} (s-response s-html (s-chrome-html "Generalized Riemann Hypothesis · Hyperactive Labs" grh-treatise-html)))) (λ okgrh →
+  bind (s-ensure-mod st "bin" "docs/cubical.wasm.hex" s-cubical-wasm) (λ okw →
+  bind (s-ensure-mod st "music" "lib/server.hypercubical" s-music) (λ okm →
+  bind (s-isolated (bind (s-site-kept st "llms-txt" s-llms-txt) (λ lm → ret {lzero} {W} unit))) (λ oklm →
+  bind (s-isolated (bind (s-site-kept st "feed-xml" s-feed-xml) (λ fd → ret {lzero} {W} unit))) (λ okfd →
+  bind (s-site-all st s-published) (λ u →
+  bind (s-isolated (bind (s-corpus-kept-one st "/paper") (λ c → ret {lzero} {W} unit))) (λ okc →
+  bind (s-ensure-mod st "syn" "docs/synesthesia.hypercubical" (ret {lzero} {W} (sy-answer nil))) (λ oky →
+  bind (h-read (list-append h-index "/meta/root")) (λ s →
+  h-write (list-append st "/site-stamp") (s-or nil s)))))))))))))))

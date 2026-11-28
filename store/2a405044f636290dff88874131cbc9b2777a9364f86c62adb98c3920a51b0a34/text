@@ -1,0 +1,8 @@
+s-main : Proc W Unit
+s-main = bind (h-env "HYPERACTIVE_CHECK_ONLY") (λ co →
+  if s-set co then exit #0
+  else bind (h-env "CUBICAL_STORE") (λ e → bind h-args (λ a →
+  let cmd = s-head nil (h-drop-n (suc (suc zero)) a) in
+  if orB (h-eq cmd "site") (h-eq cmd "refresh") then s-make-site (h-store-of e) (s-head "build/cubical" a)
+  else if h-eq cmd "search" then bind (sx-make-all (h-store-of e) s-published) (λ u → exit #0)
+  else s-start (h-store-of e) (s-head "build/cubical" a) (s-port (h-drop-n (suc (suc zero)) a)))))

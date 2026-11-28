@@ -1,0 +1,48 @@
+x4-verify-tx : List Word → List Word → Proc W (List Word)
+x4-verify-tx qs body =
+  let qTx   = ue-qparam "tx" qs
+      rawTx = if h-not (h-null qTx) then qTx else h-trim body
+      txHex = x4-lower (x4-strip-0x rawTx)
+      valid = andB (%weq (fromNat (list-length txHex)) #64) (x4-all-hex txHex)
+  in if h-not valid
+     then ret {lzero} {W}
+            (x4-ln "-- refused: pass ?tx=0x<64-hex-base-mainnet-tx-hash> paying Base USDC to 0x4A50FBF0128E2679C42466A8cC1A9D230b08A26f" nil)
+     else
+       let ledDir  = the (List Word) "/tmp/hx_x402_ledger"
+           ledFile = list-append ledDir (list-append "/" txHex)
+           tx0x    = list-append "0x" txHex
+       in bind (h-mkdir ledDir) (λ md →
+          bind (h-read ledFile) (λ mSeen →
+            let notSeen = case mSeen of
+                            inl u → true
+                            inr b → false
+            in if h-not notSeen
+               then ret {lzero} {W}
+                      (x4-ln (list-append "-- refused: replay rejected; Base tx 0x" (list-append txHex " was already redeemed")) nil)
+               else
+                 bind (x4-rpc-receipt tx0x) (λ resp →
+                   let stHex    = x4-extract-field-hex "status" resp
+                       stOk     = andB (h-infix (x4-qstr "status") resp) (%weq (x4-hex-to-word stHex) #1)
+                       paidU6   = x4-scan-log-objs stOk true #10000 (h-split #125 resp)
+                       quota    = x4-u6-to-step-quota paidU6
+                       capHash  = ue-hex-n (toNat #16) (ue-fnv64 #1213748054991827364 (list-append txHex (h-decimal paidU6)))
+                       capTok   = list-append "hx_x402_live_" capHash
+                   in if %weq paidU6 #0
+                      then ret {lzero} {W}
+                             (x4-ln (list-append "-- unverified: tx 0x" (list-append txHex " has 0 confirmed Base USDC Transfer to 0x4A50FBF0128E2679C42466A8cC1A9D230b08A26f")) nil)
+                      else
+                        bind (h-write ledFile (list-append capTok (cons #10 nil))) (λ wl →
+                        ret {lzero} {W}
+                          (x4-ln "-- ============================================================================" (
+                           x4-ln "-- HYPERACTIVE LABS // VERIFIED ON-CHAIN BASE (8453) USDC RECEIPT & PASS" (
+                           x4-ln (list-append "-- base_tx_hash     : 0x" txHex) (
+                           x4-ln (list-append "-- settled_to       : " x4-founder-coinbase-eip55) (
+                           x4-ln (list-append "-- capability_token : " capTok) (
+                           x4-ln "-- ============================================================================" (
+                           x4-ln (list-append "import " (list-append x4-q (list-append "lib/core.hypercubical" x4-q))) (
+                           x4-ln "hx-verified-paid-usdc-u6 : Word" (
+                           x4-ln (list-append "hx-verified-paid-usdc-u6 = #" (h-decimal paidU6)) (
+                           x4-ln "hx-verified-step-quota : Word" (
+                           x4-ln (list-append "hx-verified-step-quota = #" (h-decimal quota)) (
+                           x4-ln "hx-receipt-conserved : %weq (%wmul hx-verified-paid-usdc-u6 #2500) hx-verified-step-quota ≡ true" (
+                           x4-ln "hx-receipt-conserved = refl" nil)))))))))))))))))

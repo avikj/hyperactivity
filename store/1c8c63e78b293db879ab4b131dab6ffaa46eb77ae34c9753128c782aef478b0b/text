@@ -1,0 +1,15 @@
+-- GET/POST /api/p2p/signal?id=<peer> : bounded O(1) ring-buffer WebRTC SDP+ICE rendezvous mailbox
+s-p2p-signal-body : List Word → List Word → List Word → Proc W (List Word)
+s-p2p-signal-body st q body =
+  let cid = h-take (toNat #32) (hi-clean (s-param "id" q)) in
+  let payload = if h-null body then h-take (toNat #4096) (s-unescape (s-param "msg" q)) else h-take (toNat #12288) body in
+  let pdir = list-append st "/p2p" in
+  bind (h-mkdir pdir) (λ mk →
+  bind (h-list pdir) (λ ids0 →
+  bind (if andB (wlt #63 (fromNat (list-length ids0))) (andB (h-not (h-null cid)) (h-not (h-has cid ids0)))
+        then s-p2p-evict-one pdir ids0 else ret {lzero} {W} unit) (λ ev →
+  bind (if orB (h-null cid) (h-null payload) then ret {lzero} {W} false
+        else h-write (list-append pdir (list-append "/" cid)) payload) (λ wr →
+  bind (h-list pdir) (λ ids →
+  bind (s-live-read 24 pdir ids) (λ items →
+    ret {lzero} {W} (s-response "application/json" (h-concat (cons "{" (cons (s-cj-str "peers") (cons ":[" (cons (s-commas items) (cons "]}" nil)))))))))))))

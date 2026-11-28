@@ -1,0 +1,8 @@
+-- Helper: clear Order-2 context scratch `mem[0..4095]` using local `#4`:
+tir-clear-ctx4k : List Word
+tir-clear-ctx4k =
+  let zI   = list-append (pw-c #0) (pw-set #4)
+      brk  = tir-brif-exit (pw-bin #79 (pw-get #4) (pw-c #4096))
+      stZ  = tir-st32 (pw-get #4) (pw-c #0)
+      add4 = list-append (pw-bin #106 (pw-get #4) (pw-c #4)) (pw-set #4)
+  in list-append zI (tir-blk-loop (pw-cat (cons brk (cons stZ (cons add4 (cons tir-br-cont nil))))))

@@ -1,0 +1,12 @@
+-- Exact Lemma M5 cancellation check over RZ (verifying (S - (m_w + m_per + A_lg)) + A_lg + m_per == S - m_w!):
+uc-lemma-m5-exact : Word → Word → Word → Word → Bool
+uc-lemma-m5-exact s mw mper alg =
+  let zS    = rz true s
+      zmw   = rz true mw
+      zmper = rz true mper
+      zalg  = rz true alg
+      a-lv  = rz-add zmw (rz-add zmper zalg)
+      -- Combine (H1)+(H2)+(H4)+(H6): S - A_Lv + A_lg + m_per
+      combined = rz-add (rz-add (rz-sub zS a-lv) zalg) zmper
+      reduced  = rz-sub zS zmw
+  in rz-eq combined reduced

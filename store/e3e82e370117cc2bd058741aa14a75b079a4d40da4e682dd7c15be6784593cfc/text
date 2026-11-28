@@ -1,0 +1,33 @@
+-- Func 0: hx_exec(seed=0, epoch=1, dom=2, gauge=3) -> i32  (locals: 4=u, 5=v, 6=w)
+boc-wasm-f0 : List Word
+boc-wasm-f0 =
+  let locHdr = the (List Word) (cons #1 (cons #3 (cons #127 nil)))
+      -- u = rotl(seed ^ 1834655287, 13) + (epoch * 668265263)
+      uExpr  = pw-bin #106
+                 (pw-bin #119 (pw-bin #115 (pw-get #0) (pw-c #1834655287)) (pw-c #13))
+                 (pw-bin #108 (pw-get #1) (pw-c #668265263))
+      setU   = list-append uExpr (pw-set #4)
+      -- v = ((dom * 374761393) ^ gauge) ^ 1547301243
+      vExpr  = pw-bin #115
+                 (pw-bin #115 (pw-bin #108 (pw-get #2) (pw-c #374761393)) (pw-get #3))
+                 (pw-c #1547301243)
+      setV   = list-append vExpr (pw-set #5)
+      -- Pre-conjugated 3-input ULOP3 cone: ((u & v) ^ ((u ^ 2147483647) & (epoch ^ 1834655287)) ^ rotl(v, 7)) * 668265263
+      cone   = pw-bin #108
+                 (pw-bin #115
+                   (pw-bin #115
+                     (pw-bin #113 (pw-get #4) (pw-get #5))
+                     (pw-bin #113 (pw-bin #115 (pw-get #4) (pw-c #2147483647))
+                                  (pw-bin #115 (pw-get #1) (pw-c #1834655287))))
+                   (pw-bin #119 (pw-get #5) (pw-c #7)))
+                 (pw-c #668265263)
+      setW   = list-append cone (pw-set #6)
+      -- Final Feistel/avalanche readout: mix = (w ^ (w >>u 15) ^ u ^ gauge) * 374761393; mix ^ (mix >>u 16)
+      mixE   = pw-bin #108
+                 (pw-bin #115
+                   (pw-bin #115 (pw-bin #115 (pw-get #6) (pw-bin #118 (pw-get #6) (pw-c #15))) (pw-get #4))
+                   (pw-get #3))
+                 (pw-c #374761393)
+      setMix = list-append mixE (pw-set #6)
+      outE   = pw-bin #115 (pw-get #6) (pw-bin #118 (pw-get #6) (pw-c #16))
+  in pw-cat (cons locHdr (cons setU (cons setV (cons setW (cons setMix (cons outE (cons (pw-op #11) nil)))))))

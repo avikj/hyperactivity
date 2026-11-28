@@ -1,0 +1,10 @@
+-- THEOREM 4 (CRYPTIC 5-ROUND LIFE-RAF SYNTHESIZES AMP + CYS + GLY-GLY IDENTICALLY TO PLAINTEXT BY `refl`):
+boc-thm-latch-cryptic-raf-exact :
+  let key   = #2781060887
+      food  = #1799  -- {CH2O, HCN, seed-C2, H2O, H3PO4, H2S}
+      life  = #51200 -- {AMP(11), Cysteine(14), Gly-Gly(15)}
+      plain = boc-iter-w (toNat #5) boc-raf-step-plain food
+      crypt = boc-iter-w (toNat #5) (boc-raf-step-crypt key) (%wxor key food)
+  in andB (%weq (%wand plain life) life)
+          (%weq (%wxor key crypt) plain) ≡ true
+boc-thm-latch-cryptic-raf-exact = refl

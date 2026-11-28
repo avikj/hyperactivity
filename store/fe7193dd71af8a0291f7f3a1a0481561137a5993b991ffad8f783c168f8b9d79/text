@@ -1,0 +1,114 @@
+s-handle-dark : Bool → List Word → List Word → Word → List Word → Proc W Unit
+s-handle-dark pub st m c hdr =
+  let isGet   = orB (h-prefix "GET " hdr) (h-prefix "HEAD " hdr)
+      isPost  = h-prefix "POST " hdr
+      reqPath = if isPost then h-before " " (h-drop "POST " (h-before (cons #13 nil) hdr)) else s-request-path hdr
+      p       = h-before "?" reqPath
+      clen    = h-number (um-header "content-length" hdr)
+  in if s-redirect-onrender pub hdr
+     then bind (fd-write c (s-to-canonical hdr)) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (h-eq p "/robots.txt")
+     then bind (fd-write c (s-response "text/plain; charset=utf-8" s-public-portal-robots)) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (orB (h-eq p "/") (h-null p))
+     then bind (fd-write c (s-response s-html usf-home-html)) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (orB (h-eq p "/portal") (orB (h-eq p "/os") (orB (h-eq p "/supercomputer") (orB (h-eq p "/net") (orB (h-eq p "/beast") (h-eq p "/monolith"))))))
+     then bind (fd-write c (s-response s-html usf-portal-html)) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (orB (h-eq p "/collab") (h-eq p "/collablink"))
+     then bind (fd-write c (s-response s-html cl-collablink-html)) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (h-eq p "/pay")
+     then bind (fd-write c (s-response s-html x4-pay-console-html)) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (h-eq p "/api/x402/quote")
+     then bind (fd-write c (s-response "text/plain; charset=utf-8" (x4-quote-hc (s-query reqPath)))) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (h-eq p "/api/x402/verify")
+     then bind (x4-verify-tx (s-query reqPath) nil) (λ cert →
+          bind (fd-write c (s-response "text/plain; charset=utf-8" cert)) (λ w → ret {lzero} {W} unit))
+     else if andB isPost (andB (h-eq p "/api/x402/verify") (wlt clen #4097))
+     then bind (s-read-body (toNat #4) c clen nil) (λ body →
+          bind (x4-verify-tx (s-query reqPath) body) (λ cert →
+          bind (fd-write c (s-response "text/plain; charset=utf-8" cert)) (λ w → ret {lzero} {W} unit)))
+     else if andB isGet (orB (h-eq p "/eval") (h-eq p "/api/eval"))
+     then (if andB (h-eq p "/eval") (h-null (ue-qparam "code" (s-query reqPath)))
+           then bind (fd-write c (s-response s-html ue-eval-console-html)) (λ w → ret {lzero} {W} unit)
+           else bind (ue-eval-hypercubical (s-cub-bin m) (s-query reqPath) nil) (λ cert →
+                bind (fd-write c (s-response "text/plain; charset=utf-8" cert)) (λ w → ret {lzero} {W} unit)))
+     else if andB isPost (andB (orB (h-eq p "/eval") (h-eq p "/api/eval")) (wlt clen #65537))
+     then bind (s-read-body (toNat #16) c clen nil) (λ body →
+          bind (ue-eval-hypercubical (s-cub-bin m) (s-query reqPath) body) (λ cert →
+          bind (fd-write c (s-response "text/plain; charset=utf-8" cert)) (λ w → ret {lzero} {W} unit)))
+     else if andB isGet (h-eq p "/api/portal/live")
+     then bind (h-read (list-append st "/portal-live.json")) (λ pj →
+          bind (fd-write c (s-response "application/json" (s-or "{}" pj))) (λ w → ret {lzero} {W} unit))
+     else if andB isPost (andB (h-eq p "/api/portal/push") (wlt clen #262144))
+     then let isAuth = h-eq (um-header "x-hx-portal-seal" hdr) "5a17c9e3-hyperfounder-tir"
+              tgtF   = the (List Word) (if h-eq (um-header "x-hx-portal-target" hdr) "home" then "/home-live.html" else "/portal-live.html")
+          in bind (s-read-body (toNat #64) c clen nil) (λ body →
+             bind (if andB isAuth (h-prefix "<!doctype html>" body)
+                   then h-write (list-append st tgtF) body
+                   else if andB (wlt clen #16385) (h-infix (h-quote "hx_portal_cap") body)
+                   then h-write (list-append st "/portal-live.json") body
+                   else ret {lzero} {W} false) (λ ok →
+             bind (fd-write c (s-response "application/json" (if ok then "1" else "0"))) (λ w → ret {lzero} {W} unit)))
+     else if andB isGet (h-eq p "/hx/cryptic-inet.wasm")
+     then bind (fd-write c (s-response "application/wasm" tir-cryptic-wasm-bytes)) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (h-eq p "/hx/blackbox.wasm")
+     then bind (fd-write c (s-response "application/wasm" boc-blackbox-wasm)) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (h-eq p "/hx/supercomp.wasm")
+     then bind (fd-write c (s-response "application/wasm" ossc-wasm-bytes)) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (h-eq p "/api/net/pulse")
+     then bind (s-net-pulse st) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/api/trace")
+     then bind (s-trace-get st (s-query reqPath)) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isPost (andB (h-eq p "/api/trace") (wlt clen #8193))
+     then bind (s-read-body (toNat #4) c clen nil) (λ body →
+          bind (s-trace-post st body) (λ r →
+          bind (fd-write c r) (λ w → ret {lzero} {W} unit)))
+     else if andB isGet (h-eq p "/api/kg/module")
+     then bind (s-kg-module (s-query reqPath)) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/source/text")
+     then bind (s-text (s-query reqPath)) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/api/p2p/signal")
+     then bind (s-p2p-signal st (s-query reqPath)) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isPost (andB (h-eq p "/api/p2p/signal") (wlt clen #16385))
+     then bind (s-read-body (toNat #8) c clen nil) (λ body →
+          bind (s-p2p-signal-body st (s-query reqPath) body) (λ r →
+          bind (fd-write c r) (λ w → ret {lzero} {W} unit)))
+     else if andB isGet (h-eq p "/api/live/pulse")
+     then bind (s-live-pulse st (s-query reqPath)) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/dht/peers")
+     then bind (s-dht-peers st) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isPost (andB (h-eq p "/dht/announce") (wlt clen #8193))
+     then bind (s-read-body (toNat #4) c clen nil) (λ body →
+          bind (s-dht-announce pub st body) (λ r →
+          bind (fd-write c r) (λ w → ret {lzero} {W} unit)))
+     else if andB isGet (orB (h-eq p "/favicon.svg") (h-eq p "/logo.svg"))
+     then bind (h-document "docs/favicon.svg") (λ t → bind (fd-write c (s-response "image/svg+xml" (s-or nil t))) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/favicon.ico")
+     then bind (h-document "docs/favicon.ico.hex") (λ t → bind (fd-write c (s-response "image/x-icon" (h-unhex (s-or nil t)))) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/og.png")
+     then bind (h-document "docs/og.png.hex") (λ t → bind (fd-write c (s-response "image/png" (h-unhex (s-or nil t)))) (λ w → ret {lzero} {W} unit))
+     else if andB isPost (andB (orB (h-eq p "/api/this") (h-eq p "/api/oracle")) (wlt clen #16385))
+     then bind (s-read-body (toNat #8) c clen nil) (λ body →
+          bind (this-handle-post body) (λ j →
+          bind (fd-write c (s-response "application/json" j)) (λ w → ret {lzero} {W} unit)))
+     else if andB isGet (orB (h-eq p "/ide") (orB (h-eq p "/studio") (h-eq p "/kernel")))
+     then bind (s-mod-kept st "doc" "docs/kernel.html" s-kernel) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/cubical.wasm")
+     then bind (s-mod-kept st "bin" "docs/cubical.wasm.hex" s-cubical-wasm) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/api/kg/index")
+     then bind (s-mod-kept st "json" "docs/kg-index.json" s-kg-index) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/home")
+     then bind (s-mod-kept st "doc" "docs/home.html" s-home-legacy) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/archive")
+     then bind (s-site-kept st "archive" s-archive) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/llms.txt")
+     then bind (s-site-kept st "llms-txt" s-llms-txt) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/feed.xml")
+     then bind (s-site-kept st "feed-xml" s-feed-xml) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if andB isGet (h-eq p "/synesthesia")
+     then bind (fd-write c (sy-answer (s-query reqPath))) (λ w → ret {lzero} {W} unit)
+     else if andB isGet (orB (h-eq p "/grh") (h-eq p "/rh"))
+     then bind (s-mod-kept st "doc" "lib/ir/hx-grh-surface.hypercubical" (ret {lzero} {W} (s-response s-html (s-chrome-html "Critical-Axis Theorem · Hyperactive Labs" grh-treatise-html)))) (λ r → bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else if isGet
+     then bind (s-answer-treatises st p (s-answer-assets p (s-answer-logos p (ret {lzero} {W} (s-respond "404 Not Found" "text/plain; charset=utf-8" "."))))) (λ r →
+          bind (fd-write c r) (λ w → ret {lzero} {W} unit))
+     else bind (fd-write c (s-respond "404 Not Found" "text/plain; charset=utf-8" ".")) (λ w → ret {lzero} {W} unit)

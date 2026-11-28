@@ -1,0 +1,13 @@
+tir-hxsv32 : Word → Word → Word → Word → Word → List Word
+tir-hxsv32 seq sectors optSurplus drift okFlag =
+  let macA = %wxor (%wmul seq #2654435761) (%wadd sectors #1513744305)
+      macB = %wxor (%wmul optSurplus #2246822519) (%wadd drift (%wmul okFlag #765218471))
+  in pw-cat
+       (cons "HXSV"
+       (cons (tir-u32le seq)
+       (cons (tir-u32le sectors)
+       (cons (tir-u32le optSurplus)
+       (cons (tir-u32le drift)
+       (cons (tir-u32le okFlag)
+       (cons (tir-u32le macA)
+       (cons (tir-u32le macB) nil))))))))

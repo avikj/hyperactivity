@@ -1,0 +1,9 @@
+sf-fmt-groups : List Word → Word → List SfGroup → List Word
+sf-fmt-groups lbl lim nil = nil
+sf-fmt-groups lbl lim (cons (mkGrp k vs) r) =
+  if weq lim #0 then nil
+  else if wlt #1 (fromNat (list-length vs)) then
+    list-append
+      (h-concat (cons "  [" (cons lbl (cons " " (cons k (cons "] (" (cons (h-decimal (fromNat (list-length vs))) (cons "): " (cons (sf-join-sp vs) (cons (cons #10 nil) nil))))))))))
+      (sf-fmt-groups lbl (%wsub lim #1) r)
+  else sf-fmt-groups lbl lim r

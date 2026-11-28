@@ -1,0 +1,8 @@
+-- Exact Dirichlet Convolution: (f * g)(n) = sum_{d | n} f(d) * g(n / d)
+rz-conv-go : Nat → (Word → RZ) → (Word → RZ) → Word → Word → RZ → RZ
+rz-conv-go zero _ _ _ _ acc = acc
+rz-conv-go (suc k) f g n d acc =
+  let acc2 = if %weq (%wmod n d) #0
+             then rz-add acc (rz-mul (f d) (g (%wdiv n d)))
+             else acc
+  in rz-conv-go k f g n (%wsucc d) acc2

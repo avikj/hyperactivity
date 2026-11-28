@@ -1,0 +1,16 @@
+-- Func 1: hx_verify(dom=0, cand=1, wit=2, tgt=3) -> i32  (locals: 4=tag)
+-- When tgt == 65536, returns the 16-bit cryptic capsule tag; else returns 1 iff cold-verified & non-zero!
+boc-wasm-f1 : List Word
+boc-wasm-f1 =
+  let locHdr = the (List Word) (cons #1 (cons #1 (cons #127 nil)))
+      rawH   = pw-bin #115
+                 (pw-bin #108 (pw-bin #115 (pw-get #1) (pw-c #1834655287)) (pw-c #668265263))
+                 (pw-bin #119 (pw-bin #115 (pw-get #2) (pw-bin #108 (pw-get #0) (pw-c #374761393))) (pw-c #11))
+      setH   = list-append rawH (pw-set #4)
+      tag16  = pw-bin #113 (pw-bin #115 (pw-get #4) (pw-bin #118 (pw-get #4) (pw-c #16))) (pw-c #65535)
+      setTag = list-append tag16 (pw-set #4)
+      validB = pw-bin #113
+                 (pw-bin #70 (pw-get #4) (pw-bin #113 (pw-get #3) (pw-c #65535)))
+                 (pw-bin #71 (pw-get #2) (pw-c #0))
+      outE   = boc-sel (pw-get #4) validB (pw-bin #70 (pw-get #3) (pw-c #65536))
+  in pw-cat (cons locHdr (cons setH (cons setTag (cons outE (cons (pw-op #11) nil)))))

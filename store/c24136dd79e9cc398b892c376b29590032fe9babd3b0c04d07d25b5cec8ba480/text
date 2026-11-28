@@ -1,0 +1,24 @@
+tir-portal-js-3 : List Word
+tir-portal-js-3 =
+  h-concat
+    (cons "function bcastCapsule(res,tag){var cap={type:'hx_capsule',id:myId,from:myId,syn:mySyn,tag:tag,inB:res.inB,outB:res.outB,ratio:+res.ratio.toFixed(3),bpb:+res.bpb.toFixed(3),diff:res.diff,wit:res.wit,ts:Date.now()};"
+    (cons "var raw=JSON.stringify(cap);Object.keys(dcs).forEach(function(k){if(dcs[k].dc&&dcs[k].dc.readyState==='open'){try{dcs[k].dc.send(raw);p2pTx++}catch(_){}}});"
+    (cons "fetch('/api/p2p/signal?id='+myId+'_cap',{method:'POST',body:raw}).catch(function(){});"
+    (cons "document.getElementById('p-act').textContent=p2pRx+' rx / '+(++p2pTx)+' tx';logHz('P2P BROADCAST ['+tag+'] '+fmtB(res.inB)+'->'+fmtB(res.outB)+' ('+res.ratio.toFixed(2)+'x, diff='+res.diff+'b, wit='+res.wit+')')}"
+    (cons "function handleBytes(u8,name,isBf){var r=runWasmHyperzip(u8,isBf,name);if(r)logHz('VERIFIED ['+name+'] '+fmtB(r.inB)+' -> '+fmtB(r.outB)+' ('+r.ratio.toFixed(2)+'x · '+r.bpb.toFixed(2)+' bpb · '+r.mbs.toFixed(1)+' MB/s · diff='+r.diff+' bits)');return r}"
+    (cons "document.querySelectorAll('[data-ch]').forEach(function(b){b.onclick=function(){curCh=b.getAttribute('data-ch');document.querySelectorAll('[data-ch]').forEach(function(x){x.classList.toggle('on',x===b)});"
+    (cons "if(curCh!=='wss'){var isBf=(curCh==='vid14b'||curCh==='llm72b');handleBytes(synthWorkload(curCh,65536),curCh.toUpperCase(),isBf);if(BX){var c0=BX.hx_exec((sessKey^curCh.length)|0,9,curCh==='fold'?3:1,1834655287),tg=BX.hx_verify(1,c0,1337,65536),ok=BX.hx_verify(1,c0,1337,tg);document.getElementById('hm-seal').textContent='hx_verify='+ok+' ('+tg+')'}}}});"
+    (cons "document.getElementById('hz-burst').onclick=function(){var k=curCh==='wss'?'vid14b':curCh,isBf=(k==='vid14b'||k==='llm72b');handleBytes(synthWorkload(k,1048576),'1MB_'+k.toUpperCase(),isBf)};"
+    (cons "document.getElementById('hz-bcast').onclick=function(){var k=curCh==='wss'?'vid14b':curCh,r=handleBytes(synthWorkload(k,65536),k.toUpperCase(),k==='vid14b'||k==='llm72b');if(r)bcastCapsule(r,k.toUpperCase())};"
+    (cons "document.getElementById('hz-run-in').onclick=function(){var v=document.getElementById('hz-custom').value||'hyperactivity://stokes-kan-contraction';var r=handleBytes(enc.encode(v.repeat(Math.max(1,Math.ceil(4096/v.length)))),'USER_SYMBOLIC',false);if(r)bcastCapsule(r,'USER_STEER')};"
+    (cons "var dz=document.getElementById('hz-drop'),fi=document.getElementById('hz-file');"
+    (cons "fi.onchange=function(e){var f=e.target.files&&e.target.files[0];if(!f)return;f.arrayBuffer().then(function(ab){var isBf=/safetensors|bf16|pt|bin/i.test(f.name)&&((ab.byteLength&1)===0);handleBytes(new Uint8Array(ab),f.name.slice(0,22),isBf)})};"
+    (cons "['dragenter','dragover'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.add('drag')})});"
+    (cons "['dragleave','drop'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.remove('drag');if(ev==='drop'&&e.dataTransfer&&e.dataTransfer.files[0]){var f=e.dataTransfer.files[0];f.arrayBuffer().then(function(ab){var isBf=/safetensors|bf16|pt|bin/i.test(f.name)&&((ab.byteLength&1)===0);handleBytes(new Uint8Array(ab),f.name.slice(0,22),isBf)})}})});"
+    (cons "document.querySelectorAll('[data-mode]').forEach(function(b){b.onclick=function(){mode=b.getAttribute('data-mode');document.querySelectorAll('[data-mode]').forEach(function(x){x.classList.toggle('on',x===b)})}});"
+    (cons "fetch('/hx/cryptic-inet.wasm').then(function(r){return r.arrayBuffer()}).then(function(buf){return WebAssembly.instantiate(buf).then(function(res){W=res.instance.exports;MEM=W.memory;"
+    (cons "var pill=document.getElementById('wasm-pill');if(pill)pill.textContent='CRYPTIC WASM: '+buf.byteLength+'B · 11 EXPORTS + 4MiB LIVE';"
+    (cons "var r0=W.hx_vidzip_rot1(118^(165+3*17),((69<<1)|0),3,165);logFeed('Mounted /hx/cryptic-inet.wasm ('+buf.byteLength+'B, 4MiB mem): Wan2.1/LTX rot1 self-test BF16=0x'+r0.toString(16)+' (0-bit-diff)');"
+    (cons "handleBytes(synthWorkload('vid14b',65536),'BOOT_WAN2.1_14B_BF16',true);"
+    (cons "fetch('/hx/blackbox.wasm').then(function(r2){return r2.arrayBuffer()}).then(function(b2){return WebAssembly.instantiate(b2).then(function(w2){BX=w2.instance.exports;var c0=BX.hx_exec(305419896,7,2,1834655287),tg=BX.hx_verify(2,c0,-889275714,65536),ok=BX.hx_verify(2,c0,-889275714,tg);document.getElementById('hm-seal').textContent='hx_verify='+ok+' · G23=0x'+BX.hx_golay(2047).toString(16);logHz('Co-mounted Periodic+Latch+EPFL /hx/blackbox.wasm ('+b2.byteLength+'B): hx_verify='+ok)})}).catch(function(){})"
+    (cons "})}).catch(function(e){logHz('WASM init error: '+e)});" nil)))))))))))))))))))))

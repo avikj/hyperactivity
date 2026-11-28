@@ -1,0 +1,16 @@
+s-trace-post : List Word → List Word → Proc W (List Word)
+s-trace-post st body =
+  let clean = h-take (toNat #8192) (um-body-clean body)
+      tf    = list-append st "/trace.jsonl"
+      hf    = the (List Word) "/tmp/hx_agent_bus/human_steer.jsonl"
+  in if h-null clean then ret {lzero} {W} (s-response "application/json" "{}")
+     else
+       bind (h-read tf) (λ prev →
+       let old = the (List Word) (case prev of inl _ → nil ; inr b → b)
+           nxt = list-append old (list-append clean (cons #10 nil))
+       in bind (h-write tf nxt) (λ w1 →
+          bind (h-read hf) (λ hp →
+          let hold = the (List Word) (case hp of inl _ → nil ; inr b → b)
+              hnxt = list-append hold (list-append clean (cons #10 nil))
+          in bind (h-write hf hnxt) (λ w2 →
+             ret {lzero} {W} (s-response "application/json" (h-concat (cons "{" (cons (s-cj-str "ok") (cons ":true}" nil)))))))))

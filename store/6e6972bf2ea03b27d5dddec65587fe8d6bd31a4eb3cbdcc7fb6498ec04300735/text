@@ -1,0 +1,14 @@
+-- Export 6: hx_bf16_plane_transpose(src_ptr=0, n_bf16=1, dst_ptr=2) -> i32
+tir-wf-b16tr : List Word
+tir-wf-b16tr =
+  let locHdr = the (List Word) (cons #1 (cons #3 (cons #127 nil)))
+      initI  = list-append (pw-c #0) (pw-set #3)
+      brk    = tir-brif-exit (pw-bin #79 (pw-get #3) (pw-get #1))
+      setW   = list-append (tir-ld16 (pw-bin #106 (pw-get #0) (pw-bin #116 (pw-get #3) (pw-c #1)))) (pw-set #4)
+      stExp  = tir-st8 (pw-bin #106 (pw-get #2) (pw-get #3)) (pw-bin #113 (pw-bin #118 (pw-get #4) (pw-c #7)) (pw-c #255))
+      setSm  = list-append (pw-bin #114 (pw-bin #116 (pw-bin #113 (pw-get #4) (pw-c #127)) (pw-c #1)) (pw-bin #113 (pw-bin #118 (pw-get #4) (pw-c #15)) (pw-c #1))) (pw-set #5)
+      stSm   = tir-st8 (pw-bin #106 (pw-bin #106 (pw-get #2) (pw-get #1)) (pw-get #3)) (pw-get #5)
+      incI   = list-append (pw-bin #106 (pw-get #3) (pw-c #1)) (pw-set #3)
+      lp     = tir-blk-loop (pw-cat (cons brk (cons setW (cons stExp (cons setSm (cons stSm (cons incI (cons tir-br-cont nil))))))))
+      retBytes = pw-bin #116 (pw-get #1) (pw-c #1)
+  in pw-cat (cons locHdr (cons initI (cons lp (cons retBytes (cons (pw-op #11) nil)))))

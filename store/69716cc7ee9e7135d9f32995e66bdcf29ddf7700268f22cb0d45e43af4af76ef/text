@@ -1,0 +1,12 @@
+-- Assemble live grounded Knowledge-Graph slice + real-time store/ROOT + store/trace.jsonl tail!
+this-gather-live-ctx : List Word → List Word → Proc W (List Word)
+this-gather-live-ctx m1 m2 =
+  bind (h-read "store/ROOT/root") (λ mr →
+  bind (h-read "store/trace.jsonl") (λ mt →
+  bind (h-document m1) (λ md1 →
+  bind (h-document m2) (λ md2 →
+    let rh  = this-trim-nl (this-or-doc "unknown" mr)
+        tr  = this-tail-bytes (toNat #1800) (this-or-doc "(no trace events yet)" mt)
+        d1  = h-take (toNat #4200) (this-or-doc "(not in store)" md1)
+        d2  = h-take (toNat #2800) (this-or-doc "(not in store)" md2)
+    in ret {lzero} {W} (this-format-live-ctx rh tr m1 d1 m2 d2)))))

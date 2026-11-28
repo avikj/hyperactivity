@@ -1,0 +1,15 @@
+s-public-core : List Word → List Word → List Word → List Word → Proc W (List Word) → Proc W (List Word)
+s-public-core st m path p next =
+  if orB (h-eq p "/") (h-null path) then s-kept-public st "front" else
+  if orB (h-eq p "/grh") (h-eq p "/rh") then ret {lzero} {W} (s-response s-html (s-chrome-html "Generalized Riemann Hypothesis · Hyperactive Labs" grh-treatise-html)) else
+  if h-eq p "/home" then s-kept-mod-public st "doc" "docs/home.html" else
+  if h-eq p "/archive" then s-kept-public st "archive" else
+  if h-eq p "/healthz" then ret {lzero} {W} (s-response "text/plain; charset=utf-8" "ok") else
+  if h-eq p "/llms.txt" then s-kept-public st "llms-txt" else
+  if h-eq p "/feed.xml" then s-kept-public st "feed-xml" else
+  if h-eq p "/paper" then s-paper st m else
+  if orB (h-eq p "/ide") (orB (h-eq p "/studio") (h-eq p "/kernel")) then s-kept-mod-public st "doc" "docs/kernel.html" else
+  if h-eq p "/cubical.wasm" then s-kept-mod-public st "bin" "docs/cubical.wasm.hex" else
+  if h-eq p "/music" then s-kept-mod-public st "music" "lib/server.hypercubical" else
+  if h-eq p "/corpus/paper" then s-kept-public st "corpus-paper" else
+  next

@@ -1,0 +1,22 @@
+-- THEOREM 1 (`refl`):
+--   1. Valid Base `USDC` `$5.00` (`#5000000` uUSDC) transfer to `0x4A50...A26f` with `status=0x1` credits `#5000000` (`12.5B` steps),
+--   2. Replayed `txHash` (`notReplayed = false`) credits `#0`,
+--   3. Reverted tx (`statusOk = false`) credits `#0`,
+--   4. Fake ERC-20 token address credits `#0`,
+--   5. Wrong recipient `topic2` credits `#0`,
+--   6. Underpayment (`#100000 < #250000`) credits `#0`!
+x4-thm-receipt-verifier-sound :
+  let ok5    = x4-verify-transfer-log true  true  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" x4-transfer-topic0-lc x4-founder-topic32-lc #5000000 #250000
+      repBad = x4-verify-transfer-log true  false "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" x4-transfer-topic0-lc x4-founder-topic32-lc #5000000 #250000
+      revBad = x4-verify-transfer-log false true  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" x4-transfer-topic0-lc x4-founder-topic32-lc #5000000 #250000
+      tokBad = x4-verify-transfer-log true  true  "0x4200000000000000000000000000000000000006" x4-transfer-topic0-lc x4-founder-topic32-lc #5000000 #250000
+      toBad  = x4-verify-transfer-log true  true  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" x4-transfer-topic0-lc "0x0000000000000000000000001111111111111111111111111111111111111111" #5000000 #250000
+      lowBad = x4-verify-transfer-log true  true  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" x4-transfer-topic0-lc x4-founder-topic32-lc #100000 #250000
+  in andB (%weq ok5 #5000000)
+     (andB (%weq (x4-u6-to-step-quota ok5) #12500000000)
+     (andB (%weq repBad #0)
+     (andB (%weq revBad #0)
+     (andB (%weq tokBad #0)
+     (andB (%weq toBad  #0)
+           (%weq lowBad #0)))))) ≡ true
+x4-thm-receipt-verifier-sound = refl

@@ -1,0 +1,14 @@
+-- Scan `logs` chunks (split on `}`) in `eth_getTransactionReceipt` JSON for Base `USDC` Transfer to `0x4A50...A26f`:
+x4-scan-log-objs : Bool → Bool → Word → List (List Word) → Word
+x4-scan-log-objs statusOk notReplayed minU6 nil = #0
+x4-scan-log-objs statusOk notReplayed minU6 (cons chunk rest) =
+  let lc      = x4-lower chunk
+      hasUsdc = h-infix x4-usdc-base-lc lc
+      hasT0   = h-infix x4-transfer-topic0-lc lc
+      hasT2   = h-infix x4-founder-topic32-lc lc
+      dataHex = x4-extract-field-hex "data" chunk
+      amtU6   = x4-hex-to-word dataHex
+      cred    = if andB hasUsdc (andB hasT0 hasT2)
+                then x4-verify-transfer-log statusOk notReplayed x4-usdc-base-lc x4-transfer-topic0-lc x4-founder-topic32-lc amtU6 minU6
+                else #0
+  in %wadd cred (x4-scan-log-objs statusOk notReplayed minU6 rest)

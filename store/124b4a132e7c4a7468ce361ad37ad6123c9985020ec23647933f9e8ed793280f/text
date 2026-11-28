@@ -1,0 +1,9 @@
+tir-thm-conj-iter :
+  {X : Type} → (enc dec : X → X) → (inv : (x : X) → dec (enc x) ≡ x) →
+  (f : X → X) → (n : Nat) → (x : X) →
+  tir-iter n (λ y → enc (f (dec y))) (enc x) ≡ enc (tir-iter n f x)
+tir-thm-conj-iter enc dec inv f zero    x = refl
+tir-thm-conj-iter enc dec inv f (suc n) x =
+  tir-trans
+    (cong (λ y → enc (f (dec y))) (tir-thm-conj-iter enc dec inv f n x))
+    (cong (λ z → enc (f z)) (inv (tir-iter n f x)))

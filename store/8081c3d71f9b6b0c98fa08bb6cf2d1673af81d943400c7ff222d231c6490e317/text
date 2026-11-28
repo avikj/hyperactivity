@@ -1,0 +1,17 @@
+cl-js-3 : List Word
+cl-js-3 =
+  cl-cat
+    -- Deduplicated Stream Renderer & WebRTC DataChannel Mesh over `/api/p2p/signal`:
+    (cons (cl-ql "function ingestFrame(o,via){if(!o||typeof o!=='object')return;var pid=String(o.id||o.from||'');if(!pid)return;" nil)
+    (cons (cl-ql "  if(o.role||o.kind==='node_hb'||o.kind==='hello'||o.cuts){nodeMap[pid]={id:pid,handle:o.handle||pid,role:o.role||(o.cuts?('inet_peer '+Math.round(o.cuts/1e6)+'M cuts'):'mesh_peer'),root:o.root||'',ts:o.ts||Date.now(),via:via,extra:o.extra||''};}" nil)
+    (cons (cl-ql "  var sq=Number(o.seq||o.ts||0);if((o.hx||o.steer||o.code)&&sq>(seenSeq[pid]||0)){seenSeq[pid]=sq;" nil)
+    (cons (cl-ql "    feedItems.unshift({id:pid,handle:o.handle||pid,seq:sq,mod:o.module||'',hx:o.hx||o.code||'',steer:o.steer||o.msg||'',via:via,ts:o.ts||Date.now()});" nil)
+    (cons (cl-ql "    if(feedItems.length>60)feedItems.length=60;renderFeed();}}" nil)
+    (cons (cl-ql "function renderFeed(){var box=qs('#cl-feed');if(!box)return;if(!feedItems.length){box.innerHTML='<div class=`card`>No peer frames yet — click [BROADCAST TO PEERS &amp; SWARM] to transmit the first .hypercubical frame.</div>';return;}" nil)
+    (cons (cl-ql "  box.innerHTML=feedItems.map(function(it,idx){return '<div class=`card'+(idx===0?' hot':'')+'`><div class=`hd`><span><b>'+esc(it.handle)+'</b> · <span class=`tag`>'+esc(it.via)+'</span></span><span>'+esc(it.mod)+'</span></div>'+(it.steer?'<div style=`color:#ff0a94;margin-top:5px;font-weight:700`>&gt; '+esc(it.steer)+'</div>':'')+(it.hx?'<pre class=`out` style=`max-height:110px;margin-top:5px`>'+esc(it.hx.slice(0,1800))+'</pre>':'')+'<div class=`row` style=`margin-top:6px`><button class=`btn` data-load=`'+idx+'`>[LOAD INTO EDITOR]</button></div></div>';}).join('');" nil)
+    (cons (cl-ql "  box.querySelectorAll('[data-load]').forEach(function(b){b.onclick=function(){var it=feedItems[+b.getAttribute('data-load')];if(!it)return;if(it.hx)qs('#cl-ed').value=it.hx;if(it.mod){curMod=it.mod;qs('#cl-mod-lbl').textContent=it.mod;}logOut('Loaded frame from '+it.handle+' into editor.');};});}" nil)
+    (cons (cl-ql "function renderPeers(){var tb=qs('#cl-peers-tb'),ks=Object.keys(nodeMap),rtcOpen=0;Object.keys(rtcPeers).forEach(function(k){if(rtcPeers[k].dc&&rtcPeers[k].dc.readyState==='open')rtcOpen++;});" nil)
+    (cons (cl-ql "  qs('#cl-rtc-cnt').textContent=rtcOpen+' DIRECT RTC';qs('#cl-stat').textContent=ks.length+' PEERS LIVE · '+rtcOpen+' WEBRTC · CUBICAL '+(wasmBytes?Math.round(wasmBytes/1024)+'KB':'READY');" nil)
+    (cons (cl-ql "  if(!ks.length){tb.innerHTML='<tr><td colspan=`4`>Establishing co-presence...</td></tr>';return;}" nil)
+    (cons (cl-ql "  tb.innerHTML=ks.map(function(k){var p=nodeMap[k],age=Math.max(0,Math.round((Date.now()-(p.ts||Date.now()))/1000)),isRtc=rtcPeers[k]&&rtcPeers[k].dc&&rtcPeers[k].dc.readyState==='open';return '<tr><td><b>'+esc(p.handle)+'</b></td><td>'+esc(p.role)+(p.root?' · '+esc(p.root.slice(0,10)):'')+(p.extra?' · '+esc(p.extra):'')+'</td><td><span class=`tag'+(isRtc?' live':'')+'`>'+(isRtc?'WEBRTC P2P':esc(p.via||'HTTPS'))+'</span></td><td>'+age+'s</td></tr>';}).join('');}" nil)
+    nil))))))))))))

@@ -1,0 +1,7 @@
+-- Sanitize `import` lines so untrusted `.hypercubical` code can only import repo `store/` modules:
+ue-safe-import-line : List Word → Bool
+ue-safe-import-line ln =
+  let t = h-trim ln
+  in if h-not (h-prefix "import " t) then true
+     else andB (h-not (h-infix ".." t))
+               (h-not (h-infix (list-append (cons #34 nil) "/") t))

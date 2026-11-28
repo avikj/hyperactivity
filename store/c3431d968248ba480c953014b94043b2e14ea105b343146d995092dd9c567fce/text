@@ -1,0 +1,10 @@
+tir-golay-chord : Word → Word → Word
+tir-golay-chord src11 dst11 =
+  let s   = %wand src11 #2047
+      d   = %wand dst11 #2047
+      del = %wxor s d
+  in if %weq del #0 then s
+     else if %wlt #5 (tir-popcnt11 (toNat #11) del)
+          then %wxor s #2047
+          else let lsb = %wand del (%wsub #2048 del)
+               in %wand (%wxor s lsb) #2047

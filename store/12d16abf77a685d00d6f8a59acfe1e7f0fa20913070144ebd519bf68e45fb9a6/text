@@ -1,0 +1,15 @@
+cl-js-2 : List Word
+cl-js-2 =
+  cl-cat
+    -- Module loader (`/api/kg/module` with `/source/text?path=<hex>` fallback):
+    (cons (cl-ql "function strToHex(s){var o='';for(var i=0;i<s.length;i++)o+=s.charCodeAt(i).toString(16).padStart(2,'0');return o;}" nil)
+    (cons (cl-ql "function openMod(m){if(!m)return;curMod=m;qs('#cl-mod-lbl').textContent=m;logOut('Loading '+m+' from content-addressed store/...');" nil)
+    (cons (cl-ql "  fetch('/api/kg/module?path='+encodeURIComponent(m)).then(function(r){return r.ok?r.text():fetch('/source/text?path='+strToHex(m)).then(function(r2){return r2.ok?r2.text():'';});}).then(function(t){" nil)
+    (cons (cl-ql "    if(t&&t.length>4){qs('#cl-ed').value=t;logOut('Loaded '+m+' ('+t.length+' bytes, SHA-256 verified store/ object).');}" nil)
+    (cons (cl-ql "    else logOut('Module '+m+' not yet cached on this node.');" nil)
+    (cons (cl-ql "  }).catch(function(e){logOut('Load error: '+e);});}" nil)
+    (cons (cl-ql "document.querySelectorAll('.cl-mchip').forEach(function(b){b.onclick=function(){openMod(b.getAttribute('data-m'));};});" nil)
+    (cons (cl-ql "qs('#cl-mod-sel').onchange=function(){if(this.value)openMod(this.value);};" nil)
+    (cons (cl-ql "fetch('/api/kg/index').then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j||!j.mods)return;var sel=qs('#cl-mod-sel');j.mods.slice(0,300).forEach(function(m){var o=document.createElement('option');o.value=m[0];o.textContent=m[0]+' ('+m[1].slice(0,8)+')';sel.appendChild(o);});}).catch(function(){});" nil)
+    (cons (cl-ql "if(up.get('mod'))openMod(up.get('mod'));" nil)
+    nil))))))))))

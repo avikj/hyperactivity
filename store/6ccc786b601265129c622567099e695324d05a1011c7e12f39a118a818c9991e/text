@@ -1,0 +1,33 @@
+-- 4C. Zero-UB ISO C11 Reference Verifier (`-fsanitize=undefined -fno-sanitize-recover=all`):
+boc-c11-src : List Word
+boc-c11-src =
+  boc-ln "#include <stdio.h>"
+  (boc-ln "#include <stdint.h>"
+  (boc-ln "static uint16_t rf16(uint16_t k, uint16_t r) {"
+  (boc-ln "  uint32_t t = (((uint32_t)r * 40503u + (uint32_t)k) ^ ((uint32_t)r >> 7u)) * 65521u;"
+  (boc-ln "  return (uint16_t)(t & 0xFFFFu);"
+  (boc-ln "}"
+  (boc-ln "static uint32_t feistel_enc(uint32_t x) {"
+  (boc-ln "  uint16_t l = (uint16_t)(x >> 16u), r = (uint16_t)(x & 0xFFFFu), n;"
+  (boc-ln "  n = l ^ rf16(40503u, r); l = r; r = n;"
+  (boc-ln "  n = l ^ rf16(31161u, r); l = r; r = n;"
+  (boc-ln "  n = l ^ rf16(42435u, r); l = r; r = n;"
+  (boc-ln "  n = l ^ rf16(40727u, r); l = r; r = n;"
+  (boc-ln "  return ((uint32_t)l << 16u) | (uint32_t)r;"
+  (boc-ln "}"
+  (boc-ln "static uint32_t feistel_dec(uint32_t y) {"
+  (boc-ln "  uint16_t l = (uint16_t)(y >> 16u), r = (uint16_t)(y & 0xFFFFu), p;"
+  (boc-ln "  p = r ^ rf16(40727u, l); r = l; l = p;"
+  (boc-ln "  p = r ^ rf16(42435u, l); r = l; l = p;"
+  (boc-ln "  p = r ^ rf16(31161u, l); r = l; l = p;"
+  (boc-ln "  p = r ^ rf16(40503u, l); r = l; l = p;"
+  (boc-ln "  return ((uint32_t)l << 16u) | (uint32_t)r;"
+  (boc-ln "}"
+  (boc-ln "int main(void) {"
+  (boc-ln "  for (uint32_t i = 0; i < 65536u; i++) {"
+  (boc-ln "    uint32_t v = i * 2654435761u;"
+  (boc-ln "    if (feistel_dec(feistel_enc(v)) != v) return 1;"
+  (boc-ln "  }"
+  (boc-ln (list-append "  puts(" (list-append (boc-qstr "[HX-BEAST-OMNI-C11] 65,536/65,536 ARX-Feistel cryptic roundtrips EXACT (0 UB)!") ");"))
+  (boc-ln "  return 0;"
+  (boc-ln "}" nil)))))))))))))))))))))))))))))

@@ -1,0 +1,12 @@
+s-answer-supercomp : List Word → Proc W (List Word) → Proc W (List Word)
+s-answer-supercomp p next =
+  if orB (h-eq p "/portal") (orB (h-eq p "/os") (orB (h-eq p "/supercomputer") (orB (h-eq p "/net") (orB (h-eq p "/beast") (h-eq p "/monolith"))))) then ret {lzero} {W} (s-response "text/html; charset=utf-8" usf-portal-html) else
+  if orB (h-eq p "/collab") (h-eq p "/collablink") then ret {lzero} {W} (s-response "text/html; charset=utf-8" cl-collablink-html) else
+  if h-eq p "/hx/cryptic-inet.wasm" then ret {lzero} {W} (s-response "application/wasm" tir-cryptic-wasm-bytes) else
+  if h-eq p "/hx/blackbox.wasm" then ret {lzero} {W} (s-response "application/wasm" boc-blackbox-wasm) else
+  if orB (h-eq p "/os-fluid") (h-eq p "/terminal") then ret {lzero} {W} (s-response "text/html; charset=utf-8" (ossc-render-page (s-head-chrome "hyperactivity — Collective Superintelligence OS") s-nav)) else
+  if h-eq p "/hx/supercomp.wasm" then ret {lzero} {W} (s-response "application/wasm" ossc-wasm-bytes) else
+  if h-eq p "/hx/supercomp.css" then ret {lzero} {W} (s-response "text/css; charset=utf-8" ossc-compiled-css) else
+  if h-eq p "/hx/supercomp-os.json" then ret {lzero} {W} (s-response "application/json" ossc-spec-json) else
+  if orB (h-eq p "/api/this/status") (h-eq p "/api/oracle/status") then bind this-handle-status (λ j → ret {lzero} {W} (s-response "application/json" j)) else
+  next

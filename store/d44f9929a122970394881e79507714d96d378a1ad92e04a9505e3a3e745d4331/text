@@ -1,0 +1,20 @@
+sf-run-store : List Word → Proc W Unit
+sf-run-store st =
+  bind (h-read (list-append st "/names")) (λ nr →
+  let bs = sf-parse-names (sf-unwrap nr) in
+  let exact = sf-group-exact bs nil in
+  bind (sf-scan-data-iso st bs nil) (λ isos →
+  bind (sf-scan-subterms st (toNat #250) bs nil) (λ subs →
+  let report = h-concat (
+    cons "=== PURE .HYPERCUBICAL CONTINUOUS SEMANTIC FACTORING REPORT ===" (cons sf-nl (
+    cons "STORE: " (cons st (cons sf-nl (
+    cons "NAMED SEMANTIC OBJECTS: " (cons (h-decimal (fromNat (list-length bs))) (cons sf-nl (cons sf-nl (
+    cons "[1] EXACT CANONICAL DUPLICATES (DigestEq — " (cons (h-decimal (sf-multi-count exact)) (cons " classes):" (cons sf-nl (
+    cons (sf-fmt-groups "EXACT-DUP" #20 exact) (cons sf-nl (
+    cons "[2] STRUCTURALLY ISOMORPHIC DATA TYPES (DataIso / ua — " (cons (h-decimal (sf-multi-count isos)) (cons " classes):" (cons sf-nl (
+    cons (sf-fmt-groups "DATA-ISO" #20 isos) (cons sf-nl (
+    cons "[3] SHARED INTERNAL SUBTERMS (SubtermFactor — " (cons (h-decimal (sf-multi-count subs)) (cons " shared classes):" (cons sf-nl (
+    cons (sf-fmt-groups "SUBTERM" #20 subs) (cons sf-nl (
+    cons "=== ZERO POSTULATES · ZERO C CHANGES · ZERO AGENTS IN LOOP ===" (cons sf-nl nil))))))))))))))))))))))))))))) in
+  bind (h-write (list-append st "/factor_report.txt") report) (λ ok →
+  h-say report))))

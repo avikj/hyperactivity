@@ -1,0 +1,70 @@
+-- Execute `.hypercubical` on `./build/cubical --read`, memoize in `/tmp/hx_hyperreactor`, & emit pure `.hypercubical`:
+ue-eval-hypercubical : List Word → List Word → List Word → Proc W (List Word)
+ue-eval-hypercubical binPath qs body =
+  let qCode   = ue-qparam "code" qs
+      mode0   = ue-qparam "mode" qs
+      loadS   = ue-qparam "load" qs
+      loadPct = if h-null loadS then #35 else ue-min-w #100 (ue-parse-num #0 loadS)
+      rawCode = if h-not (h-null qCode) then qCode
+                else if h-not (h-null (h-trim body)) then body
+                else ue-default-program
+      lns     = h-lines rawCode
+  in if h-not (ue-all-imports-safe lns)
+     then ret {lzero} {W} (ue-ln "-- refused: import path must name a module inside the repository store/" nil)
+     else
+       let fullSrc = if ue-has-import lns then rawCode
+                     else list-append "import " (list-append ue-q (list-append "lib/core.hypercubical" (list-append ue-q (cons #10 rawCode))))
+           h64     = ue-fnv64 #14695981039346656037 fullSrc
+           hHex    = ue-hex-n (toNat #16) h64
+           cDir    = the (List Word) "/tmp/hx_hyperreactor"
+           fOut    = list-append cDir (list-append "/" (list-append hHex ".out"))
+           fBaseX  = list-append cDir (list-append "/" (list-append hHex ".x"))
+       in bind (h-mkdir cDir) (λ u0 →
+          bind (h-read fOut) (λ mCachedOut →
+          bind (h-read fBaseX) (λ mCachedX →
+          bind (ue-run-or-cache binPath cDir fOut fBaseX fullSrc mCachedOut mCachedX) (λ runInfo →
+            let isHit   = fst runInfo
+                xSteps  = fst (snd runInfo)
+                ySteps  = fst (snd (snd runInfo))
+                kOut    = snd (snd (snd runInfo))
+                surp0   = if %wlt xSteps ySteps then #0 else %wsub xSteps ySteps
+                muFloor = ue-max-w #1 (%wdiv ySteps #10)
+                muCong  = if %wlt #70 loadPct then %wdiv (%wmul surp0 (%wsub loadPct #70)) #40 else #0
+                muTau   = %wadd muFloor muCong
+                chP     = ue-channel-params mode0
+                pEl     = fst chP
+                qEl     = fst (snd chP)
+                chLbl   = snd (snd chP)
+                split   = ue-settle-split pEl qEl xSteps ySteps muTau
+                pStar   = ue-kkt-price pEl qEl xSteps ySteps muTau
+                profW   = fst (snd split)
+                saveW   = snd (snd split)
+                tpPass  = ue-twopart-fee #100 xSteps (ue-y-eff xSteps ySteps muTau) #85
+                certHc  = ue-ln "-- ============================================================================" (
+                          ue-ln "-- HYPERACTIVE LABS // SELF-OPTIMIZING CUBICAL SUPERCOMPILER & HYPERREACTOR" (
+                          ue-ln (list-append "-- fiber_id_fnv64  : 0x" hHex) (
+                          ue-ln (list-append "-- store_fiber_hit : " (if isHit then "true (O(1) store/<sha256> normal-form recall)" else "false (fresh Lafont INet reduction + cached)")) (
+                          ue-ln (list-append "-- kkt_channel     : " chLbl) (
+                          ue-ln "-- kkt_law         : P* = Y_eff + (q / (p + q)) * (X - Y_eff)  [0 guesswork]" (
+                          ue-ln "-- ============================================================================" (
+                          ue-ln "-- [KERNEL OUTPUT (./build/cubical --read)]" (
+                          list-append (ue-comment-lines (h-lines kOut)) (
+                          ue-ln (list-append "import " (list-append ue-q (list-append "lib/core.hypercubical" ue-q))) (
+                          ue-ln "hx-baseline-steps-X : Word" (
+                          ue-ln (list-append "hx-baseline-steps-X = #" (h-decimal xSteps)) (
+                          ue-ln "hx-hyperreactor-steps-Y : Word" (
+                          ue-ln (list-append "hx-hyperreactor-steps-Y = #" (h-decimal ySteps)) (
+                          ue-ln "hx-kkt-shadow-hurdle : Word" (
+                          ue-ln (list-append "hx-kkt-shadow-hurdle = #" (h-decimal muTau)) (
+                          ue-ln "hx-optimal-price-P : Word" (
+                          ue-ln (list-append "hx-optimal-price-P = #" (h-decimal pStar)) (
+                          ue-ln "hx-founder-profit : Word" (
+                          ue-ln (list-append "hx-founder-profit = #" (h-decimal profW)) (
+                          ue-ln "hx-buyer-instant-savings : Word" (
+                          ue-ln (list-append "hx-buyer-instant-savings = #" (h-decimal saveW)) (
+                          ue-ln "hx-twopart-100call-pass : Word" (
+                          ue-ln (list-append "hx-twopart-100call-pass = #" (h-decimal tpPass)) (
+                          ue-ln "hx-zero-dust-conserved : %weq (%wadd hx-hyperreactor-steps-Y (%wadd hx-founder-profit hx-buyer-instant-savings)) hx-baseline-steps-X ≡ true" (
+                          ue-ln "hx-zero-dust-conserved = refl" (
+                          ue-ln "-- x402_base8453_usdc_pay_to : 0x4A50FBF0128E2679C42466A8cC1A9D230b08A26f" nil))))))))))))))))))))))))))
+            in ret {lzero} {W} certHc))))

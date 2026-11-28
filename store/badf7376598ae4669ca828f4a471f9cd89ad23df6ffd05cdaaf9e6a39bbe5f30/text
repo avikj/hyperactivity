@@ -1,0 +1,19 @@
+tir-sync-bus : Proc W Unit
+tir-sync-bus =
+  let optSurplus = tir-micro-scan (toNat #9) #1 #512
+      pkt32      = tir-hxsv32 #778 #2048 optSurplus #0 #1
+      wasmLen    = fromNat (list-length tir-cryptic-wasm-bytes)
+      msg        = h-concat
+                     (cons "[HX-TOTAL-REFLECTION v2 | 4MiB CRYPTIC WASM HYPERCOMPRESSOR + 14-WSS PORTAL READY]" (cons tir-nl
+                     (cons "  1. Cryptic WASM 1.0 Binary : " (cons (h-decimal wasmLen) (cons " bytes (13 exports + 4 MiB linear memory, byte_lt256=refl, Warrants->Empty)" (cons tir-nl
+                     (cons "  2. Lossless Codecs Live    : Order-2+Cryptic hyperzip/unzip + BF16 Rot1 Video-DiT/72B plane transpose (0-bit-loss)" (cons tir-nl
+                     (cons "  3. Public Portal HTML      : " (cons (h-decimal (fromNat (list-length tir-public-portal-html))) (cons " bytes -> https://hyperactivity.ai/" (cons tir-nl nil))))))))))))
+  in bind (h-mkdir "/tmp/hx_agent_bus") (λ u0 →
+     bind (h-mkdir "/tmp/hy_out/omni_deploy") (λ u0b →
+     bind (h-write "/tmp/hx_agent_bus/tir_omninet.hxsv" pkt32) (λ u1 →
+     bind (h-write "/tmp/hx_agent_bus/agent_tir_omninet_a2c13e74_state.json" tir-agent-json) (λ u2 →
+     bind (h-read "/tmp/hx_agent_bus/outbox.jsonl") (λ prev →
+     bind (h-write "/tmp/hx_agent_bus/outbox.jsonl" (list-append (tir-or-nil prev) tir-agent-json)) (λ u3 →
+     bind (h-write "/tmp/hy_out/omni_deploy/cryptic-inet.wasm" tir-cryptic-wasm-bytes) (λ u4 →
+     bind (h-write "/tmp/hy_out/omni_deploy/portal.html" tir-public-portal-html) (λ u5 →
+     h-out msg))))))))

@@ -1,0 +1,8 @@
+ga-lem-ite-guard : (env : Nat → Bool) → (c t f : GaGuard) →
+  ga-eval env (if ga-eq t f then t else ga-ite c t f) ≡ ga-iteB (ga-eval env c) (ga-eval env t) (ga-eval env f)
+ga-lem-ite-guard env c t f =
+  (case ga-eq t f return (λ z → (ga-eq t f ≡ z) →
+     ga-eval env (if z then t else ga-ite c t f) ≡ ga-iteB (ga-eval env c) (ga-eval env t) (ga-eval env f)) of
+     true  → λ h → ga-trans (ga-sym (ga-lem-ite-same (ga-eval env c) (ga-eval env t)))
+                     (λ i → ga-iteB (ga-eval env c) (ga-eval env t) (ga-eval env (ga-eq-sound t f h i)))
+     false → λ h → refl) refl

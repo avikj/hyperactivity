@@ -1,0 +1,13 @@
+-- Exact zero-float Periodic phase filter: electroneutrality + squared Goldschmidt + Pauling octahedral + hull > 0
+boc-periodic-phase-ok : Word → Word → Word → Word → Word → Word → Word → Bool
+boc-periodic-phase-ok qCat qAn rA rB rX hullMev zMax =
+  let sAX  = %wadd rA rX
+      sBX  = %wadd rB rX
+      sqAX = %wmul sAX sAX
+      sqBX = %wmul sBX sBX
+  in andB (%weq qCat qAn)
+     (andB (boc-le-w (%wmul #32 sqBX) (%wmul #25 sqAX))
+     (andB (boc-le-w (%wmul #100 sqAX) (%wmul #229 sqBX))
+     (andB (boc-le-w (%wmul #2 (%wmul rX rX)) sqBX)
+     (andB (%wlt #0 hullMev)
+           (%wlt (%wmul zMax zMax) #18769))))) -- Z < 137 Dirac stability!

@@ -1,0 +1,8 @@
+sf-scan-subterms : List Word → Nat → List SfBinding → List SfGroup → Proc W (List SfGroup)
+sf-scan-subterms st zero bs acc = ret {lzero} {W} acc
+sf-scan-subterms st (suc k) nil acc = ret {lzero} {W} acc
+sf-scan-subterms st (suc k) (cons (mkBind nm ky) r) acc =
+  bind (h-read (h-concat (cons st (cons "/" (cons ky (cons "/code" nil)))))) (λ cr →
+  let cd = sf-unwrap cr in
+  let subs = sf-extract-sub-go nil cd nil in
+  sf-scan-subterms st k r (sf-insert-subs nm subs acc))

@@ -1,0 +1,25 @@
+this-build-payload : List Word → List Word → List Word → List Word → List Word → List Word
+this-build-payload sysPrefix liveCtx qRaw rRaw qtRaw =
+  let nl = h-concat (cons this-bs (cons "n" nil))
+      sysFull = h-concat (cons sysPrefix (cons this-nl-raw (cons this-nl-raw (cons this-grounding-rule (cons this-nl-raw (cons this-nl-raw (cons liveCtx nil)))))))
+      userRaw =
+        h-concat (cons "[Space: " (cons rRaw (cons "]" (cons nl
+          (if h-null qtRaw then cons qRaw nil
+           else cons "[Context: " (cons qtRaw (cons "]" (cons nl (cons nl (cons qRaw nil))))))))))
+  in h-concat (
+    cons "{" (
+    cons this-q (cons "systemInstruction" (cons this-q (cons ":{" (
+    cons this-q (cons "parts" (cons this-q (cons ":[{" (
+    cons (this-kv "text" (this-esc-json sysFull)) (
+    cons "}]}," (
+    cons this-q (cons "contents" (cons this-q (cons ":[{" (
+    cons (this-kv "role" "user") (cons "," (
+    cons this-q (cons "parts" (cons this-q (cons ":[{" (
+    cons (this-kv "text" userRaw) (
+    cons "}]}]," (
+    cons this-q (cons "generationConfig" (cons this-q (cons ":{" (
+    cons this-q (cons "temperature" (cons this-q (cons ":0.3," (
+    cons this-q (cons "maxOutputTokens" (cons this-q (cons ":2048," (
+    cons this-q (cons "thinkingConfig" (cons this-q (cons ":{" (
+    cons this-q (cons "thinkingBudget" (cons this-q (cons ":1024" (
+    cons "}}}" nil))))))))))))))))))))))))))))))))))))))))))))

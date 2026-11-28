@@ -1,0 +1,9 @@
+grh-thm-superopt-sound : (n : GrhNode) → grh-emit (grh-superopt n) ≡ grh-emit n
+grh-thm-superopt-sound grh-empty = refl
+grh-thm-superopt-sound (grh-seq a b) =
+  let iha = grh-thm-superopt-sound a
+      ihb = grh-thm-superopt-sound b
+      st1 = grh-drop-r-sound (grh-superopt a) (grh-superopt b)
+      st2 = λ i → list-append (iha i) (ihb i)
+  in grh-trans st1 st2
+grh-thm-superopt-sound (grh-raw s) = refl

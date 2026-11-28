@@ -1,0 +1,30 @@
+s-request : Bool → List Word → List Word → Sum Unit (List Word) → List Word → Proc W (List Word)
+s-request pub st m tok req =
+  if h-prefix "PUT " req then (
+    let p = h-before " " (h-drop "PUT " (h-before (cons #13 nil) req)) in
+    if s-allowed pub tok req then (
+      if h-prefix "/roots/" p then s-put-root st m (h-drop "/roots/" (h-before "?" p)) (h-after (list-append h-crlf h-crlf) req)
+      else ret {lzero} {W} (s-respond "404 Not Found" "text/plain" "not found"))
+    else ret {lzero} {W} (s-respond "403 Forbidden" "text/plain" "this server is read-only"))
+  else if h-prefix "POST " req then (
+    let p = h-before " " (h-drop "POST " (h-before (cons #13 nil) req)) in
+    if um-send-path p then um-send req
+    else if orB (h-eq (h-before "?" p) "/eval") (h-eq (h-before "?" p) "/api/eval") then bind (ue-eval-hypercubical (if h-null m then "./build/cubical" else if orB (h-prefix "/" m) (h-prefix "./" m) then m else list-append "./" m) (s-query p) (h-after (list-append h-crlf h-crlf) req)) (λ cert → ret {lzero} {W} (s-response "text/plain; charset=utf-8" cert))
+    else if h-eq (h-before "?" p) "/api/x402/verify" then bind (x4-verify-tx (s-query p) (h-after (list-append h-crlf h-crlf) req)) (λ cert → ret {lzero} {W} (s-response "text/plain; charset=utf-8" cert))
+    else if orB (h-eq (h-before "?" p) "/api/this") (h-eq (h-before "?" p) "/api/oracle") then bind (this-handle-post (h-after (list-append h-crlf h-crlf) req)) (λ j → ret {lzero} {W} (s-response "application/json" j))
+    else if h-eq (h-before "?" p) "/api/trace" then s-trace-post st (h-after (list-append h-crlf h-crlf) req)
+    else if andB (h-eq (h-before "?" p) "/api/net/pulse") (s-allowed pub tok req) then s-net-pulse-post st (h-after (list-append h-crlf h-crlf) req)
+    else if h-prefix "/api/p2p/signal" p then s-p2p-signal-body st (s-query p) (h-after (list-append h-crlf h-crlf) req)
+    else if h-eq (h-before "?" p) "/dht/announce" then s-dht-announce pub st (h-after (list-append h-crlf h-crlf) req)
+    else if h-eq (h-before "?" p) "/dht/provide" then s-dht-provide pub st (h-after (list-append h-crlf h-crlf) req)
+    else if s-allowed pub tok req then s-post st m p req
+    else if h-eq (h-before "?" p) "/peer/reduce" then bind (h-env "HYPERACTIVE_PEER_COMPUTE") (λ pc → case pc of
+      inr v → (if h-null v then ret {lzero} {W} (s-respond "403 Forbidden" "text/plain" "peer compute not enabled") else s-peer-reduce st m (h-after (list-append h-crlf h-crlf) req))
+      inl u → ret {lzero} {W} (s-respond "403 Forbidden" "text/plain" "peer compute requires token or HYPERACTIVE_PEER_COMPUTE=1"))
+    else ret {lzero} {W} (s-respond "403 Forbidden" "text/plain" "this server is read-only"))
+  else if h-not (orB (h-prefix "GET " req) (h-prefix "HEAD " req)) then ret {lzero} {W} (s-respond "405 Method Not Allowed" "text/plain" "method not allowed")
+  else if s-redirect-onrender pub req then ret {lzero} {W} (s-to-canonical req)
+  else if andB pub (andB (s-views-path (s-request-path req)) (h-not (s-allowed pub tok req))) then ret {lzero} {W} s-to-front
+  else if andB pub (andB (s-withheld (s-request-path req)) (h-not (s-allowed pub tok req))) then ret {lzero} {W} (s-respond "404 Not Found" s-html s-not-found)
+  else if andB pub (h-not (s-allowed pub tok req)) then s-public-answer st m (s-request-path req)
+  else s-answer st m (s-request-path req)

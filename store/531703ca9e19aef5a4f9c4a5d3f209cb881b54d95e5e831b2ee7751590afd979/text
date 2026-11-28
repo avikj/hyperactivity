@@ -1,0 +1,30 @@
+x4-quote-hc : List Word → List Word
+x4-quote-hc qs =
+  let tier0  = ue-qparam "tier" qs
+      amtU6  = the Word
+                 (if h-eq tier0 "ent" then #50000000
+                  else if h-eq tier0 "pro" then #5000000
+                  else #250000)
+      quota  = x4-u6-to-step-quota amtU6
+      eip681 = h-concat
+                 (cons "ethereum:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913@8453/transfer?address="
+                 (cons x4-founder-coinbase-eip55
+                 (cons "&uint256=" (cons (h-decimal amtU6) nil))))
+  in x4-ln "-- ============================================================================" (
+     x4-ln "-- HYPERACTIVE LABS // x402 BASE MAINNET (8453) USDC PAYMENT DESCRIPTOR" (
+     x4-ln "-- protocol         : x402-hypercubical-v1 (direct non-custodial Base USDC)" (
+     x4-ln "-- chain_id         : 8453 (Base Mainnet)" (
+     x4-ln "-- asset_usdc       : 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" (
+     x4-ln (list-append "-- pay_to_founder   : " x4-founder-coinbase-eip55) (
+     x4-ln (list-append "-- eip681_uri       : " eip681) (
+     x4-ln "-- verify_endpoint  : POST /api/x402/verify?tx=0x<64_hex_base_tx_hash>" (
+     x4-ln "-- ============================================================================" (
+     x4-ln (list-append "import " (list-append x4-q (list-append "lib/core.hypercubical" x4-q))) (
+     x4-ln "hx-x402-chain-id : Word" (
+     x4-ln "hx-x402-chain-id = #8453" (
+     x4-ln "hx-x402-amount-usdc-u6 : Word" (
+     x4-ln (list-append "hx-x402-amount-usdc-u6 = #" (h-decimal amtU6)) (
+     x4-ln "hx-x402-unlocked-step-quota : Word" (
+     x4-ln (list-append "hx-x402-unlocked-step-quota = #" (h-decimal quota)) (
+     x4-ln "hx-x402-quota-exact : %weq (%wmul hx-x402-amount-usdc-u6 #2500) hx-x402-unlocked-step-quota ≡ true" (
+     x4-ln "hx-x402-quota-exact = refl" nil)))))))))))))))))
