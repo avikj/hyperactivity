@@ -1,0 +1,15 @@
+live-main : Proc W Unit
+live-main =
+  bind (h-env "HX_LIVE_OUT") (λ o →
+  bind (h-env "HX_LIVE_POLLS") (λ np →
+  let out = live-out o in
+  bind (h-read "/proc/self/environ") (λ env →
+  bind (with-region {Word} 8 (λ fds → sys-call #293 fds #0 #0 #0 #0 #0) h-cell0) (λ both →
+  let rfd = wand both #4294967295 in
+  let wfd = wshr both #32 in
+  bind (h-ptrs (live-ffmpeg rfd out)) (λ argv → bind (h-ptrs (h-env-block env)) (λ envp →
+  bind (spawn-at (fst argv) (fst envp) #18446744073709551615) (λ pid →
+  bind (sys-call #3 rfd #0 #0 #0 #0 #0) (λ c →
+  bind (live-loop (live-polls np) wfd) (λ u →
+  bind (sys-call #3 wfd #0 #0 #0 #0 #0) (λ c2 →
+  bind (h-wait pid) (λ st → exit #0)))))))))))

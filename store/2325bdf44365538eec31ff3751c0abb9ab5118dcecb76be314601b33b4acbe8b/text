@@ -1,0 +1,7 @@
+-- one poll: the mailbox's bytes into the pipe; forever, or until n polls when HX_LIVE_POLLS bounds it
+live-loop : Nat → Word → Proc W Unit
+live-loop zero wfd = ret {lzero} {W} unit
+live-loop (suc k) wfd =
+  bind (h-capture (cons "/usr/bin/curl" (cons "-s" (cons "-m" (cons "5" (cons live-src nil)))))) (λ r →
+  bind (h-put wfd (snd r)) (λ u →
+  bind (live-sleep #250000000) (λ s → live-loop k wfd)))
